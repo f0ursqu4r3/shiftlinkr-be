@@ -1,14 +1,14 @@
-use actix_web::{App, HttpResponse, HttpServer, Responder, get, web, middleware::Logger};
+use actix_web::{App, HttpResponse, HttpServer, Responder, get, middleware::Logger, web};
 use anyhow::Result;
 
-mod database;
 mod auth;
-mod handlers;
 mod config;
+mod database;
+mod handlers;
 
-use database::{init_database, user_repository::UserRepository};
 use auth::AuthService;
 use config::Config;
+use database::{init_database, user_repository::UserRepository};
 
 pub struct AppState {
     pub auth_service: AuthService,
@@ -31,7 +31,7 @@ async fn health() -> impl Responder {
 async fn main() -> Result<()> {
     // Load environment variables
     dotenvy::dotenv().ok();
-    
+
     // Initialize logger
     env_logger::init();
 
@@ -39,7 +39,10 @@ async fn main() -> Result<()> {
 
     // Load configuration
     let config = Config::from_env()?;
-    println!("📋 Configuration loaded (environment: {})", config.environment);
+    println!(
+        "📋 Configuration loaded (environment: {})",
+        config.environment
+    );
 
     // Initialize database
     let pool = init_database(&config.database_url).await?;
@@ -50,9 +53,7 @@ async fn main() -> Result<()> {
     let auth_service = AuthService::new(user_repository, config.clone());
 
     // Create app state
-    let app_state = web::Data::new(AppState {
-        auth_service,
-    });
+    let app_state = web::Data::new(AppState { auth_service });
 
     let server_address = config.server_address();
     println!("🌐 Server starting on http://{}", server_address);
@@ -65,13 +66,12 @@ async fn main() -> Result<()> {
             .service(hello)
             .service(health)
             .service(
-                web::scope("/api/v1")
-                    .service(
-                        web::scope("/auth")
-                            .route("/register", web::post().to(handlers::auth::register))
-                            .route("/login", web::post().to(handlers::auth::login))
-                            .route("/me", web::get().to(handlers::auth::me))
-                    )
+                web::scope("/api/v1").service(
+                    web::scope("/auth")
+                        .route("/register", web::post().to(handlers::auth::register))
+                        .route("/login", web::post().to(handlers::auth::login))
+                        .route("/me", web::get().to(handlers::auth::me)),
+                ),
             )
     })
     .bind(&server_address)?
