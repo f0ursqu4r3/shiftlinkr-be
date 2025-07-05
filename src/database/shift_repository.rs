@@ -1,0 +1,234 @@
+use anyhow::Result;
+use chrono::{DateTime, Utc};
+use sqlx::SqlitePool;
+
+use super::models::{Shift, ShiftInput, ShiftStatus};
+
+pub struct ShiftRepository {
+    pool: SqlitePool,
+}
+
+impl ShiftRepository {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+
+    pub async fn create_shift(&self, input: ShiftInput) -> Result<Shift> {
+        let shift = sqlx::query_as!(
+            Shift,
+            r#"
+            INSERT INTO shifts (title, description, location_id, team_id, assigned_user_id, start_time, end_time, hourly_rate, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING id, title, description, location_id, team_id, assigned_user_id, start_time, end_time, hourly_rate, status, created_at, updated_at
+            "#,
+            input.title,
+            input.description,
+            input.location_id,
+            input.team_id,
+            input.assigned_user_id,
+            input.start_time,
+            input.end_time,
+            input.hourly_rate,
+            ShiftStatus::Open.to_string(),
+            Utc::now(),
+            Utc::now()
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(shift)
+    }
+
+    pub async fn get_shift_by_id(&self, id: i64) -> Result<Option<Shift>> {
+        let shift = sqlx::query_as!(
+            Shift,
+            "SELECT id, title, description, location_id, team_id, assigned_user_id, start_time, end_time, hourly_rate, status, created_at, updated_at FROM shifts WHERE id = ?",
+            id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(shift)
+    }
+
+    pub async fn get_shifts_by_location(&self, location_id: i64) -> Result<Vec<Shift>> {
+        let shifts = sqlx::query_as!(
+            Shift,
+            "SELECT id, title, description, location_id, team_id, assigned_user_id, start_time, end_time, hourly_rate, status, created_at, updated_at FROM shifts WHERE location_id = ? ORDER BY start_time",
+            location_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(shifts)
+    }
+
+    pub async fn get_shifts_by_team(&self, team_id: i64) -> Result<Vec<Shift>> {
+        let shifts = sqlx::query_as!(
+            Shift,
+            "SELECT id, title, description, location_id, team_id, assigned_user_id, start_time, end_time, hourly_rate, status, created_at, updated_at FROM shifts WHERE team_id = ? ORDER BY start_time",
+            team_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(shifts)
+    }
+
+    pub async fn get_shifts_by_user(&self, user_id: i64) -> Result<Vec<Shift>> {
+        let shifts = sqlx::query_as!(
+            Shift,
+            "SELECT id, title, description, location_id, team_id, assigned_user_id, start_time, end_time, hourly_rate, status, created_at, updated_at FROM shifts WHERE assigned_user_id = ? ORDER BY start_time",
+            user_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(shifts)
+    }
+
+    pub async fn get_shifts_by_date_range(
+        &self,
+        start_date: DateTime<Utc>,
+        end_date: DateTime<Utc>,
+        location_id: Option<i64>,
+    ) -> Result<Vec<Shift>> {
+        let shifts = if let Some(location_id) = location_id {
+            sqlx::query_as!(
+                Shift,
+                "SELECT id, title, description, location_id, team_id, assigned_user_id, start_time, end_time, hourly_rate, status, created_at, updated_at FROM shifts WHERE start_time >= ? AND end_time <= ? AND location_id = ? ORDER BY start_time",
+                start_date,
+                end_date,
+                location_id
+            )
+            .fetch_all(&self.pool)
+            .await?
+        } else {
+            sqlx::query_as!(
+                Shift,
+                "SELECT id, title, description, location_id, team_id, assigned_user_id, start_time, end_time, hourly_rate, status, created_at, updated_at FROM shifts WHERE start_time >= ? AND end_time <= ? ORDER BY start_time",
+                start_date,
+                end_date
+            )
+            .fetch_all(&self.pool)
+            .await?
+        };
+
+        Ok(shifts)
+    }
+
+    pub async fn get_open_shifts(&self, location_id: Option<i64>) -> Result<Vec<Shift>> {
+        let shifts = if let Some(location_id) = location_id {
+            sqlx::query_as!(
+                Shift,
+                "SELECT id, title, description, location_id, team_id, assigned_user_id, start_time, end_time, hourly_rate, status, created_at, updated_at FROM shifts WHERE status = ? AND location_id = ? ORDER BY start_time",
+                ShiftStatus::Open.to_string(),
+                location_id
+            )
+            .fetch_all(&self.pool)
+            .await?
+        } else {
+            sqlx::query_as!(
+                Shift,
+                "SELECT id, title, description, location_id, team_id, assigned_user_id, start_time, end_time, hourly_rate, status, created_at, updated_at FROM shifts WHERE status = ? ORDER BY start_time",
+                ShiftStatus::Open.to_string()
+            )
+            .fetch_all(&self.pool)
+            .await?
+        };
+
+        Ok(shifts)
+    }
+
+    pub async fn update_shift(&self, id: i64, input: ShiftInput) -> Result<Option<Shift>> {
+        let shift = sqlx::query_as!(
+            Shift,
+            r#"
+            UPDATE shifts 
+            SET title = ?, description = ?, location_id = ?, team_id = ?, assigned_user_id = ?, start_time = ?, end_time = ?, hourly_rate = ?, updated_at = ?
+            WHERE id = ?
+            RETURNING id, title, description, location_id, team_id, assigned_user_id, start_time, end_time, hourly_rate, status, created_at, updated_at
+            "#,
+            input.title,
+            input.description,
+            input.location_id,
+            input.team_id,
+            input.assigned_user_id,
+            input.start_time,
+            input.end_time,
+            input.hourly_rate,
+            Utc::now(),
+            id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(shift)
+    }
+
+    pub async fn assign_shift(&self, id: i64, user_id: i64) -> Result<Option<Shift>> {
+        let shift = sqlx::query_as!(
+            Shift,
+            r#"
+            UPDATE shifts 
+            SET assigned_user_id = ?, status = ?, updated_at = ?
+            WHERE id = ?
+            RETURNING id, title, description, location_id, team_id, assigned_user_id, start_time, end_time, hourly_rate, status, created_at, updated_at
+            "#,
+            user_id,
+            ShiftStatus::Assigned.to_string(),
+            Utc::now(),
+            id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(shift)
+    }
+
+    pub async fn unassign_shift(&self, id: i64) -> Result<Option<Shift>> {
+        let shift = sqlx::query_as!(
+            Shift,
+            r#"
+            UPDATE shifts 
+            SET assigned_user_id = NULL, status = ?, updated_at = ?
+            WHERE id = ?
+            RETURNING id, title, description, location_id, team_id, assigned_user_id, start_time, end_time, hourly_rate, status, created_at, updated_at
+            "#,
+            ShiftStatus::Open.to_string(),
+            Utc::now(),
+            id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(shift)
+    }
+
+    pub async fn update_shift_status(&self, id: i64, status: ShiftStatus) -> Result<Option<Shift>> {
+        let shift = sqlx::query_as!(
+            Shift,
+            r#"
+            UPDATE shifts 
+            SET status = ?, updated_at = ?
+            WHERE id = ?
+            RETURNING id, title, description, location_id, team_id, assigned_user_id, start_time, end_time, hourly_rate, status, created_at, updated_at
+            "#,
+            status.to_string(),
+            Utc::now(),
+            id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(shift)
+    }
+
+    pub async fn delete_shift(&self, id: i64) -> Result<bool> {
+        let result = sqlx::query!("DELETE FROM shifts WHERE id = ?", id)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(result.rows_affected() > 0)
+    }
+}

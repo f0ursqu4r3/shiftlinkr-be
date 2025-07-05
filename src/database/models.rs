@@ -123,3 +123,111 @@ impl User {
         }
     }
 }
+
+// Location models
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Location {
+    pub id: i64,
+    pub name: String,
+    pub address: Option<String>,
+    pub phone: Option<String>,
+    pub email: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocationInput {
+    pub name: String,
+    pub address: Option<String>,
+    pub phone: Option<String>,
+    pub email: Option<String>,
+}
+
+// Team models
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Team {
+    pub id: i64,
+    pub name: String,
+    pub description: Option<String>,
+    pub location_id: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TeamInput {
+    pub name: String,
+    pub description: Option<String>,
+    pub location_id: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TeamMember {
+    pub id: i64,
+    pub team_id: i64,
+    pub user_id: i64,
+    pub created_at: DateTime<Utc>,
+}
+
+// Shift models
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Shift {
+    pub id: i64,
+    pub title: String,
+    pub description: Option<String>,
+    pub location_id: i64,
+    pub team_id: Option<i64>,
+    pub assigned_user_id: Option<i64>,
+    pub start_time: DateTime<Utc>,
+    pub end_time: DateTime<Utc>,
+    pub hourly_rate: Option<f64>,
+    pub status: ShiftStatus,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShiftInput {
+    pub title: String,
+    pub description: Option<String>,
+    pub location_id: i64,
+    pub team_id: Option<i64>,
+    pub assigned_user_id: Option<i64>,
+    pub start_time: DateTime<Utc>,
+    pub end_time: DateTime<Utc>,
+    pub hourly_rate: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ShiftStatus {
+    Open,
+    Assigned,
+    Completed,
+    Cancelled,
+}
+
+impl std::fmt::Display for ShiftStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ShiftStatus::Open => write!(f, "open"),
+            ShiftStatus::Assigned => write!(f, "assigned"),
+            ShiftStatus::Completed => write!(f, "completed"),
+            ShiftStatus::Cancelled => write!(f, "cancelled"),
+        }
+    }
+}
+
+impl std::str::FromStr for ShiftStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "open" => Ok(ShiftStatus::Open),
+            "assigned" => Ok(ShiftStatus::Assigned),
+            "completed" => Ok(ShiftStatus::Completed),
+            "cancelled" => Ok(ShiftStatus::Cancelled),
+            _ => Err(format!("Invalid shift status: {}", s)),
+        }
+    }
+}

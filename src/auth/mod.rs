@@ -16,6 +16,24 @@ pub struct Claims {
     pub exp: usize, // expiration time
 }
 
+impl Claims {
+    pub fn is_admin(&self) -> bool {
+        self.role.to_lowercase() == "admin"
+    }
+
+    pub fn is_manager(&self) -> bool {
+        self.role.to_lowercase() == "manager"
+    }
+
+    pub fn is_employee(&self) -> bool {
+        self.role.to_lowercase() == "employee"
+    }
+
+    pub fn user_id(&self) -> &str {
+        &self.sub
+    }
+}
+
 pub struct AuthService {
     user_repository: UserRepository,
     config: Config,
