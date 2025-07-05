@@ -1,3 +1,4 @@
+use actix_cors::Cors;
 use actix_web::{App, HttpResponse, HttpServer, Responder, get, middleware::Logger, web};
 use anyhow::Result;
 
@@ -73,6 +74,18 @@ async fn main() -> Result<()> {
             .app_data(location_repo_data.clone())
             .app_data(shift_repo_data.clone())
             .app_data(config_data.clone())
+            .wrap(
+                Cors::default()
+                    .allowed_origin("http://localhost:3000")
+                    .allowed_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+                    .allowed_headers(vec![
+                        "Authorization",
+                        "Content-Type",
+                        "Accept",
+                        "X-Requested-With",
+                    ])
+                    .max_age(3600),
+            )
             .wrap(Logger::default())
             .service(hello)
             .service(health)
