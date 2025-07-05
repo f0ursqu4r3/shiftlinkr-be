@@ -1,5 +1,5 @@
 use actix_web::{web, HttpResponse, Result};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use chrono::{DateTime, Utc};
 
 use crate::database::shift_repository::ShiftRepository;
@@ -63,15 +63,23 @@ pub async fn get_shifts(
     } else if let Some(location_id) = query.location_id {
         shift_repo.get_shifts_by_location(location_id).await
     } else if let (Some(start_date), Some(end_date)) = (query.start_date, query.end_date) {
-        shift_repo.get_shifts_by_date_range(start_date, end_date, query.location_id).await
+        shift_repo.get_shifts_by_date_range(start_date.naive_utc(), end_date.naive_utc(), query.location_id).await
     } else if query.status.as_deref() == Some("open") {
-        shift_repo.get_open_shifts(query.location_id).await
+        if let Some(location_id) = query.location_id {
+            shift_repo.get_open_shifts_by_location(location_id).await
+        } else {
+            shift_repo.get_open_shifts().await
+        }
     } else {
         // For general queries, only admin/manager can see all shifts
         if !claims.is_admin() && !claims.is_manager() {
             return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error("Insufficient permissions")));
         }
-        shift_repo.get_open_shifts(query.location_id).await
+        if let Some(location_id) = query.location_id {
+            shift_repo.get_open_shifts_by_location(location_id).await
+        } else {
+            shift_repo.get_open_shifts().await
+        }
     };
 
     match shifts {

@@ -9,10 +9,8 @@ pub mod handlers;
 use auth::AuthService;
 use config::Config;
 use database::{
-    init_database, 
+    init_database, location_repository::LocationRepository, shift_repository::ShiftRepository,
     user_repository::UserRepository,
-    location_repository::LocationRepository,
-    shift_repository::ShiftRepository
 };
 
 pub struct AppState {
@@ -63,6 +61,7 @@ async fn main() -> Result<()> {
     let app_state = web::Data::new(AppState { auth_service });
     let location_repo_data = web::Data::new(location_repository);
     let shift_repo_data = web::Data::new(shift_repository);
+    let config_data = web::Data::new(config.clone());
 
     let server_address = config.server_address();
     println!("🌐 Server starting on http://{}", server_address);
@@ -73,6 +72,7 @@ async fn main() -> Result<()> {
             .app_data(app_state.clone())
             .app_data(location_repo_data.clone())
             .app_data(shift_repo_data.clone())
+            .app_data(config_data.clone())
             .wrap(Logger::default())
             .service(hello)
             .service(health)
@@ -86,19 +86,43 @@ async fn main() -> Result<()> {
                     )
                     .service(
                         web::scope("/admin")
-                            .route("/locations", web::post().to(handlers::admin::create_location))
+                            .route(
+                                "/locations",
+                                web::post().to(handlers::admin::create_location),
+                            )
                             .route("/locations", web::get().to(handlers::admin::get_locations))
-                            .route("/locations/{id}", web::get().to(handlers::admin::get_location))
-                            .route("/locations/{id}", web::put().to(handlers::admin::update_location))
-                            .route("/locations/{id}", web::delete().to(handlers::admin::delete_location))
+                            .route(
+                                "/locations/{id}",
+                                web::get().to(handlers::admin::get_location),
+                            )
+                            .route(
+                                "/locations/{id}",
+                                web::put().to(handlers::admin::update_location),
+                            )
+                            .route(
+                                "/locations/{id}",
+                                web::delete().to(handlers::admin::delete_location),
+                            )
                             .route("/teams", web::post().to(handlers::admin::create_team))
                             .route("/teams", web::get().to(handlers::admin::get_teams))
                             .route("/teams/{id}", web::get().to(handlers::admin::get_team))
                             .route("/teams/{id}", web::put().to(handlers::admin::update_team))
-                            .route("/teams/{id}", web::delete().to(handlers::admin::delete_team))
-                            .route("/teams/{team_id}/members/{user_id}", web::post().to(handlers::admin::add_team_member))
-                            .route("/teams/{team_id}/members", web::get().to(handlers::admin::get_team_members))
-                            .route("/teams/{team_id}/members/{user_id}", web::delete().to(handlers::admin::remove_team_member)),
+                            .route(
+                                "/teams/{id}",
+                                web::delete().to(handlers::admin::delete_team),
+                            )
+                            .route(
+                                "/teams/{team_id}/members/{user_id}",
+                                web::post().to(handlers::admin::add_team_member),
+                            )
+                            .route(
+                                "/teams/{team_id}/members",
+                                web::get().to(handlers::admin::get_team_members),
+                            )
+                            .route(
+                                "/teams/{team_id}/members/{user_id}",
+                                web::delete().to(handlers::admin::remove_team_member),
+                            ),
                     )
                     .service(
                         web::scope("/shifts")
@@ -107,9 +131,18 @@ async fn main() -> Result<()> {
                             .route("/{id}", web::get().to(handlers::shifts::get_shift))
                             .route("/{id}", web::put().to(handlers::shifts::update_shift))
                             .route("/{id}", web::delete().to(handlers::shifts::delete_shift))
-                            .route("/{id}/assign", web::post().to(handlers::shifts::assign_shift))
-                            .route("/{id}/unassign", web::post().to(handlers::shifts::unassign_shift))
-                            .route("/{id}/status", web::post().to(handlers::shifts::update_shift_status))
+                            .route(
+                                "/{id}/assign",
+                                web::post().to(handlers::shifts::assign_shift),
+                            )
+                            .route(
+                                "/{id}/unassign",
+                                web::post().to(handlers::shifts::unassign_shift),
+                            )
+                            .route(
+                                "/{id}/status",
+                                web::post().to(handlers::shifts::update_shift_status),
+                            )
                             .route("/{id}/claim", web::post().to(handlers::shifts::claim_shift)),
                     ),
             )

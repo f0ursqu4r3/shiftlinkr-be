@@ -51,7 +51,7 @@ pub async fn create_location(
 }
 
 pub async fn get_locations(
-    claims: Claims,
+    _claims: Claims,
     location_repo: web::Data<LocationRepository>,
 ) -> Result<HttpResponse> {
     // All authenticated users can view locations
@@ -65,7 +65,7 @@ pub async fn get_locations(
 }
 
 pub async fn get_location(
-    claims: Claims,
+    _claims: Claims,
     location_repo: web::Data<LocationRepository>,
     path: web::Path<i64>,
 ) -> Result<HttpResponse> {
@@ -147,7 +147,7 @@ pub async fn create_team(
 }
 
 pub async fn get_teams(
-    claims: Claims,
+    _claims: Claims,
     location_repo: web::Data<LocationRepository>,
     query: web::Query<TeamQuery>,
 ) -> Result<HttpResponse> {
@@ -167,7 +167,7 @@ pub async fn get_teams(
 }
 
 pub async fn get_team(
-    claims: Claims,
+    _claims: Claims,
     location_repo: web::Data<LocationRepository>,
     path: web::Path<i64>,
 ) -> Result<HttpResponse> {
@@ -251,7 +251,7 @@ pub async fn add_team_member(
 }
 
 pub async fn get_team_members(
-    claims: Claims,
+    _claims: Claims,
     location_repo: web::Data<LocationRepository>,
     path: web::Path<i64>,
 ) -> Result<HttpResponse> {

@@ -1,8 +1,13 @@
+use actix_web::{
+    Error as ActixError, FromRequest, HttpRequest, dev::Payload, error::ErrorUnauthorized,
+    web::Data,
+};
 use anyhow::{Result, anyhow};
 use bcrypt::{DEFAULT_COST, hash, verify};
 use chrono::{Duration, Utc};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
+use std::future::{Ready, ready};
 
 use crate::config::Config;
 use crate::database::models::{AuthResponse, CreateUserRequest, LoginRequest, User};
@@ -31,6 +36,43 @@ impl Claims {
 
     pub fn user_id(&self) -> &str {
         &self.sub
+    }
+}
+
+impl FromRequest for Claims {
+    type Error = ActixError;
+    type Future = Ready<Result<Self, Self::Error>>;
+
+    fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
+        let auth_header = req.headers().get("Authorization");
+
+        if let Some(auth_header) = auth_header {
+            if let Ok(auth_str) = auth_header.to_str() {
+                if auth_str.starts_with("Bearer ") {
+                    let token = &auth_str[7..]; // Remove "Bearer " prefix
+
+                    // Get the config from app data
+                    if let Some(config) = req.app_data::<Data<Config>>() {
+                        match decode::<Claims>(
+                            token,
+                            &DecodingKey::from_secret(config.jwt_secret.as_ref()),
+                            &Validation::new(Algorithm::HS256),
+                        ) {
+                            Ok(token_data) => {
+                                return ready(Ok(token_data.claims));
+                            }
+                            Err(_) => {
+                                return ready(Err(ErrorUnauthorized("Invalid token")));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        ready(Err(ErrorUnauthorized(
+            "Missing or invalid authorization header",
+        )))
     }
 }
 

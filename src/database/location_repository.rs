@@ -1,8 +1,9 @@
 use sqlx::SqlitePool;
 use anyhow::Result;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 
 use super::models::{Location, LocationInput, Team, TeamInput, TeamMember};
+use super::types::{TeamRow, TeamMemberRow};
 
 pub struct LocationRepository {
     pool: SqlitePool,
@@ -14,6 +15,7 @@ impl LocationRepository {
     }
 
     pub async fn create_location(&self, input: LocationInput) -> Result<Location> {
+        let now = Utc::now().naive_utc();
         let location = sqlx::query_as!(
             Location,
             r#"
@@ -25,8 +27,8 @@ impl LocationRepository {
             input.address,
             input.phone,
             input.email,
-            Utc::now(),
-            Utc::now()
+            now,
+            now
         )
         .fetch_one(&self.pool)
         .await?;
@@ -58,8 +60,8 @@ impl LocationRepository {
     }
 
     pub async fn update_location(&self, id: i64, input: LocationInput) -> Result<Option<Location>> {
-        let location = sqlx::query_as!(
-            Location,
+        let now = Utc::now().naive_utc();
+        let row = sqlx::query!(
             r#"
             UPDATE locations 
             SET name = ?, address = ?, phone = ?, email = ?, updated_at = ?
@@ -70,13 +72,25 @@ impl LocationRepository {
             input.address,
             input.phone,
             input.email,
-            Utc::now(),
+            now,
             id
         )
         .fetch_optional(&self.pool)
         .await?;
 
-        Ok(location)
+        if let Some(row) = row {
+            Ok(Some(Location {
+                id: row.id.unwrap(),
+                name: row.name,
+                address: row.address,
+                phone: row.phone,
+                email: row.email,
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+            }))
+        } else {
+            Ok(None)
+        }
     }
 
     pub async fn delete_location(&self, id: i64) -> Result<bool> {
@@ -92,6 +106,7 @@ impl LocationRepository {
 
     // Team management methods
     pub async fn create_team(&self, input: TeamInput) -> Result<Team> {
+        let now = Utc::now().naive_utc();
         let team = sqlx::query_as!(
             Team,
             r#"
@@ -102,8 +117,8 @@ impl LocationRepository {
             input.name,
             input.description,
             input.location_id,
-            Utc::now(),
-            Utc::now()
+            now,
+            now
         )
         .fetch_one(&self.pool)
         .await?;
@@ -124,15 +139,14 @@ impl LocationRepository {
     }
 
     pub async fn get_teams_by_location(&self, location_id: i64) -> Result<Vec<Team>> {
-        let teams = sqlx::query_as!(
-            Team,
-            "SELECT id, name, description, location_id, created_at, updated_at FROM teams WHERE location_id = ? ORDER BY name",
-            location_id
+        let rows = sqlx::query_as::<_, TeamRow>(
+            "SELECT id, name, description, location_id, created_at, updated_at FROM teams WHERE location_id = ? ORDER BY name"
         )
+        .bind(location_id)
         .fetch_all(&self.pool)
         .await?;
 
-        Ok(teams)
+        Ok(rows.into_iter().map(|row| row.into()).collect())
     }
 
     pub async fn get_all_teams(&self) -> Result<Vec<Team>> {
@@ -147,24 +161,24 @@ impl LocationRepository {
     }
 
     pub async fn update_team(&self, id: i64, input: TeamInput) -> Result<Option<Team>> {
-        let team = sqlx::query_as!(
-            Team,
+        let now = Utc::now().naive_utc();
+        let row = sqlx::query_as::<_, TeamRow>(
             r#"
             UPDATE teams 
             SET name = ?, description = ?, location_id = ?, updated_at = ?
             WHERE id = ?
             RETURNING id, name, description, location_id, created_at, updated_at
-            "#,
-            input.name,
-            input.description,
-            input.location_id,
-            Utc::now(),
-            id
+            "#
         )
+        .bind(input.name)
+        .bind(input.description)
+        .bind(input.location_id)
+        .bind(now)
+        .bind(id)
         .fetch_optional(&self.pool)
         .await?;
 
-        Ok(team)
+        Ok(row.map(|r| r.into()))
     }
 
     pub async fn delete_team(&self, id: i64) -> Result<bool> {
@@ -180,6 +194,7 @@ impl LocationRepository {
 
     // Team member management
     pub async fn add_team_member(&self, team_id: i64, user_id: i64) -> Result<TeamMember> {
+        let now = Utc::now().naive_utc();
         let team_member = sqlx::query_as!(
             TeamMember,
             r#"
@@ -189,7 +204,7 @@ impl LocationRepository {
             "#,
             team_id,
             user_id,
-            Utc::now()
+            now
         )
         .fetch_one(&self.pool)
         .await?;
@@ -198,15 +213,14 @@ impl LocationRepository {
     }
 
     pub async fn get_team_members(&self, team_id: i64) -> Result<Vec<TeamMember>> {
-        let members = sqlx::query_as!(
-            TeamMember,
-            "SELECT id, team_id, user_id, created_at FROM team_members WHERE team_id = ?",
-            team_id
+        let rows = sqlx::query_as::<_, TeamMemberRow>(
+            "SELECT id, team_id, user_id, created_at FROM team_members WHERE team_id = ?"
         )
+        .bind(team_id)
         .fetch_all(&self.pool)
         .await?;
 
-        Ok(members)
+        Ok(rows.into_iter().map(|row| row.into()).collect())
     }
 
     pub async fn remove_team_member(&self, team_id: i64, user_id: i64) -> Result<bool> {

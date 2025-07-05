@@ -4,6 +4,7 @@ use sqlx::{Sqlite, migrate::MigrateDatabase, sqlite::SqlitePool};
 pub mod location_repository;
 pub mod models;
 pub mod shift_repository;
+pub mod types;
 pub mod user_repository;
 
 pub async fn init_database(database_url: &str) -> Result<SqlitePool> {

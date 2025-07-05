@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -10,8 +10,8 @@ pub struct User {
     pub password_hash: String,
     pub name: String,
     pub role: UserRole,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -111,7 +111,7 @@ impl From<User> for UserInfo {
 
 impl User {
     pub fn new(email: String, password_hash: String, name: String, role: Option<UserRole>) -> Self {
-        let now = Utc::now();
+        let now = Utc::now().naive_utc();
         User {
             id: Uuid::new_v4().to_string(),
             email,
@@ -125,15 +125,15 @@ impl User {
 }
 
 // Location models
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Location {
     pub id: i64,
     pub name: String,
     pub address: Option<String>,
     pub phone: Option<String>,
     pub email: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -145,14 +145,14 @@ pub struct LocationInput {
 }
 
 // Team models
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Team {
     pub id: i64,
     pub name: String,
     pub description: Option<String>,
     pub location_id: i64,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -162,16 +162,16 @@ pub struct TeamInput {
     pub location_id: i64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct TeamMember {
     pub id: i64,
     pub team_id: i64,
     pub user_id: i64,
-    pub created_at: DateTime<Utc>,
+    pub created_at: NaiveDateTime,
 }
 
 // Shift models
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Shift {
     pub id: i64,
     pub title: String,
@@ -179,12 +179,12 @@ pub struct Shift {
     pub location_id: i64,
     pub team_id: Option<i64>,
     pub assigned_user_id: Option<i64>,
-    pub start_time: DateTime<Utc>,
-    pub end_time: DateTime<Utc>,
+    pub start_time: NaiveDateTime,
+    pub end_time: NaiveDateTime,
     pub hourly_rate: Option<f64>,
     pub status: ShiftStatus,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -194,8 +194,8 @@ pub struct ShiftInput {
     pub location_id: i64,
     pub team_id: Option<i64>,
     pub assigned_user_id: Option<i64>,
-    pub start_time: DateTime<Utc>,
-    pub end_time: DateTime<Utc>,
+    pub start_time: NaiveDateTime,
+    pub end_time: NaiveDateTime,
     pub hourly_rate: Option<f64>,
 }
 
@@ -229,5 +229,34 @@ impl std::str::FromStr for ShiftStatus {
             "cancelled" => Ok(ShiftStatus::Cancelled),
             _ => Err(format!("Invalid shift status: {}", s)),
         }
+    }
+}
+
+impl sqlx::Type<sqlx::Sqlite> for ShiftStatus {
+    fn type_info() -> sqlx::sqlite::SqliteTypeInfo {
+        <String as sqlx::Type<sqlx::Sqlite>>::type_info()
+    }
+}
+
+impl<'q> sqlx::Encode<'q, sqlx::Sqlite> for ShiftStatus {
+    fn encode_by_ref(
+        &self,
+        args: &mut Vec<sqlx::sqlite::SqliteArgumentValue<'q>>,
+    ) -> sqlx::encode::IsNull {
+        let s = self.to_string();
+        <String as sqlx::Encode<'q, sqlx::Sqlite>>::encode_by_ref(&s, args)
+    }
+}
+
+impl<'r> sqlx::Decode<'r, sqlx::Sqlite> for ShiftStatus {
+    fn decode(value: sqlx::sqlite::SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let s = <String as sqlx::Decode<sqlx::Sqlite>>::decode(value)?;
+        s.parse::<ShiftStatus>().map_err(|e| e.into())
+    }
+}
+
+impl Default for ShiftStatus {
+    fn default() -> Self {
+        ShiftStatus::Open
     }
 }
