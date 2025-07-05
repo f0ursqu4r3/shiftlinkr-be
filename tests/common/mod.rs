@@ -1,14 +1,15 @@
-use sqlx::SqlitePool;
-use tempfile::TempDir;
 use anyhow::Result;
+use sqlx::SqlitePool;
 use std::env;
+use tempfile::TempDir;
 
 // Import the modules we need to test
+use be::auth::AuthService;
 use be::config::Config;
 use be::database::init_database;
 use be::database::user_repository::UserRepository;
-use be::auth::AuthService;
 
+#[allow(dead_code)]
 pub struct TestContext {
     pub pool: SqlitePool,
     pub config: Config,
@@ -17,10 +18,11 @@ pub struct TestContext {
 }
 
 impl TestContext {
+    #[allow(dead_code)]
     pub async fn new() -> Result<Self> {
         let temp_dir = TempDir::new()?;
         let database_url = format!("sqlite:{}/test.db", temp_dir.path().display());
-        
+
         let config = Config {
             database_url: database_url.clone(),
             jwt_secret: "test-jwt-secret-key".to_string(),
@@ -44,6 +46,8 @@ impl TestContext {
 }
 
 pub fn setup_test_env() {
-    unsafe { env::set_var("RUST_LOG", "debug"); }
+    unsafe {
+        env::set_var("RUST_LOG", "debug");
+    }
     let _ = env_logger::builder().is_test(true).try_init();
 }

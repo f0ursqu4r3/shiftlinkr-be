@@ -38,7 +38,7 @@ async fn test_find_user_by_email() {
 
     let found_user = repo.find_by_email("findme@example.com").await.unwrap();
     assert!(found_user.is_some());
-    
+
     let found_user = found_user.unwrap();
     assert_eq!(found_user.email, "findme@example.com");
     assert_eq!(found_user.name, "Find Me");
@@ -62,7 +62,7 @@ async fn test_find_user_by_id() {
 
     let found_user = repo.find_by_id(&user.id).await.unwrap();
     assert!(found_user.is_some());
-    
+
     let found_user = found_user.unwrap();
     assert_eq!(found_user.id, user.id);
     assert_eq!(found_user.email, "findbyid@example.com");
@@ -128,9 +128,21 @@ async fn test_user_roles() {
     repo.create_user(&employee_user).await.unwrap();
 
     // Verify roles
-    let found_admin = repo.find_by_email("admin@example.com").await.unwrap().unwrap();
-    let found_manager = repo.find_by_email("manager@example.com").await.unwrap().unwrap();
-    let found_employee = repo.find_by_email("employee@example.com").await.unwrap().unwrap();
+    let found_admin = repo
+        .find_by_email("admin@example.com")
+        .await
+        .unwrap()
+        .unwrap();
+    let found_manager = repo
+        .find_by_email("manager@example.com")
+        .await
+        .unwrap()
+        .unwrap();
+    let found_employee = repo
+        .find_by_email("employee@example.com")
+        .await
+        .unwrap()
+        .unwrap();
 
     assert!(matches!(found_admin.role, UserRole::Admin));
     assert!(matches!(found_manager.role, UserRole::Manager));
@@ -152,7 +164,11 @@ async fn test_user_creation_with_default_role() {
 
     repo.create_user(&user).await.unwrap();
 
-    let found_user = repo.find_by_email("default@example.com").await.unwrap().unwrap();
+    let found_user = repo
+        .find_by_email("default@example.com")
+        .await
+        .unwrap()
+        .unwrap();
     assert!(matches!(found_user.role, UserRole::Employee));
 }
 
@@ -198,9 +214,9 @@ fn test_user_model_creation() {
     assert_eq!(user.password_hash, "hashed_password");
     assert!(matches!(user.role, UserRole::Admin));
     assert!(!user.id.is_empty());
-    
+
     // Check that timestamps are reasonable (within last minute)
-    let now = Utc::now();
+    let now = Utc::now().naive_local();
     assert!(user.created_at <= now);
     assert!(user.updated_at <= now);
     assert!(user.created_at > now - chrono::Duration::minutes(1));
