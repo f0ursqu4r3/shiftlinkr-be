@@ -5,6 +5,7 @@ A Rust-based REST API for the ShiftLinkr employee scheduling system, built with 
 ## Features
 
 ✅ **Employee Authentication**
+
 - User registration with email/password
 - JWT-based authentication
 - Role-based access control (Admin, Manager, Employee)
@@ -23,6 +24,7 @@ A Rust-based REST API for the ShiftLinkr employee scheduling system, built with 
 ### Authentication
 
 #### Register a new user
+
 ```bash
 POST /api/v1/auth/register
 Content-Type: application/json
@@ -36,6 +38,7 @@ Content-Type: application/json
 ```
 
 #### Login
+
 ```bash
 POST /api/v1/auth/login
 Content-Type: application/json
@@ -47,6 +50,7 @@ Content-Type: application/json
 ```
 
 #### Get current user info
+
 ```bash
 GET /api/v1/auth/me
 Authorization: Bearer <jwt_token>
@@ -55,6 +59,7 @@ Authorization: Bearer <jwt_token>
 ### Health Check
 
 #### Health status
+
 ```bash
 GET /health
 ```
@@ -62,6 +67,7 @@ GET /health
 ## Quick Start
 
 1. **Clone and setup environment:**
+
    ```bash
    cd be
    cp .env.example .env
@@ -69,16 +75,19 @@ GET /health
    ```
 
 2. **Build the application:**
+
    ```bash
    cargo build
    ```
 
 3. **Run the server:**
+
    ```bash
    cargo run
    ```
 
 4. **Test the API:**
+
    ```bash
    ./test_api.sh
    ```
@@ -88,6 +97,7 @@ The server will start on the configured host and port (default: `http://127.0.0.
 ## Database Schema
 
 ### Users Table
+
 - `id` (TEXT PRIMARY KEY) - UUID
 - `email` (TEXT UNIQUE) - User's email
 - `password_hash` (TEXT) - Bcrypt hashed password
@@ -137,6 +147,7 @@ Run the test script to verify all endpoints:
 ## Next Steps
 
 Based on the [roadmap](../ROADMAP.md), the next features to implement are:
+
 1. Business Admin Dashboard endpoints
 2. Shift management and calendar views
 3. Time-off request system

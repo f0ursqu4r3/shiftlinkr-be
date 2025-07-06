@@ -7,8 +7,9 @@ This document describes the comprehensive test suite for the ShiftLinkr backend.
 The backend tests are organized into several test files:
 
 ### 1. Authentication Tests (`auth_tests.rs`)
+
 - **Purpose**: Tests core authentication functionality
-- **Coverage**: 
+- **Coverage**:
   - User registration
   - User login
   - JWT token generation and validation
@@ -17,6 +18,7 @@ The backend tests are organized into several test files:
   - Edge cases (duplicate emails, invalid credentials)
 
 ### 2. Password Reset Tests (`password_reset_tests.rs`)
+
 - **Purpose**: Tests the password reset flow
 - **Coverage**:
   - Token generation and validation
@@ -26,6 +28,7 @@ The backend tests are organized into several test files:
   - Security edge cases (invalid tokens, expired tokens)
 
 ### 3. Integration Tests (`integration_tests.rs`)
+
 - **Purpose**: Tests HTTP endpoints end-to-end
 - **Coverage**:
   - All auth endpoints (`/register`, `/login`, `/me`, `/forgot-password`, `/reset-password`)
@@ -35,6 +38,7 @@ The backend tests are organized into several test files:
   - Authentication middleware
 
 ### 4. Configuration Tests (`config_tests.rs`)
+
 - **Purpose**: Tests configuration management
 - **Coverage**:
   - Environment variable handling
@@ -75,6 +79,7 @@ This script runs all tests with proper isolation and provides a comprehensive su
 The test suite covers:
 
 ### Core Functionality
+
 - ✅ User registration and authentication
 - ✅ JWT token management
 - ✅ Password hashing and verification
@@ -82,6 +87,7 @@ The test suite covers:
 - ✅ Role-based access control
 
 ### Security Features
+
 - ✅ Password reset token security
 - ✅ Token expiration handling
 - ✅ One-time token usage
@@ -89,6 +95,7 @@ The test suite covers:
 - ✅ Authentication middleware
 
 ### Error Handling
+
 - ✅ Duplicate email registration
 - ✅ Invalid login credentials
 - ✅ Missing/invalid JWT tokens
@@ -96,6 +103,7 @@ The test suite covers:
 - ✅ Malformed requests
 
 ### Configuration
+
 - ✅ Environment variable handling
 - ✅ Default configuration values
 - ✅ Configuration validation
@@ -107,12 +115,14 @@ Tests use isolated SQLite databases created in temporary directories. Each test 
 ## Test Fixtures
 
 The `common/mod.rs` module provides shared test utilities:
+
 - `TestContext`: Creates isolated test environments
 - `setup_test_env()`: Configures test logging
 
 ## Continuous Integration
 
 All tests must pass before code can be merged. The test suite is designed to:
+
 - Run quickly and reliably
 - Provide clear failure messages
 - Test both happy path and error conditions
@@ -130,6 +140,7 @@ When adding new functionality:
 ## Test Results
 
 Current test status:
+
 - **Authentication Tests**: ✅ 11 tests passing
 - **Password Reset Tests**: ✅ 12 tests passing
 - **Integration Tests**: ✅ 10 tests passing
