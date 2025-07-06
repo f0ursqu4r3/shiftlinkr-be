@@ -34,7 +34,10 @@ async fn test_forgot_password_invalid_email() {
     let ctx = common::TestContext::new().await.unwrap();
 
     // Test forgot password with non-existent email
-    let result = ctx.auth_service.forgot_password("nonexistent@example.com").await;
+    let result = ctx
+        .auth_service
+        .forgot_password("nonexistent@example.com")
+        .await;
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("User not found"));
 }
@@ -56,24 +59,37 @@ async fn test_reset_password_valid_token() {
     assert!(registration.is_ok());
 
     // Request password reset
-    let token = ctx.auth_service.forgot_password("reset@example.com").await.unwrap();
+    let token = ctx
+        .auth_service
+        .forgot_password("reset@example.com")
+        .await
+        .unwrap();
 
     // Reset password with valid token
-    let result = ctx.auth_service.reset_password(&token, "newpassword123").await;
+    let result = ctx
+        .auth_service
+        .reset_password(&token, "newpassword123")
+        .await;
     assert!(result.is_ok());
 
     // Verify old password doesn't work
-    let old_login = ctx.auth_service.login(be::database::models::LoginRequest {
-        email: "reset@example.com".to_string(),
-        password: "oldpassword123".to_string(),
-    }).await;
+    let old_login = ctx
+        .auth_service
+        .login(be::database::models::LoginRequest {
+            email: "reset@example.com".to_string(),
+            password: "oldpassword123".to_string(),
+        })
+        .await;
     assert!(old_login.is_err());
 
     // Verify new password works
-    let new_login = ctx.auth_service.login(be::database::models::LoginRequest {
-        email: "reset@example.com".to_string(),
-        password: "newpassword123".to_string(),
-    }).await;
+    let new_login = ctx
+        .auth_service
+        .login(be::database::models::LoginRequest {
+            email: "reset@example.com".to_string(),
+            password: "newpassword123".to_string(),
+        })
+        .await;
     assert!(new_login.is_ok());
 }
 
@@ -83,9 +99,17 @@ async fn test_reset_password_invalid_token() {
     let ctx = common::TestContext::new().await.unwrap();
 
     // Test reset with invalid token
-    let result = ctx.auth_service.reset_password("invalid-token", "newpassword123").await;
+    let result = ctx
+        .auth_service
+        .reset_password("invalid-token", "newpassword123")
+        .await;
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("Invalid or expired reset token"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid or expired reset token")
+    );
 }
 
 #[tokio::test]
@@ -105,16 +129,31 @@ async fn test_reset_password_used_token() {
     assert!(registration.is_ok());
 
     // Request password reset
-    let token = ctx.auth_service.forgot_password("used@example.com").await.unwrap();
+    let token = ctx
+        .auth_service
+        .forgot_password("used@example.com")
+        .await
+        .unwrap();
 
     // Use the token once
-    let first_reset = ctx.auth_service.reset_password(&token, "newpassword123").await;
+    let first_reset = ctx
+        .auth_service
+        .reset_password(&token, "newpassword123")
+        .await;
     assert!(first_reset.is_ok());
 
     // Try to use the same token again
-    let second_reset = ctx.auth_service.reset_password(&token, "anotherpassword123").await;
+    let second_reset = ctx
+        .auth_service
+        .reset_password(&token, "anotherpassword123")
+        .await;
     assert!(second_reset.is_err());
-    assert!(second_reset.unwrap_err().to_string().contains("Invalid or expired reset token"));
+    assert!(
+        second_reset
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid or expired reset token")
+    );
 }
 
 #[tokio::test]
@@ -134,15 +173,29 @@ async fn test_multiple_reset_tokens_invalidated() {
     assert!(registration.is_ok());
 
     // Request multiple password resets
-    let token1 = ctx.auth_service.forgot_password("multiple@example.com").await.unwrap();
-    let token2 = ctx.auth_service.forgot_password("multiple@example.com").await.unwrap();
+    let token1 = ctx
+        .auth_service
+        .forgot_password("multiple@example.com")
+        .await
+        .unwrap();
+    let token2 = ctx
+        .auth_service
+        .forgot_password("multiple@example.com")
+        .await
+        .unwrap();
 
     // Use the second token
-    let reset_result = ctx.auth_service.reset_password(&token2, "newpassword123").await;
+    let reset_result = ctx
+        .auth_service
+        .reset_password(&token2, "newpassword123")
+        .await;
     assert!(reset_result.is_ok());
 
     // First token should now be invalid (all tokens for user should be invalidated)
-    let old_token_result = ctx.auth_service.reset_password(&token1, "anotherpassword123").await;
+    let old_token_result = ctx
+        .auth_service
+        .reset_password(&token1, "anotherpassword123")
+        .await;
     assert!(old_token_result.is_err());
 }
 
@@ -163,7 +216,9 @@ async fn test_password_reset_repository_create_token() {
     user_repo.create_user(&user).await.unwrap();
 
     // Create password reset token repository
-    let reset_repo = be::database::password_reset_repository::PasswordResetTokenRepository::new(ctx.pool.clone());
+    let reset_repo = be::database::password_reset_repository::PasswordResetTokenRepository::new(
+        ctx.pool.clone(),
+    );
 
     // Create a token
     let token = reset_repo.create_token(&user.id).await.unwrap();
@@ -191,13 +246,18 @@ async fn test_password_reset_repository_find_valid_token() {
     let user_repo = be::database::user_repository::UserRepository::new(ctx.pool.clone());
     user_repo.create_user(&user).await.unwrap();
 
-    let reset_repo = be::database::password_reset_repository::PasswordResetTokenRepository::new(ctx.pool.clone());
+    let reset_repo = be::database::password_reset_repository::PasswordResetTokenRepository::new(
+        ctx.pool.clone(),
+    );
 
     // Create a token
     let created_token = reset_repo.create_token(&user.id).await.unwrap();
 
     // Find the token
-    let found_token = reset_repo.find_valid_token(&created_token.token).await.unwrap();
+    let found_token = reset_repo
+        .find_valid_token(&created_token.token)
+        .await
+        .unwrap();
     assert!(found_token.is_some());
 
     let found = found_token.unwrap();
@@ -223,7 +283,9 @@ async fn test_password_reset_repository_mark_token_used() {
     let user_repo = be::database::user_repository::UserRepository::new(ctx.pool.clone());
     user_repo.create_user(&user).await.unwrap();
 
-    let reset_repo = be::database::password_reset_repository::PasswordResetTokenRepository::new(ctx.pool.clone());
+    let reset_repo = be::database::password_reset_repository::PasswordResetTokenRepository::new(
+        ctx.pool.clone(),
+    );
 
     // Create a token
     let created_token = reset_repo.create_token(&user.id).await.unwrap();
@@ -233,7 +295,10 @@ async fn test_password_reset_repository_mark_token_used() {
     assert!(mark_result.is_ok());
 
     // Token should no longer be valid
-    let found_token = reset_repo.find_valid_token(&created_token.token).await.unwrap();
+    let found_token = reset_repo
+        .find_valid_token(&created_token.token)
+        .await
+        .unwrap();
     assert!(found_token.is_none());
 }
 
@@ -253,7 +318,9 @@ async fn test_password_reset_repository_cleanup_expired() {
     let user_repo = be::database::user_repository::UserRepository::new(ctx.pool.clone());
     user_repo.create_user(&user).await.unwrap();
 
-    let reset_repo = be::database::password_reset_repository::PasswordResetTokenRepository::new(ctx.pool.clone());
+    let reset_repo = be::database::password_reset_repository::PasswordResetTokenRepository::new(
+        ctx.pool.clone(),
+    );
 
     // Create a token
     let _token = reset_repo.create_token(&user.id).await.unwrap();
@@ -279,23 +346,49 @@ async fn test_password_reset_repository_invalidate_user_tokens() {
     let user_repo = be::database::user_repository::UserRepository::new(ctx.pool.clone());
     user_repo.create_user(&user).await.unwrap();
 
-    let reset_repo = be::database::password_reset_repository::PasswordResetTokenRepository::new(ctx.pool.clone());
+    let reset_repo = be::database::password_reset_repository::PasswordResetTokenRepository::new(
+        ctx.pool.clone(),
+    );
 
     // Create multiple tokens
     let token1 = reset_repo.create_token(&user.id).await.unwrap();
     let token2 = reset_repo.create_token(&user.id).await.unwrap();
 
     // Both should be valid initially
-    assert!(reset_repo.find_valid_token(&token1.token).await.unwrap().is_some());
-    assert!(reset_repo.find_valid_token(&token2.token).await.unwrap().is_some());
+    assert!(
+        reset_repo
+            .find_valid_token(&token1.token)
+            .await
+            .unwrap()
+            .is_some()
+    );
+    assert!(
+        reset_repo
+            .find_valid_token(&token2.token)
+            .await
+            .unwrap()
+            .is_some()
+    );
 
     // Invalidate all tokens for user
     let invalidate_result = reset_repo.invalidate_user_tokens(&user.id).await;
     assert!(invalidate_result.is_ok());
 
     // Both tokens should now be invalid
-    assert!(reset_repo.find_valid_token(&token1.token).await.unwrap().is_none());
-    assert!(reset_repo.find_valid_token(&token2.token).await.unwrap().is_none());
+    assert!(
+        reset_repo
+            .find_valid_token(&token1.token)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        reset_repo
+            .find_valid_token(&token2.token)
+            .await
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[tokio::test]

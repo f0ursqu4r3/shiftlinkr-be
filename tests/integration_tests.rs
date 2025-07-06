@@ -376,10 +376,12 @@ async fn test_forgot_password_endpoint() {
     assert_eq!(resp.status(), StatusCode::OK);
 
     let body: serde_json::Value = test::read_body_json(resp).await;
-    assert!(body["message"]
-        .as_str()
-        .unwrap()
-        .contains("password reset link has been sent"));
+    assert!(
+        body["message"]
+            .as_str()
+            .unwrap()
+            .contains("password reset link has been sent")
+    );
 }
 
 #[actix_web::test]
@@ -419,10 +421,12 @@ async fn test_forgot_password_nonexistent_email() {
     assert_eq!(resp.status(), StatusCode::OK);
 
     let body: serde_json::Value = test::read_body_json(resp).await;
-    assert!(body["message"]
-        .as_str()
-        .unwrap()
-        .contains("password reset link has been sent"));
+    assert!(
+        body["message"]
+            .as_str()
+            .unwrap()
+            .contains("password reset link has been sent")
+    );
 }
 
 #[actix_web::test]
@@ -439,12 +443,9 @@ async fn test_reset_password_invalid_token() {
         App::new()
             .app_data(app_state)
             .app_data(config_data)
-            .service(
-                web::scope("/api/v1").service(
-                    web::scope("/auth")
-                        .route("/reset-password", web::post().to(auth::reset_password)),
-                ),
-            ),
+            .service(web::scope("/api/v1").service(
+                web::scope("/auth").route("/reset-password", web::post().to(auth::reset_password)),
+            )),
     )
     .await;
 
@@ -462,10 +463,12 @@ async fn test_reset_password_invalid_token() {
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
     let body: serde_json::Value = test::read_body_json(resp).await;
-    assert!(body["error"]
-        .as_str()
-        .unwrap()
-        .contains("Invalid or expired reset token"));
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap()
+            .contains("Invalid or expired reset token")
+    );
 }
 
 #[actix_web::test]
@@ -521,7 +524,11 @@ async fn test_complete_password_reset_flow() {
     assert_eq!(forgot_resp.status(), StatusCode::OK);
 
     // 3. Get the token from the auth service (simulating getting it from email)
-    let token = ctx.auth_service.forgot_password("complete@example.com").await.unwrap();
+    let token = ctx
+        .auth_service
+        .forgot_password("complete@example.com")
+        .await
+        .unwrap();
 
     // 4. Reset password with the token
     let reset_data = json!({
@@ -537,10 +544,12 @@ async fn test_complete_password_reset_flow() {
     assert_eq!(reset_resp.status(), StatusCode::OK);
 
     let reset_body: serde_json::Value = test::read_body_json(reset_resp).await;
-    assert!(reset_body["message"]
-        .as_str()
-        .unwrap()
-        .contains("Password has been reset successfully"));
+    assert!(
+        reset_body["message"]
+            .as_str()
+            .unwrap()
+            .contains("Password has been reset successfully")
+    );
 
     // 5. Verify old password doesn't work
     let old_login_data = json!({
