@@ -8,6 +8,7 @@ use be::auth::AuthService;
 use be::config::Config;
 use be::database::init_database;
 use be::database::user_repository::UserRepository;
+use be::database::password_reset_repository::PasswordResetTokenRepository;
 
 #[allow(dead_code)]
 pub struct TestContext {
@@ -34,7 +35,8 @@ impl TestContext {
 
         let pool = init_database(&database_url).await?;
         let user_repository = UserRepository::new(pool.clone());
-        let auth_service = AuthService::new(user_repository, config.clone());
+        let password_reset_repository = PasswordResetTokenRepository::new(pool.clone());
+        let auth_service = AuthService::new(user_repository, password_reset_repository, config.clone());
 
         Ok(TestContext {
             pool,

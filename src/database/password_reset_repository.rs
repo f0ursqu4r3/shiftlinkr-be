@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 use crate::database::models::PasswordResetToken;
 
+#[derive(Clone)]
 pub struct PasswordResetTokenRepository {
     pool: SqlitePool,
 }

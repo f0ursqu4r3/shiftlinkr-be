@@ -2,6 +2,7 @@ use sqlx::SqlitePool;
 use anyhow::Result;
 use crate::database::models::User;
 
+#[derive(Clone)]
 pub struct UserRepository {
     pool: SqlitePool,
 }

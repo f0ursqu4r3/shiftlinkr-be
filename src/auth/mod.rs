@@ -77,6 +77,7 @@ impl FromRequest for Claims {
     }
 }
 
+#[derive(Clone)]
 pub struct AuthService {
     user_repository: UserRepository,
     password_reset_repository: PasswordResetTokenRepository,
