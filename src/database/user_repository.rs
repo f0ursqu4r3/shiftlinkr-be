@@ -71,4 +71,25 @@ impl UserRepository {
 
         Ok(count > 0)
     }
+
+    pub async fn update_password(&self, user_id: &str, password_hash: &str) -> Result<()> {
+        use chrono::Utc;
+        
+        let updated_at = Utc::now().naive_utc();
+        
+        sqlx::query(
+            r#"
+            UPDATE users
+            SET password_hash = ?, updated_at = ?
+            WHERE id = ?
+            "#
+        )
+        .bind(password_hash)
+        .bind(updated_at)
+        .bind(user_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
 }

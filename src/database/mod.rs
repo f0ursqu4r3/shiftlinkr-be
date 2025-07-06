@@ -3,6 +3,7 @@ use sqlx::{Sqlite, migrate::MigrateDatabase, sqlite::SqlitePool};
 
 pub mod location_repository;
 pub mod models;
+pub mod password_reset_repository;
 pub mod shift_repository;
 pub mod types;
 pub mod user_repository;
@@ -118,6 +119,23 @@ async fn run_migrations(pool: &SqlitePool) -> Result<()> {
             FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE,
             FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL,
             FOREIGN KEY (assigned_user_id) REFERENCES users(id) ON DELETE SET NULL
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Create password reset tokens table
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            token TEXT UNIQUE NOT NULL,
+            expires_at DATETIME NOT NULL,
+            used_at DATETIME,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )
         "#,
     )

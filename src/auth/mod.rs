@@ -12,6 +12,7 @@ use std::future::{Ready, ready};
 use crate::config::Config;
 use crate::database::models::{AuthResponse, CreateUserRequest, LoginRequest, User};
 use crate::database::user_repository::UserRepository;
+use crate::database::password_reset_repository::PasswordResetTokenRepository;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
@@ -78,13 +79,15 @@ impl FromRequest for Claims {
 
 pub struct AuthService {
     user_repository: UserRepository,
+    password_reset_repository: PasswordResetTokenRepository,
     config: Config,
 }
 
 impl AuthService {
-    pub fn new(user_repository: UserRepository, config: Config) -> Self {
+    pub fn new(user_repository: UserRepository, password_reset_repository: PasswordResetTokenRepository, config: Config) -> Self {
         Self {
             user_repository,
+            password_reset_repository,
             config,
         }
     }
@@ -176,5 +179,58 @@ impl AuthService {
         )?;
 
         Ok(token)
+    }
+
+    /// Request password reset - generates and stores a reset token
+    pub async fn forgot_password(&self, email: &str) -> Result<String> {
+        // Check if user exists
+        let user = self
+            .user_repository
+            .find_by_email(email)
+            .await?
+            .ok_or_else(|| anyhow!("User not found"))?;
+
+        // Generate reset token
+        let reset_token = self
+            .password_reset_repository
+            .create_token(&user.id)
+            .await?;
+
+        // In a real application, you would send this token via email
+        // For development, we'll return it directly
+        println!("🔗 Password reset token for {}: {}", email, reset_token.token);
+        println!("🌐 Reset link: http://localhost:3000/auth/reset-password?token={}", reset_token.token);
+
+        Ok(reset_token.token)
+    }
+
+    /// Reset password using a valid token
+    pub async fn reset_password(&self, token: &str, new_password: &str) -> Result<()> {
+        // Find and validate the token
+        let reset_token = self
+            .password_reset_repository
+            .find_valid_token(token)
+            .await?
+            .ok_or_else(|| anyhow!("Invalid or expired reset token"))?;
+
+        // Hash the new password
+        let password_hash = hash(new_password, DEFAULT_COST)?;
+
+        // Update user's password
+        self.user_repository
+            .update_password(&reset_token.user_id, &password_hash)
+            .await?;
+
+        // Mark token as used
+        self.password_reset_repository
+            .mark_token_used(token)
+            .await?;
+
+        // Invalidate all other reset tokens for this user
+        self.password_reset_repository
+            .invalidate_user_tokens(&reset_token.user_id)
+            .await?;
+
+        Ok(())
     }
 }

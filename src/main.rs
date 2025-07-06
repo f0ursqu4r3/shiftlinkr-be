@@ -10,7 +10,8 @@ pub mod handlers;
 use auth::AuthService;
 use config::Config;
 use database::{
-    init_database, location_repository::LocationRepository, shift_repository::ShiftRepository,
+    init_database, location_repository::LocationRepository,
+    password_reset_repository::PasswordResetTokenRepository, shift_repository::ShiftRepository,
     user_repository::UserRepository,
 };
 
@@ -56,7 +57,8 @@ async fn main() -> Result<()> {
     let user_repository = UserRepository::new(pool.clone());
     let location_repository = LocationRepository::new(pool.clone());
     let shift_repository = ShiftRepository::new(pool.clone());
-    let auth_service = AuthService::new(user_repository, config.clone());
+    let password_reset_repository = PasswordResetTokenRepository::new(pool.clone());
+    let auth_service = AuthService::new(user_repository, password_reset_repository, config.clone());
 
     // Create app state and repository data
     let app_state = web::Data::new(AppState { auth_service });
@@ -95,7 +97,15 @@ async fn main() -> Result<()> {
                         web::scope("/auth")
                             .route("/register", web::post().to(handlers::auth::register))
                             .route("/login", web::post().to(handlers::auth::login))
-                            .route("/me", web::get().to(handlers::auth::me)),
+                            .route("/me", web::get().to(handlers::auth::me))
+                            .route(
+                                "/forgot-password",
+                                web::post().to(handlers::auth::forgot_password),
+                            )
+                            .route(
+                                "/reset-password",
+                                web::post().to(handlers::auth::reset_password),
+                            ),
                     )
                     .service(
                         web::scope("/admin")

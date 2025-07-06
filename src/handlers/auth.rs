@@ -1,7 +1,7 @@
 use actix_web::{web, HttpResponse, Result, HttpRequest};
 use serde_json::json;
 
-use crate::database::models::{CreateUserRequest, LoginRequest};
+use crate::database::models::{CreateUserRequest, LoginRequest, ForgotPasswordRequest, ResetPasswordRequest};
 use crate::AppState;
 
 pub async fn register(
@@ -64,5 +64,36 @@ fn extract_token_from_header(req: &HttpRequest) -> Option<String> {
         Some(auth_str[7..].to_string())
     } else {
         None
+    }
+}
+
+pub async fn forgot_password(
+    data: web::Data<AppState>,
+    request: web::Json<ForgotPasswordRequest>,
+) -> Result<HttpResponse> {
+    match data.auth_service.forgot_password(&request.email).await {
+        Ok(_token) => Ok(HttpResponse::Ok().json(json!({
+            "message": "If the email exists, a password reset link has been sent."
+        }))),
+        Err(_) => {
+            // Don't reveal whether the email exists or not for security
+            Ok(HttpResponse::Ok().json(json!({
+                "message": "If the email exists, a password reset link has been sent."
+            })))
+        }
+    }
+}
+
+pub async fn reset_password(
+    data: web::Data<AppState>,
+    request: web::Json<ResetPasswordRequest>,
+) -> Result<HttpResponse> {
+    match data.auth_service.reset_password(&request.token, &request.new_password).await {
+        Ok(()) => Ok(HttpResponse::Ok().json(json!({
+            "message": "Password has been reset successfully."
+        }))),
+        Err(err) => Ok(HttpResponse::BadRequest().json(json!({
+            "error": err.to_string()
+        }))),
     }
 }
