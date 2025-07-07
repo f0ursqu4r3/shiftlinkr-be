@@ -358,3 +358,343 @@ impl Default for ShiftStatus {
         ShiftStatus::Open
     }
 }
+
+// Time-Off Request models
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct TimeOffRequest {
+    pub id: i64,
+    pub user_id: String,
+    pub start_date: NaiveDateTime,
+    pub end_date: NaiveDateTime,
+    pub reason: String,
+    pub request_type: TimeOffType,
+    pub status: TimeOffStatus,
+    pub approved_by: Option<String>,
+    pub approval_notes: Option<String>,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimeOffRequestInput {
+    pub user_id: String,
+    pub start_date: NaiveDateTime,
+    pub end_date: NaiveDateTime,
+    pub reason: String,
+    pub request_type: TimeOffType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TimeOffType {
+    Vacation,
+    Sick,
+    Personal,
+    Emergency,
+    Bereavement,
+    MaternityPaternity,
+    Other,
+}
+
+impl std::fmt::Display for TimeOffType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TimeOffType::Vacation => write!(f, "vacation"),
+            TimeOffType::Sick => write!(f, "sick"),
+            TimeOffType::Personal => write!(f, "personal"),
+            TimeOffType::Emergency => write!(f, "emergency"),
+            TimeOffType::Bereavement => write!(f, "bereavement"),
+            TimeOffType::MaternityPaternity => write!(f, "maternity_paternity"),
+            TimeOffType::Other => write!(f, "other"),
+        }
+    }
+}
+
+impl std::str::FromStr for TimeOffType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "vacation" => Ok(TimeOffType::Vacation),
+            "sick" => Ok(TimeOffType::Sick),
+            "personal" => Ok(TimeOffType::Personal),
+            "emergency" => Ok(TimeOffType::Emergency),
+            "bereavement" => Ok(TimeOffType::Bereavement),
+            "maternity_paternity" => Ok(TimeOffType::MaternityPaternity),
+            "other" => Ok(TimeOffType::Other),
+            _ => Err(format!("Invalid time-off type: {}", s)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TimeOffStatus {
+    Pending,
+    Approved,
+    Denied,
+    Cancelled,
+}
+
+impl std::fmt::Display for TimeOffStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TimeOffStatus::Pending => write!(f, "pending"),
+            TimeOffStatus::Approved => write!(f, "approved"),
+            TimeOffStatus::Denied => write!(f, "denied"),
+            TimeOffStatus::Cancelled => write!(f, "cancelled"),
+        }
+    }
+}
+
+impl std::str::FromStr for TimeOffStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "pending" => Ok(TimeOffStatus::Pending),
+            "approved" => Ok(TimeOffStatus::Approved),
+            "denied" => Ok(TimeOffStatus::Denied),
+            "cancelled" => Ok(TimeOffStatus::Cancelled),
+            _ => Err(format!("Invalid time-off status: {}", s)),
+        }
+    }
+}
+
+// SQLx trait implementations for TimeOffType
+impl sqlx::Type<sqlx::Sqlite> for TimeOffType {
+    fn type_info() -> sqlx::sqlite::SqliteTypeInfo {
+        <String as sqlx::Type<sqlx::Sqlite>>::type_info()
+    }
+}
+
+impl<'q> sqlx::Encode<'q, sqlx::Sqlite> for TimeOffType {
+    fn encode_by_ref(
+        &self,
+        args: &mut Vec<sqlx::sqlite::SqliteArgumentValue<'q>>,
+    ) -> sqlx::encode::IsNull {
+        let s = self.to_string();
+        <String as sqlx::Encode<'q, sqlx::Sqlite>>::encode_by_ref(&s, args)
+    }
+}
+
+impl<'r> sqlx::Decode<'r, sqlx::Sqlite> for TimeOffType {
+    fn decode(value: sqlx::sqlite::SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let s = <String as sqlx::Decode<sqlx::Sqlite>>::decode(value)?;
+        s.parse::<TimeOffType>().map_err(|e| e.into())
+    }
+}
+
+// SQLx trait implementations for TimeOffStatus
+impl sqlx::Type<sqlx::Sqlite> for TimeOffStatus {
+    fn type_info() -> sqlx::sqlite::SqliteTypeInfo {
+        <String as sqlx::Type<sqlx::Sqlite>>::type_info()
+    }
+}
+
+impl<'q> sqlx::Encode<'q, sqlx::Sqlite> for TimeOffStatus {
+    fn encode_by_ref(
+        &self,
+        args: &mut Vec<sqlx::sqlite::SqliteArgumentValue<'q>>,
+    ) -> sqlx::encode::IsNull {
+        let s = self.to_string();
+        <String as sqlx::Encode<'q, sqlx::Sqlite>>::encode_by_ref(&s, args)
+    }
+}
+
+impl<'r> sqlx::Decode<'r, sqlx::Sqlite> for TimeOffStatus {
+    fn decode(value: sqlx::sqlite::SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let s = <String as sqlx::Decode<sqlx::Sqlite>>::decode(value)?;
+        s.parse::<TimeOffStatus>().map_err(|e| e.into())
+    }
+}
+
+impl Default for TimeOffStatus {
+    fn default() -> Self {
+        TimeOffStatus::Pending
+    }
+}
+
+// Shift Swap models
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct ShiftSwap {
+    pub id: i64,
+    pub original_shift_id: i64,
+    pub requesting_user_id: String,
+    pub target_user_id: Option<String>,
+    pub status: ShiftSwapStatus,
+    pub notes: Option<String>,
+    pub swap_type: ShiftSwapType,
+    pub approved_by: Option<String>,
+    pub approval_notes: Option<String>,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShiftSwapInput {
+    pub original_shift_id: i64,
+    pub requesting_user_id: String,
+    pub target_user_id: Option<String>,
+    pub notes: Option<String>,
+    pub swap_type: ShiftSwapType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ShiftSwapType {
+    Open,     // Open to any qualified employee
+    Targeted, // Targeted to specific employee
+}
+
+impl std::fmt::Display for ShiftSwapType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ShiftSwapType::Open => write!(f, "open"),
+            ShiftSwapType::Targeted => write!(f, "targeted"),
+        }
+    }
+}
+
+impl std::str::FromStr for ShiftSwapType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "open" => Ok(ShiftSwapType::Open),
+            "targeted" => Ok(ShiftSwapType::Targeted),
+            _ => Err(format!("Invalid shift swap type: {}", s)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ShiftSwapStatus {
+    Open,
+    Pending,
+    Approved,
+    Denied,
+    Completed,
+    Cancelled,
+}
+
+impl std::fmt::Display for ShiftSwapStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ShiftSwapStatus::Open => write!(f, "open"),
+            ShiftSwapStatus::Pending => write!(f, "pending"),
+            ShiftSwapStatus::Approved => write!(f, "approved"),
+            ShiftSwapStatus::Denied => write!(f, "denied"),
+            ShiftSwapStatus::Completed => write!(f, "completed"),
+            ShiftSwapStatus::Cancelled => write!(f, "cancelled"),
+        }
+    }
+}
+
+impl std::str::FromStr for ShiftSwapStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "open" => Ok(ShiftSwapStatus::Open),
+            "pending" => Ok(ShiftSwapStatus::Pending),
+            "approved" => Ok(ShiftSwapStatus::Approved),
+            "denied" => Ok(ShiftSwapStatus::Denied),
+            "completed" => Ok(ShiftSwapStatus::Completed),
+            "cancelled" => Ok(ShiftSwapStatus::Cancelled),
+            _ => Err(format!("Invalid shift swap status: {}", s)),
+        }
+    }
+}
+
+// SQLx trait implementations for ShiftSwapType
+impl sqlx::Type<sqlx::Sqlite> for ShiftSwapType {
+    fn type_info() -> sqlx::sqlite::SqliteTypeInfo {
+        <String as sqlx::Type<sqlx::Sqlite>>::type_info()
+    }
+}
+
+impl<'q> sqlx::Encode<'q, sqlx::Sqlite> for ShiftSwapType {
+    fn encode_by_ref(
+        &self,
+        args: &mut Vec<sqlx::sqlite::SqliteArgumentValue<'q>>,
+    ) -> sqlx::encode::IsNull {
+        let s = self.to_string();
+        <String as sqlx::Encode<'q, sqlx::Sqlite>>::encode_by_ref(&s, args)
+    }
+}
+
+impl<'r> sqlx::Decode<'r, sqlx::Sqlite> for ShiftSwapType {
+    fn decode(value: sqlx::sqlite::SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let s = <String as sqlx::Decode<sqlx::Sqlite>>::decode(value)?;
+        s.parse::<ShiftSwapType>().map_err(|e| e.into())
+    }
+}
+
+// SQLx trait implementations for ShiftSwapStatus
+impl sqlx::Type<sqlx::Sqlite> for ShiftSwapStatus {
+    fn type_info() -> sqlx::sqlite::SqliteTypeInfo {
+        <String as sqlx::Type<sqlx::Sqlite>>::type_info()
+    }
+}
+
+impl<'q> sqlx::Encode<'q, sqlx::Sqlite> for ShiftSwapStatus {
+    fn encode_by_ref(
+        &self,
+        args: &mut Vec<sqlx::sqlite::SqliteArgumentValue<'q>>,
+    ) -> sqlx::encode::IsNull {
+        let s = self.to_string();
+        <String as sqlx::Encode<'q, sqlx::Sqlite>>::encode_by_ref(&s, args)
+    }
+}
+
+impl<'r> sqlx::Decode<'r, sqlx::Sqlite> for ShiftSwapStatus {
+    fn decode(value: sqlx::sqlite::SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let s = <String as sqlx::Decode<sqlx::Sqlite>>::decode(value)?;
+        s.parse::<ShiftSwapStatus>().map_err(|e| e.into())
+    }
+}
+
+impl Default for ShiftSwapStatus {
+    fn default() -> Self {
+        ShiftSwapStatus::Open
+    }
+}
+
+// Request/Response DTOs for approvals
+#[derive(Debug, Deserialize)]
+pub struct ApprovalRequest {
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DenialRequest {
+    pub notes: String, // Required for denials
+}
+
+// Statistics models
+#[derive(Debug, Serialize)]
+pub struct DashboardStats {
+    pub total_shifts: i64,
+    pub upcoming_shifts: i64,
+    pub pending_time_off_requests: i64,
+    pub pending_swap_requests: i64,
+    pub approved_time_off: i64,
+    pub total_hours: f64,
+    pub team_coverage: f64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ShiftStats {
+    pub total_shifts: i64,
+    pub assigned_shifts: i64,
+    pub unassigned_shifts: i64,
+    pub completed_shifts: i64,
+    pub cancelled_shifts: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TimeOffStats {
+    pub total_requests: i64,
+    pub approved_requests: i64,
+    pub denied_requests: i64,
+    pub pending_requests: i64,
+    pub cancelled_requests: i64,
+}
