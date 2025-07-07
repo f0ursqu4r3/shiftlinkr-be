@@ -1,9 +1,12 @@
-use actix_web::{web, HttpResponse, Result, HttpRequest};
+use actix_web::{HttpRequest, HttpResponse, Result, web};
 use serde_json::json;
 
-use crate::database::models::{CreateUserRequest, LoginRequest, ForgotPasswordRequest, ResetPasswordRequest, CreateInviteRequest, AcceptInviteRequest};
-use crate::database::invite_repository::InviteRepository;
 use crate::AppState;
+use crate::database::invite_repository::InviteRepository;
+use crate::database::models::{
+    AcceptInviteRequest, CreateInviteRequest, CreateUserRequest, ForgotPasswordRequest,
+    LoginRequest, ResetPasswordRequest,
+};
 
 pub async fn register(
     data: web::Data<AppState>,
@@ -29,16 +32,15 @@ pub async fn login(
     }
 }
 
-pub async fn me(
-    data: web::Data<AppState>,
-    req: HttpRequest,
-) -> Result<HttpResponse> {
+pub async fn me(data: web::Data<AppState>, req: HttpRequest) -> Result<HttpResponse> {
     // Extract token from Authorization header
     let token = match extract_token_from_header(&req) {
         Some(token) => token,
-        None => return Ok(HttpResponse::Unauthorized().json(json!({
-            "error": "Missing or invalid authorization header"
-        }))),
+        None => {
+            return Ok(HttpResponse::Unauthorized().json(json!({
+                "error": "Missing or invalid authorization header"
+            })));
+        }
     };
 
     // Verify token and get user
@@ -60,7 +62,7 @@ pub async fn me(
 fn extract_token_from_header(req: &HttpRequest) -> Option<String> {
     let auth_header = req.headers().get("Authorization")?;
     let auth_str = auth_header.to_str().ok()?;
-    
+
     if auth_str.starts_with("Bearer ") {
         Some(auth_str[7..].to_string())
     } else {
@@ -89,7 +91,11 @@ pub async fn reset_password(
     data: web::Data<AppState>,
     request: web::Json<ResetPasswordRequest>,
 ) -> Result<HttpResponse> {
-    match data.auth_service.reset_password(&request.token, &request.new_password).await {
+    match data
+        .auth_service
+        .reset_password(&request.token, &request.new_password)
+        .await
+    {
         Ok(()) => Ok(HttpResponse::Ok().json(json!({
             "message": "Password has been reset successfully."
         }))),
@@ -108,43 +114,59 @@ pub async fn create_invite(
     // Extract token from Authorization header
     let token = match extract_token_from_header(&req) {
         Some(token) => token,
-        None => return Ok(HttpResponse::Unauthorized().json(json!({
-            "error": "Missing or invalid authorization header"
-        }))),
+        None => {
+            return Ok(HttpResponse::Unauthorized().json(json!({
+                "error": "Missing or invalid authorization header"
+            })));
+        }
     };
 
     // Verify token and get user
     let user = match data.auth_service.get_user_from_token(&token).await {
         Ok(user) => user,
-        Err(err) => return Ok(HttpResponse::Unauthorized().json(json!({
-            "error": err.to_string()
-        }))),
+        Err(err) => {
+            return Ok(HttpResponse::Unauthorized().json(json!({
+                "error": err.to_string()
+            })));
+        }
     };
 
     // Check if user has permission to create invites (admin or manager)
     match user.role {
-        crate::database::models::UserRole::Admin | crate::database::models::UserRole::Manager => {},
-        _ => return Ok(HttpResponse::Forbidden().json(json!({
-            "error": "You don't have permission to create invites"
-        }))),
+        crate::database::models::UserRole::Admin | crate::database::models::UserRole::Manager => {}
+        _ => {
+            return Ok(HttpResponse::Forbidden().json(json!({
+                "error": "You don't have permission to create invites"
+            })));
+        }
     }
 
     // Check if email already exists
     match data.auth_service.get_user_by_email(&request.email).await {
-        Ok(_) => return Ok(HttpResponse::BadRequest().json(json!({
-            "error": "User with this email already exists"
-        }))),
-        Err(_) => {}, // User doesn't exist, which is what we want
+        Ok(_) => {
+            return Ok(HttpResponse::BadRequest().json(json!({
+                "error": "User with this email already exists"
+            })));
+        }
+        Err(_) => {} // User doesn't exist, which is what we want
     }
 
-    match invite_repo.create_invite_token(&request.email, &user.id, request.role.clone(), request.team_id).await {
+    match invite_repo
+        .create_invite_token(
+            &request.email,
+            &user.id,
+            request.role.clone(),
+            request.team_id,
+        )
+        .await
+    {
         Ok(invite_token) => {
             let invite_link = format!("http://localhost:3000/auth/invite/{}", invite_token.token);
             Ok(HttpResponse::Ok().json(json!({
                 "invite_link": invite_link,
                 "expires_at": invite_token.expires_at
             })))
-        },
+        }
         Err(err) => Ok(HttpResponse::InternalServerError().json(json!({
             "error": format!("Failed to create invite: {}", err)
         }))),
@@ -156,7 +178,7 @@ pub async fn get_invite(
     path: web::Path<String>,
 ) -> Result<HttpResponse> {
     let token = path.into_inner();
-    
+
     match invite_repo.get_invite_token(&token).await {
         Ok(Some(invite_token)) => {
             // Check if token is expired
@@ -168,7 +190,7 @@ pub async fn get_invite(
 
             // Get inviter name
             let inviter_name = "Unknown"; // TODO: Get from user repo
-            
+
             Ok(HttpResponse::Ok().json(json!({
                 "email": invite_token.email,
                 "role": invite_token.role,
@@ -176,7 +198,7 @@ pub async fn get_invite(
                 "inviter_name": inviter_name,
                 "expires_at": invite_token.expires_at
             })))
-        },
+        }
         Ok(None) => Ok(HttpResponse::BadRequest().json(json!({
             "error": "Invalid or expired invite token"
         }))),
@@ -194,12 +216,16 @@ pub async fn accept_invite(
     // Get invite token
     let invite_token = match invite_repo.get_invite_token(&request.token).await {
         Ok(Some(invite_token)) => invite_token,
-        Ok(None) => return Ok(HttpResponse::BadRequest().json(json!({
-            "error": "Invalid or expired invite token"
-        }))),
-        Err(err) => return Ok(HttpResponse::InternalServerError().json(json!({
-            "error": format!("Failed to get invite: {}", err)
-        }))),
+        Ok(None) => {
+            return Ok(HttpResponse::BadRequest().json(json!({
+                "error": "Invalid or expired invite token"
+            })));
+        }
+        Err(err) => {
+            return Ok(HttpResponse::InternalServerError().json(json!({
+                "error": format!("Failed to get invite: {}", err)
+            })));
+        }
     };
 
     // Check if token is expired
@@ -210,11 +236,17 @@ pub async fn accept_invite(
     }
 
     // Check if user already exists
-    match data.auth_service.get_user_by_email(&invite_token.email).await {
-        Ok(_) => return Ok(HttpResponse::BadRequest().json(json!({
-            "error": "User with this email already exists"
-        }))),
-        Err(_) => {}, // User doesn't exist, which is what we want
+    match data
+        .auth_service
+        .get_user_by_email(&invite_token.email)
+        .await
+    {
+        Ok(_) => {
+            return Ok(HttpResponse::BadRequest().json(json!({
+                "error": "User with this email already exists"
+            })));
+        }
+        Err(_) => {} // User doesn't exist, which is what we want
     }
 
     // Create user account
@@ -234,7 +266,7 @@ pub async fn accept_invite(
             }
 
             Ok(HttpResponse::Ok().json(auth_response))
-        },
+        }
         Err(err) => Ok(HttpResponse::BadRequest().json(json!({
             "error": format!("Failed to create user: {}", err)
         }))),
@@ -249,25 +281,31 @@ pub async fn get_my_invites(
     // Extract token from Authorization header
     let token = match extract_token_from_header(&req) {
         Some(token) => token,
-        None => return Ok(HttpResponse::Unauthorized().json(json!({
-            "error": "Missing or invalid authorization header"
-        }))),
+        None => {
+            return Ok(HttpResponse::Unauthorized().json(json!({
+                "error": "Missing or invalid authorization header"
+            })));
+        }
     };
 
     // Verify token and get user
     let user = match data.auth_service.get_user_from_token(&token).await {
         Ok(user) => user,
-        Err(err) => return Ok(HttpResponse::Unauthorized().json(json!({
-            "error": err.to_string()
-        }))),
+        Err(err) => {
+            return Ok(HttpResponse::Unauthorized().json(json!({
+                "error": err.to_string()
+            })));
+        }
     };
 
     // Check if user has permission to view invites (admin or manager)
     match user.role {
-        crate::database::models::UserRole::Admin | crate::database::models::UserRole::Manager => {},
-        _ => return Ok(HttpResponse::Forbidden().json(json!({
-            "error": "You don't have permission to view invites"
-        }))),
+        crate::database::models::UserRole::Admin | crate::database::models::UserRole::Manager => {}
+        _ => {
+            return Ok(HttpResponse::Forbidden().json(json!({
+                "error": "You don't have permission to view invites"
+            })));
+        }
     }
 
     match invite_repo.get_invites_by_inviter(&user.id).await {

@@ -111,7 +111,10 @@ async fn main() -> Result<()> {
                             )
                             .route("/invite", web::post().to(handlers::auth::create_invite))
                             .route("/invite/{token}", web::get().to(handlers::auth::get_invite))
-                            .route("/invite/accept", web::post().to(handlers::auth::accept_invite))
+                            .route(
+                                "/invite/accept",
+                                web::post().to(handlers::auth::accept_invite),
+                            )
                             .route("/invites", web::get().to(handlers::auth::get_my_invites)),
                     )
                     .service(

@@ -1,4 +1,4 @@
--- Users and authentication tables
+-- Create users table
 CREATE TABLE users (
     id TEXT PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
@@ -9,7 +9,7 @@ CREATE TABLE users (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Password reset tokens table
+-- Create password reset tokens table
 CREATE TABLE password_reset_tokens (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
