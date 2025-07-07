@@ -14,7 +14,7 @@ pub struct User {
     pub updated_at: NaiveDateTime,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum UserRole {
     Admin,
@@ -66,6 +66,19 @@ impl std::fmt::Display for UserRole {
             UserRole::Admin => write!(f, "admin"),
             UserRole::Manager => write!(f, "manager"),
             UserRole::Employee => write!(f, "employee"),
+        }
+    }
+}
+
+impl std::str::FromStr for UserRole {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "admin" => Ok(UserRole::Admin),
+            "manager" => Ok(UserRole::Manager),
+            "employee" => Ok(UserRole::Employee),
+            _ => Err(format!("Invalid UserRole: {}", s)),
         }
     }
 }
@@ -127,6 +140,60 @@ pub struct ResetPasswordRequest {
 #[derive(Debug, Serialize)]
 pub struct ResetPasswordResponse {
     pub message: String,
+}
+
+// Invite link models
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct InviteToken {
+    pub id: String,
+    pub email: String,
+    pub token: String,
+    pub inviter_id: String,
+    pub role: UserRole,
+    pub team_id: Option<i64>,
+    pub expires_at: NaiveDateTime,
+    pub used_at: Option<NaiveDateTime>,
+    pub created_at: NaiveDateTime,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateInviteRequest {
+    pub email: String,
+    pub role: UserRole,
+    pub team_id: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CreateInviteResponse {
+    pub invite_link: String,
+    pub expires_at: NaiveDateTime,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GetInviteRequest {
+    pub token: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct GetInviteResponse {
+    pub email: String,
+    pub role: UserRole,
+    pub team_name: Option<String>,
+    pub inviter_name: String,
+    pub expires_at: NaiveDateTime,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AcceptInviteRequest {
+    pub token: String,
+    pub name: String,
+    pub password: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AcceptInviteResponse {
+    pub token: String,
+    pub user: UserInfo,
 }
 
 impl From<User> for UserInfo {

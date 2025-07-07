@@ -10,7 +10,7 @@ pub mod handlers;
 use auth::AuthService;
 use config::Config;
 use database::{
-    init_database, location_repository::LocationRepository,
+    init_database, invite_repository::InviteRepository, location_repository::LocationRepository,
     password_reset_repository::PasswordResetTokenRepository, shift_repository::ShiftRepository,
     user_repository::UserRepository,
 };
@@ -58,12 +58,14 @@ async fn main() -> Result<()> {
     let location_repository = LocationRepository::new(pool.clone());
     let shift_repository = ShiftRepository::new(pool.clone());
     let password_reset_repository = PasswordResetTokenRepository::new(pool.clone());
+    let invite_repository = InviteRepository::new(pool.clone());
     let auth_service = AuthService::new(user_repository, password_reset_repository, config.clone());
 
     // Create app state and repository data
     let app_state = web::Data::new(AppState { auth_service });
     let location_repo_data = web::Data::new(location_repository);
     let shift_repo_data = web::Data::new(shift_repository);
+    let invite_repo_data = web::Data::new(invite_repository);
     let config_data = web::Data::new(config.clone());
 
     let server_address = config.server_address();
@@ -75,6 +77,7 @@ async fn main() -> Result<()> {
             .app_data(app_state.clone())
             .app_data(location_repo_data.clone())
             .app_data(shift_repo_data.clone())
+            .app_data(invite_repo_data.clone())
             .app_data(config_data.clone())
             .wrap(
                 Cors::default()
@@ -105,7 +108,11 @@ async fn main() -> Result<()> {
                             .route(
                                 "/reset-password",
                                 web::post().to(handlers::auth::reset_password),
-                            ),
+                            )
+                            .route("/invite", web::post().to(handlers::auth::create_invite))
+                            .route("/invite/{token}", web::get().to(handlers::auth::get_invite))
+                            .route("/invite/accept", web::post().to(handlers::auth::accept_invite))
+                            .route("/invites", web::get().to(handlers::auth::get_my_invites)),
                     )
                     .service(
                         web::scope("/admin")

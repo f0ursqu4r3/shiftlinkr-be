@@ -234,4 +234,15 @@ impl AuthService {
 
         Ok(())
     }
+
+    /// Get user by email
+    pub async fn get_user_by_email(&self, email: &str) -> Result<User> {
+        let user = self
+            .user_repository
+            .find_by_email(email)
+            .await?
+            .ok_or_else(|| anyhow!("User not found"))?;
+
+        Ok(user)
+    }
 }
