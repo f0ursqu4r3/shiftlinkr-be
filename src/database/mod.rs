@@ -1,11 +1,14 @@
 use anyhow::Result;
-use sqlx::{Sqlite, migrate::MigrateDatabase, sqlite::SqlitePool};
+use sqlx::{migrate::MigrateDatabase, sqlite::SqlitePool, Sqlite};
 
 pub mod invite_repository;
 pub mod location_repository;
 pub mod models;
 pub mod password_reset_repository;
 pub mod shift_repository;
+pub mod shift_swap_repository;
+pub mod stats_repository;
+pub mod time_off_repository;
 pub mod types;
 pub mod user_repository;
 

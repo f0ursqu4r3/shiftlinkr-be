@@ -1,7 +1,8 @@
 [package]
 name = "be"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
+
 
 [dependencies]
 actix-web = "4.11.0"
@@ -22,7 +23,7 @@ log = "0.4"
 [dev-dependencies]
 tempfile = "3.8"
 tokio-test = "0.4"
-actix-web-test = "4.0"
+actix-rt = "2.8"
 fake = { version = "2.9", features = ["derive", "chrono", "uuid"] }
 serial_test = "3.0"
 pretty_assertions = "1.4"

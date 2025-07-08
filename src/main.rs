@@ -1,5 +1,5 @@
 use actix_cors::Cors;
-use actix_web::{App, HttpResponse, HttpServer, Responder, get, middleware::Logger, web};
+use actix_web::{get, middleware::Logger, web, App, HttpResponse, HttpServer, Responder};
 use anyhow::Result;
 
 pub mod auth;
@@ -12,7 +12,8 @@ use config::Config;
 use database::{
     init_database, invite_repository::InviteRepository, location_repository::LocationRepository,
     password_reset_repository::PasswordResetTokenRepository, shift_repository::ShiftRepository,
-    user_repository::UserRepository,
+    shift_swap_repository::ShiftSwapRepository, stats_repository::StatsRepository,
+    time_off_repository::TimeOffRepository, user_repository::UserRepository,
 };
 
 pub struct AppState {
@@ -59,6 +60,9 @@ async fn main() -> Result<()> {
     let shift_repository = ShiftRepository::new(pool.clone());
     let password_reset_repository = PasswordResetTokenRepository::new(pool.clone());
     let invite_repository = InviteRepository::new(pool.clone());
+    let time_off_repository = TimeOffRepository::new(pool.clone());
+    let shift_swap_repository = ShiftSwapRepository::new(pool.clone());
+    let stats_repository = StatsRepository::new(pool.clone());
     let auth_service = AuthService::new(user_repository, password_reset_repository, config.clone());
 
     // Create app state and repository data
@@ -66,6 +70,9 @@ async fn main() -> Result<()> {
     let location_repo_data = web::Data::new(location_repository);
     let shift_repo_data = web::Data::new(shift_repository);
     let invite_repo_data = web::Data::new(invite_repository);
+    let time_off_repo_data = web::Data::new(time_off_repository);
+    let shift_swap_repo_data = web::Data::new(shift_swap_repository);
+    let stats_repo_data = web::Data::new(stats_repository);
     let config_data = web::Data::new(config.clone());
 
     let server_address = config.server_address();
@@ -78,6 +85,9 @@ async fn main() -> Result<()> {
             .app_data(location_repo_data.clone())
             .app_data(shift_repo_data.clone())
             .app_data(invite_repo_data.clone())
+            .app_data(time_off_repo_data.clone())
+            .app_data(shift_swap_repo_data.clone())
+            .app_data(stats_repo_data.clone())
             .app_data(config_data.clone())
             .wrap(
                 Cors::default()
@@ -177,6 +187,64 @@ async fn main() -> Result<()> {
                                 web::post().to(handlers::shifts::update_shift_status),
                             )
                             .route("/{id}/claim", web::post().to(handlers::shifts::claim_shift)),
+                    )
+                    .service(
+                        web::scope("/time-off")
+                            .route(
+                                "",
+                                web::post().to(handlers::time_off::create_time_off_request),
+                            )
+                            .route("", web::get().to(handlers::time_off::get_time_off_requests))
+                            .route(
+                                "/{id}",
+                                web::get().to(handlers::time_off::get_time_off_request),
+                            )
+                            .route(
+                                "/{id}",
+                                web::put().to(handlers::time_off::update_time_off_request),
+                            )
+                            .route(
+                                "/{id}",
+                                web::delete().to(handlers::time_off::delete_time_off_request),
+                            )
+                            .route(
+                                "/{id}/approve",
+                                web::post().to(handlers::time_off::approve_time_off_request),
+                            )
+                            .route(
+                                "/{id}/deny",
+                                web::post().to(handlers::time_off::deny_time_off_request),
+                            ),
+                    )
+                    .service(
+                        web::scope("/swaps")
+                            .route("", web::post().to(handlers::swaps::create_swap_request))
+                            .route("", web::get().to(handlers::swaps::get_swap_requests))
+                            .route("/{id}", web::get().to(handlers::swaps::get_swap_request))
+                            .route(
+                                "/{id}/respond",
+                                web::post().to(handlers::swaps::respond_to_swap),
+                            )
+                            .route(
+                                "/{id}/approve",
+                                web::post().to(handlers::swaps::approve_swap_request),
+                            )
+                            .route(
+                                "/{id}/deny",
+                                web::post().to(handlers::swaps::deny_swap_request),
+                            ),
+                    )
+                    .service(
+                        web::scope("/stats")
+                            .route(
+                                "/dashboard",
+                                web::get().to(handlers::stats::get_dashboard_stats),
+                            )
+                            .route("/shifts", web::get().to(handlers::stats::get_shift_stats))
+                            .route(
+                                "/time-off",
+                                web::get().to(handlers::stats::get_time_off_stats),
+                            ),
                     ),
             )
     })
