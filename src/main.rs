@@ -11,9 +11,10 @@ use auth::AuthService;
 use config::Config;
 use database::{
     init_database, invite_repository::InviteRepository, location_repository::LocationRepository,
-    password_reset_repository::PasswordResetTokenRepository, pto_balance_repository::PtoBalanceRepository,
-    shift_repository::ShiftRepository, shift_swap_repository::ShiftSwapRepository, 
-    stats_repository::StatsRepository, time_off_repository::TimeOffRepository, 
+    password_reset_repository::PasswordResetTokenRepository,
+    pto_balance_repository::PtoBalanceRepository, shift_claim_repository::ShiftClaimRepository,
+    shift_repository::ShiftRepository, shift_swap_repository::ShiftSwapRepository,
+    stats_repository::StatsRepository, time_off_repository::TimeOffRepository,
     user_repository::UserRepository,
 };
 
@@ -65,6 +66,7 @@ async fn main() -> Result<()> {
     let shift_swap_repository = ShiftSwapRepository::new(pool.clone());
     let stats_repository = StatsRepository::new(pool.clone());
     let pto_balance_repository = PtoBalanceRepository::new(pool.clone());
+    let shift_claim_repository = ShiftClaimRepository::new(pool.clone());
     let auth_service = AuthService::new(user_repository, password_reset_repository, config.clone());
 
     // Create app state and repository data
@@ -76,6 +78,7 @@ async fn main() -> Result<()> {
     let shift_swap_repo_data = web::Data::new(shift_swap_repository);
     let stats_repo_data = web::Data::new(stats_repository);
     let pto_balance_repo_data = web::Data::new(pto_balance_repository);
+    let shift_claim_repo_data = web::Data::new(shift_claim_repository);
     let config_data = web::Data::new(config.clone());
 
     let server_address = config.server_address();
@@ -92,6 +95,7 @@ async fn main() -> Result<()> {
             .app_data(shift_swap_repo_data.clone())
             .app_data(stats_repo_data.clone())
             .app_data(pto_balance_repo_data.clone())
+            .app_data(shift_claim_repo_data.clone())
             .app_data(config_data.clone())
             .wrap(
                 Cors::default()
@@ -190,7 +194,29 @@ async fn main() -> Result<()> {
                                 "/{id}/status",
                                 web::post().to(handlers::shifts::update_shift_status),
                             )
-                            .route("/{id}/claim", web::post().to(handlers::shifts::claim_shift)),
+                            .route("/{id}/claim", web::post().to(handlers::shifts::claim_shift))
+                            .route(
+                                "/{id}/claims",
+                                web::get().to(handlers::shifts::get_shift_claims),
+                            ),
+                    )
+                    // Shift claims management
+                    .service(
+                        web::scope("/shift-claims")
+                            .route("", web::get().to(handlers::shifts::get_pending_claims))
+                            .route("/my", web::get().to(handlers::shifts::get_my_claims))
+                            .route(
+                                "/{id}/approve",
+                                web::post().to(handlers::shifts::approve_shift_claim),
+                            )
+                            .route(
+                                "/{id}/reject",
+                                web::post().to(handlers::shifts::reject_shift_claim),
+                            )
+                            .route(
+                                "/{id}/cancel",
+                                web::post().to(handlers::shifts::cancel_shift_claim),
+                            ),
                     )
                     .service(
                         web::scope("/time-off")
@@ -213,7 +239,8 @@ async fn main() -> Result<()> {
                             )
                             .route(
                                 "/{id}/approve",
-                                web::post().to(handlers::time_off::approve_time_off_request_endpoint),
+                                web::post()
+                                    .to(handlers::time_off::approve_time_off_request_endpoint),
                             )
                             .route(
                                 "/{id}/deny",

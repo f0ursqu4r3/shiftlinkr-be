@@ -6,6 +6,7 @@ pub mod location_repository;
 pub mod models;
 pub mod password_reset_repository;
 pub mod pto_balance_repository;
+pub mod shift_claim_repository;
 pub mod shift_repository;
 pub mod shift_swap_repository;
 pub mod stats_repository;
