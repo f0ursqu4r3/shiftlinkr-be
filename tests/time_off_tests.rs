@@ -1,18 +1,13 @@
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::test_utils::*;
-    use crate::database::models::*;
-    use crate::database::user_repository::UserRepository;
-    use crate::database::time_off_repository::TimeOffRepository;
-    use actix_web::{http::StatusCode, test};
-    use pretty_assertions::assert_eq;
-    use serial_test::serial;
-    use sqlx::SqlitePool;
+mod common;
 
-    #[tokio::test]
-    #[serial]
-    async fn test_create_time_off_request_success() {
+use common::*;
+use actix_web::{http::StatusCode, test};
+use pretty_assertions::assert_eq;
+use serial_test::serial;
+
+#[tokio::test]
+#[serial]
+async fn test_create_time_off_request_success() {
         // Arrange
         let test_app = TestApp::new().await.expect("Failed to create test app");
         let app = test_app.create_app().await;
@@ -269,7 +264,7 @@ mod tests {
         let body_str = std::str::from_utf8(&body).unwrap();
         let updated_request: TimeOffRequest = TestAssertions::assert_success_response(body_str);
 
-        assert_eq!(updated_request.reason, Some(update_data.reason));
+        assert_eq!(updated_request.reason, update_data.reason);
     }
 
     #[tokio::test]
@@ -307,18 +302,10 @@ mod tests {
     // Helper functions for test data creation
     async fn create_test_user(pool: &SqlitePool, user_data: &CreateUserRequest) -> User {
         let user_repo = UserRepository::new(pool.clone());
-        let user = User {
-            id: uuid::Uuid::new_v4().to_string(),
-            email: user_data.email.clone(),
-            password_hash: "test_hash".to_string(),
-            name: user_data.name.clone(),
-            role: user_data.role.clone().unwrap_or(UserRole::Employee),
-            created_at: chrono::Utc::now().naive_utc(),
-            updated_at: chrono::Utc::now().naive_utc(),
-        };
-        user_repo.create_user(&user).await
-            .expect("Failed to create test user");
-        user
+        user_repo
+            .create_user(user_data)
+            .await
+            .expect("Failed to create test user")
     }
 
     async fn create_test_time_off_request(pool: &SqlitePool, user_id: &str) -> TimeOffRequest {
@@ -329,4 +316,3 @@ mod tests {
             .await
             .expect("Failed to create test time-off request")
     }
-}

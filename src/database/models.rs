@@ -366,7 +366,7 @@ pub struct TimeOffRequest {
     pub user_id: String,
     pub start_date: NaiveDateTime,
     pub end_date: NaiveDateTime,
-    pub reason: String,
+    pub reason: Option<String>,
     pub request_type: TimeOffType,
     pub status: TimeOffStatus,
     pub approved_by: Option<String>,
@@ -426,7 +426,7 @@ impl std::str::FromStr for TimeOffType {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum TimeOffStatus {
     Pending,
     Approved,
@@ -517,12 +517,13 @@ impl Default for TimeOffStatus {
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct ShiftSwap {
     pub id: i64,
-    pub original_shift_id: i64,
     pub requesting_user_id: String,
+    pub original_shift_id: i64,
     pub target_user_id: Option<String>,
-    pub status: ShiftSwapStatus,
+    pub target_shift_id: Option<i64>,
     pub notes: Option<String>,
     pub swap_type: ShiftSwapType,
+    pub status: ShiftSwapStatus,
     pub approved_by: Option<String>,
     pub approval_notes: Option<String>,
     pub created_at: NaiveDateTime,
@@ -534,11 +535,12 @@ pub struct ShiftSwapInput {
     pub original_shift_id: i64,
     pub requesting_user_id: String,
     pub target_user_id: Option<String>,
+    pub target_shift_id: Option<i64>,
     pub notes: Option<String>,
     pub swap_type: ShiftSwapType,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ShiftSwapType {
     Open,     // Open to any qualified employee
     Targeted, // Targeted to specific employee
@@ -565,7 +567,7 @@ impl std::str::FromStr for ShiftSwapType {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ShiftSwapStatus {
     Open,
     Pending,
@@ -659,18 +661,18 @@ impl Default for ShiftSwapStatus {
 }
 
 // Request/Response DTOs for approvals
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ApprovalRequest {
     pub notes: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct DenialRequest {
     pub notes: String, // Required for denials
 }
 
 // Statistics models
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct DashboardStats {
     pub total_shifts: i64,
     pub upcoming_shifts: i64,
@@ -681,7 +683,7 @@ pub struct DashboardStats {
     pub team_coverage: f64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ShiftStats {
     pub total_shifts: i64,
     pub assigned_shifts: i64,
@@ -690,7 +692,7 @@ pub struct ShiftStats {
     pub cancelled_shifts: i64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TimeOffStats {
     pub total_requests: i64,
     pub approved_requests: i64,

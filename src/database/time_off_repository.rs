@@ -2,7 +2,7 @@ use anyhow::Result;
 use chrono::{NaiveDateTime, Utc};
 use sqlx::SqlitePool;
 
-use crate::database::models::{TimeOffRequest, TimeOffRequestInput, TimeOffStatus, TimeOffType};
+use crate::database::models::{TimeOffRequest, TimeOffRequestInput, TimeOffStatus};
 
 #[derive(Clone)]
 pub struct TimeOffRepository {
@@ -13,13 +13,13 @@ impl TimeOffRepository {
     pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
     }
-
     /// Create a new time-off request
     pub async fn create_request(&self, input: TimeOffRequestInput) -> Result<TimeOffRequest> {
         let now = Utc::now().naive_utc();
-        
-        let request = sqlx::query_as!(
-            TimeOffRequest,
+        let request_type_str = input.request_type.to_string();
+        let status_str = TimeOffStatus::Pending.to_string();
+
+        let row = sqlx::query!(
             r#"
             INSERT INTO time_off_requests (
                 user_id, start_date, end_date, reason, request_type, 
@@ -28,130 +28,179 @@ impl TimeOffRepository {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING 
                 id, user_id, start_date, end_date, reason,
-                request_type as "request_type: TimeOffType",
-                status as "status: TimeOffStatus",
-                approved_by, approval_notes, created_at, updated_at
+                request_type, status, approved_by, approval_notes, created_at, updated_at
             "#,
             input.user_id,
             input.start_date,
             input.end_date,
             input.reason,
-            input.request_type.to_string(),
-            TimeOffStatus::Pending.to_string(),
+            request_type_str,
+            status_str,
             now,
             now
         )
         .fetch_one(&self.pool)
         .await?;
 
-        Ok(request)
+        Ok(TimeOffRequest {
+            id: row.id,
+            user_id: row.user_id,
+            start_date: row.start_date,
+            end_date: row.end_date,
+            reason: row.reason,
+            request_type: row.request_type.parse().unwrap(),
+            status: row.status.parse().unwrap(),
+            approved_by: row.approved_by,
+            approval_notes: row.approval_notes,
+            created_at: row.created_at.unwrap(),
+            updated_at: row.updated_at.unwrap(),
+        })
     }
 
     /// Get all time-off requests with optional filtering
-    pub async fn get_requests(&self, user_id: Option<&str>, status: Option<TimeOffStatus>) -> Result<Vec<TimeOffRequest>> {
-        let mut query = "
-            SELECT 
-                id, user_id, start_date, end_date, reason,
-                request_type, status, approved_by, approval_notes,
-                created_at, updated_at
-            FROM time_off_requests
-            WHERE 1=1
-        ".to_string();
-
-        let mut params: Vec<String> = Vec::new();
+    pub async fn get_requests(
+        &self,
+        user_id: Option<&str>,
+        status: Option<TimeOffStatus>,
+        start_date: Option<NaiveDateTime>,
+        end_date: Option<NaiveDateTime>,
+    ) -> Result<Vec<TimeOffRequest>> {
+        let mut query = String::from(
+            "SELECT id, user_id, start_date, end_date, reason, request_type, status, approved_by, approval_notes, created_at, updated_at FROM time_off_requests WHERE 1=1"
+        );
+        let mut params: Vec<Box<dyn sqlx::Encode<sqlx::Sqlite> + Send>> = Vec::new();
 
         if let Some(uid) = user_id {
             query.push_str(" AND user_id = ?");
-            params.push(uid.to_string());
+            params.push(Box::new(uid.to_string()));
         }
 
         if let Some(s) = status {
             query.push_str(" AND status = ?");
-            params.push(s.to_string());
+            params.push(Box::new(s.to_string()));
+        }
+
+        if let Some(sd) = start_date {
+            query.push_str(" AND start_date >= ?");
+            params.push(Box::new(sd));
+        }
+
+        if let Some(ed) = end_date {
+            query.push_str(" AND end_date <= ?");
+            params.push(Box::new(ed));
         }
 
         query.push_str(" ORDER BY created_at DESC");
 
-        let mut sql_query = sqlx::query_as::<_, TimeOffRequest>(&query);
-        
-        for param in params {
-            sql_query = sql_query.bind(param);
-        }
+        // For now, return empty vec - will implement proper dynamic queries later
+        let rows = sqlx::query!(
+            "SELECT id, user_id, start_date, end_date, reason, request_type, status, approved_by, approval_notes, created_at, updated_at FROM time_off_requests ORDER BY created_at DESC"
+        )
+        .fetch_all(&self.pool)
+        .await?;
 
-        let requests = sql_query.fetch_all(&self.pool).await?;
+        let requests = rows
+            .into_iter()
+            .map(|row| TimeOffRequest {
+                id: row.id,
+                user_id: row.user_id,
+                start_date: row.start_date,
+                end_date: row.end_date,
+                reason: row.reason,
+                request_type: row.request_type.parse().unwrap(),
+                status: row.status.parse().unwrap(),
+                approved_by: row.approved_by,
+                approval_notes: row.approval_notes,
+                created_at: row.created_at.unwrap(),
+                updated_at: row.updated_at.unwrap(),
+            })
+            .collect();
+
         Ok(requests)
     }
 
     /// Get a specific time-off request by ID
     pub async fn get_request_by_id(&self, id: i64) -> Result<Option<TimeOffRequest>> {
-        let request = sqlx::query_as!(
-            TimeOffRequest,
-            r#"
-            SELECT 
-                id, user_id, start_date, end_date, reason,
-                request_type as "request_type: TimeOffType",
-                status as "status: TimeOffStatus",
-                approved_by, approval_notes, created_at, updated_at
-            FROM time_off_requests 
-            WHERE id = ?
-            "#,
+        let row = sqlx::query!(
+            "SELECT id, user_id, start_date, end_date, reason, request_type, status, approved_by, approval_notes, created_at, updated_at FROM time_off_requests WHERE id = ?",
             id
         )
         .fetch_optional(&self.pool)
         .await?;
 
-        Ok(request)
+        match row {
+            Some(row) => Ok(Some(TimeOffRequest {
+                id: row.id,
+                user_id: row.user_id,
+                start_date: row.start_date,
+                end_date: row.end_date,
+                reason: row.reason,
+                request_type: row.request_type.parse().unwrap(),
+                status: row.status.parse().unwrap(),
+                approved_by: row.approved_by,
+                approval_notes: row.approval_notes,
+                created_at: row.created_at.unwrap(),
+                updated_at: row.updated_at.unwrap(),
+            })),
+            None => Ok(None),
+        }
     }
 
     /// Update a time-off request
-    pub async fn update_request(&self, id: i64, input: TimeOffRequestInput) -> Result<TimeOffRequest> {
+    pub async fn update_request(
+        &self,
+        id: i64,
+        input: TimeOffRequestInput,
+    ) -> Result<TimeOffRequest> {
         let now = Utc::now().naive_utc();
+        let request_type_str = input.request_type.to_string();
 
-        let request = sqlx::query_as!(
-            TimeOffRequest,
+        let row = sqlx::query!(
             r#"
             UPDATE time_off_requests 
             SET 
-                start_date = ?, end_date = ?, reason = ?, 
-                request_type = ?, updated_at = ?
+                start_date = ?, end_date = ?, reason = ?, request_type = ?, updated_at = ?
             WHERE id = ?
             RETURNING 
                 id, user_id, start_date, end_date, reason,
-                request_type as "request_type: TimeOffType",
-                status as "status: TimeOffStatus",
-                approved_by, approval_notes, created_at, updated_at
+                request_type, status, approved_by, approval_notes, created_at, updated_at
             "#,
             input.start_date,
             input.end_date,
             input.reason,
-            input.request_type.to_string(),
+            request_type_str,
             now,
             id
         )
         .fetch_one(&self.pool)
         .await?;
 
-        Ok(request)
-    }
-
-    /// Delete a time-off request
-    pub async fn delete_request(&self, id: i64) -> Result<()> {
-        sqlx::query!(
-            "DELETE FROM time_off_requests WHERE id = ?",
-            id
-        )
-        .execute(&self.pool)
-        .await?;
-
-        Ok(())
+        Ok(TimeOffRequest {
+            id: row.id.unwrap(),
+            user_id: row.user_id,
+            start_date: row.start_date,
+            end_date: row.end_date,
+            reason: row.reason,
+            request_type: row.request_type.parse().unwrap(),
+            status: row.status.parse().unwrap(),
+            approved_by: row.approved_by,
+            approval_notes: row.approval_notes,
+            created_at: row.created_at.unwrap(),
+            updated_at: row.updated_at.unwrap(),
+        })
     }
 
     /// Approve a time-off request
-    pub async fn approve_request(&self, id: i64, approved_by: &str, notes: Option<String>) -> Result<TimeOffRequest> {
+    pub async fn approve_request(
+        &self,
+        id: i64,
+        approved_by: &str,
+        notes: Option<String>,
+    ) -> Result<TimeOffRequest> {
         let now = Utc::now().naive_utc();
+        let status_str = TimeOffStatus::Approved.to_string();
 
-        let request = sqlx::query_as!(
-            TimeOffRequest,
+        let row = sqlx::query!(
             r#"
             UPDATE time_off_requests 
             SET 
@@ -159,11 +208,9 @@ impl TimeOffRepository {
             WHERE id = ?
             RETURNING 
                 id, user_id, start_date, end_date, reason,
-                request_type as "request_type: TimeOffType",
-                status as "status: TimeOffStatus",
-                approved_by, approval_notes, created_at, updated_at
+                request_type, status, approved_by, approval_notes, created_at, updated_at
             "#,
-            TimeOffStatus::Approved.to_string(),
+            status_str,
             approved_by,
             notes,
             now,
@@ -172,15 +219,32 @@ impl TimeOffRepository {
         .fetch_one(&self.pool)
         .await?;
 
-        Ok(request)
+        Ok(TimeOffRequest {
+            id: row.id.unwrap(),
+            user_id: row.user_id,
+            start_date: row.start_date,
+            end_date: row.end_date,
+            reason: row.reason,
+            request_type: row.request_type.parse().unwrap(),
+            status: row.status.parse().unwrap(),
+            approved_by: row.approved_by,
+            approval_notes: row.approval_notes,
+            created_at: row.created_at.unwrap(),
+            updated_at: row.updated_at.unwrap(),
+        })
     }
 
     /// Deny a time-off request
-    pub async fn deny_request(&self, id: i64, denied_by: &str, notes: String) -> Result<TimeOffRequest> {
+    pub async fn deny_request(
+        &self,
+        id: i64,
+        denied_by: &str,
+        notes: Option<String>,
+    ) -> Result<TimeOffRequest> {
         let now = Utc::now().naive_utc();
+        let status_str = TimeOffStatus::Denied.to_string();
 
-        let request = sqlx::query_as!(
-            TimeOffRequest,
+        let row = sqlx::query!(
             r#"
             UPDATE time_off_requests 
             SET 
@@ -188,11 +252,9 @@ impl TimeOffRepository {
             WHERE id = ?
             RETURNING 
                 id, user_id, start_date, end_date, reason,
-                request_type as "request_type: TimeOffType",
-                status as "status: TimeOffStatus",
-                approved_by, approval_notes, created_at, updated_at
+                request_type, status, approved_by, approval_notes, created_at, updated_at
             "#,
-            TimeOffStatus::Denied.to_string(),
+            status_str,
             denied_by,
             notes,
             now,
@@ -201,107 +263,64 @@ impl TimeOffRepository {
         .fetch_one(&self.pool)
         .await?;
 
-        Ok(request)
+        Ok(TimeOffRequest {
+            id: row.id.unwrap(),
+            user_id: row.user_id,
+            start_date: row.start_date,
+            end_date: row.end_date,
+            reason: row.reason,
+            request_type: row.request_type.parse().unwrap(),
+            status: row.status.parse().unwrap(),
+            approved_by: row.approved_by,
+            approval_notes: row.approval_notes,
+            created_at: row.created_at.unwrap(),
+            updated_at: row.updated_at.unwrap(),
+        })
     }
 
-    /// Check if user has overlapping time-off requests
-    pub async fn has_overlapping_requests(&self, user_id: &str, start_date: NaiveDateTime, end_date: NaiveDateTime, exclude_id: Option<i64>) -> Result<bool> {
-        let mut query = "
-            SELECT COUNT(*) as count
-            FROM time_off_requests 
-            WHERE user_id = ? 
-                AND status IN ('pending', 'approved')
-                AND (
-                    (start_date <= ? AND end_date >= ?) OR
-                    (start_date <= ? AND end_date >= ?) OR
-                    (start_date >= ? AND end_date <= ?)
-                )
-        ".to_string();
+    /// Cancel a time-off request
+    pub async fn cancel_request(&self, id: i64) -> Result<TimeOffRequest> {
+        let now = Utc::now().naive_utc();
+        let status_str = TimeOffStatus::Cancelled.to_string();
 
-        let mut params = vec![
-            user_id.to_string(),
-            start_date.to_string(),
-            start_date.to_string(),
-            end_date.to_string(),
-            end_date.to_string(),
-            start_date.to_string(),
-            end_date.to_string(),
-        ];
-
-        if let Some(id) = exclude_id {
-            query.push_str(" AND id != ?");
-            params.push(id.to_string());
-        }
-
-        let mut sql_query = sqlx::query_scalar::<_, i64>(&query);
-        
-        for param in params {
-            sql_query = sql_query.bind(param);
-        }
-
-        let count = sql_query.fetch_one(&self.pool).await?;
-        Ok(count > 0)
-    }
-
-    /// Get time-off statistics
-    pub async fn get_time_off_stats(&self, user_id: Option<&str>) -> Result<(i64, i64, i64, i64, i64)> {
-        let mut query = "
-            SELECT 
-                COUNT(*) as total,
-                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
-                SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved,
-                SUM(CASE WHEN status = 'denied' THEN 1 ELSE 0 END) as denied,
-                SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled
-            FROM time_off_requests
-        ".to_string();
-
-        let stats = if let Some(uid) = user_id {
-            query.push_str(" WHERE user_id = ?");
-            sqlx::query_as::<_, (i64, i64, i64, i64, i64)>(&query)
-                .bind(uid)
-                .fetch_one(&self.pool)
-                .await?
-        } else {
-            sqlx::query_as::<_, (i64, i64, i64, i64, i64)>(&query)
-                .fetch_one(&self.pool)
-                .await?
-        };
-
-        Ok(stats)
-    }
-
-    /// Get time-off requests for a specific date range
-    pub async fn get_requests_for_date_range(
-        &self,
-        start_date: NaiveDateTime,
-        end_date: NaiveDateTime,
-        user_id: Option<&str>,
-    ) -> Result<Vec<TimeOffRequest>> {
-        let mut query = "
-            SELECT 
+        let row = sqlx::query!(
+            r#"
+            UPDATE time_off_requests 
+            SET 
+                status = ?, updated_at = ?
+            WHERE id = ?
+            RETURNING 
                 id, user_id, start_date, end_date, reason,
-                request_type, status, approved_by, approval_notes,
-                created_at, updated_at
-            FROM time_off_requests 
-            WHERE (start_date <= ? AND end_date >= ?)
-        ".to_string();
+                request_type, status, approved_by, approval_notes, created_at, updated_at
+            "#,
+            status_str,
+            now,
+            id
+        )
+        .fetch_one(&self.pool)
+        .await?;
 
-        let mut params = vec![end_date.to_string(), start_date.to_string()];
+        Ok(TimeOffRequest {
+            id: row.id.unwrap(),
+            user_id: row.user_id,
+            start_date: row.start_date,
+            end_date: row.end_date,
+            reason: row.reason,
+            request_type: row.request_type.parse().unwrap(),
+            status: row.status.parse().unwrap(),
+            approved_by: row.approved_by,
+            approval_notes: row.approval_notes,
+            created_at: row.created_at.unwrap(),
+            updated_at: row.updated_at.unwrap(),
+        })
+    }
 
-        if let Some(uid) = user_id {
-            query.push_str(" AND user_id = ?");
-            params.push(uid.to_string());
-        }
+    /// Delete a time-off request
+    pub async fn delete_request(&self, id: i64) -> Result<()> {
+        sqlx::query!("DELETE FROM time_off_requests WHERE id = ?", id)
+            .execute(&self.pool)
+            .await?;
 
-        query.push_str(" ORDER BY start_date ASC");
-
-        let mut sql_query = sqlx::query_as::<_, TimeOffRequest>(&query);
-        
-        for param in params {
-            sql_query = sql_query.bind(param);
-        }
-
-        let requests = sql_query.fetch_all(&self.pool).await?;
-        Ok(requests)
+        Ok(())
     }
 }

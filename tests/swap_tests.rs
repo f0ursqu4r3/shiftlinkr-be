@@ -1,21 +1,13 @@
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::test_utils::*;
-    use crate::database::models::*;
-    use crate::database::user_repository::UserRepository;
-    use crate::database::location_repository::LocationRepository;
-    use crate::database::shift_repository::ShiftRepository;
-    use crate::database::shift_swap_repository::ShiftSwapRepository;
-    use actix_web::{test, web, http::StatusCode};
-    use pretty_assertions::assert_eq;
-    use serial_test::serial;
-    use sqlx::SqlitePool;
-    use uuid::Uuid;
+mod common;
 
-    #[tokio::test]
-    #[serial]
-    async fn test_create_shift_swap_request_success() {
+use be::test_utils::*;
+use actix_web::{test, http::StatusCode};
+use pretty_assertions::assert_eq;
+use serial_test::serial;
+
+#[tokio::test]
+#[serial]
+async fn test_create_shift_swap_request_success() {
         // Arrange
         let test_app = TestApp::new().await.expect("Failed to create test app");
         let app = test_app.create_app().await;
@@ -81,7 +73,6 @@ mod tests {
             original_shift_id: shift.id,
             requesting_user_id: requesting_user.id.clone(),
             target_user_id: Some(target_user.id.clone()),
-            target_shift_id: None,
             notes: Some("Need to swap due to appointment".to_string()),
             swap_type: ShiftSwapType::Targeted,
         };
@@ -359,18 +350,8 @@ mod tests {
     // Helper functions for test data creation
     async fn create_test_user(pool: &SqlitePool, user_data: &CreateUserRequest) -> User {
         let user_repo = UserRepository::new(pool.clone());
-        let user = User {
-            id: uuid::Uuid::new_v4().to_string(),
-            email: user_data.email.clone(),
-            password_hash: "test_hash".to_string(),
-            name: user_data.name.clone(),
-            role: user_data.role.clone().unwrap_or(UserRole::Employee),
-            created_at: chrono::Utc::now().naive_utc(),
-            updated_at: chrono::Utc::now().naive_utc(),
-        };
-        user_repo.create_user(&user).await
-            .expect("Failed to create test user");
-        user
+        user_repo.create_user(user_data).await
+            .expect("Failed to create test user")
     }
 
     async fn create_test_location(pool: &SqlitePool) -> Location {
@@ -383,8 +364,7 @@ mod tests {
     async fn create_test_shift(pool: &SqlitePool, location_id: i64, assigned_user_id: Option<String>) -> Shift {
         let shift_repo = ShiftRepository::new(pool.clone());
         let mut shift_data = MockData::shift(location_id, None);
-        // Convert string user ID to i64 for the database
-        shift_data.assigned_user_id = assigned_user_id.and_then(|id| id.parse::<i64>().ok());
+        shift_data.assigned_user_id = assigned_user_id;
         shift_repo.create_shift(shift_data).await
             .expect("Failed to create test shift")
     }
@@ -415,4 +395,3 @@ mod tests {
             .await
             .expect("Failed to get swap by id")
     }
-}

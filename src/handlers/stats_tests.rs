@@ -2,9 +2,15 @@
 mod tests {
     use super::*;
     use crate::test_utils::*;
+    use crate::database::models::*;
+    use crate::database::user_repository::UserRepository;
+    use crate::database::location_repository::LocationRepository;
+    use crate::database::shift_repository::ShiftRepository;
+    use crate::database::time_off_repository::TimeOffRepository;
     use actix_web::{test, web, http::StatusCode};
     use pretty_assertions::assert_eq;
     use serial_test::serial;
+    use sqlx::SqlitePool;
 
     #[tokio::test]
     #[serial]
@@ -279,8 +285,18 @@ mod tests {
     // Helper functions for test data creation
     async fn create_test_user(pool: &SqlitePool, user_data: &CreateUserRequest) -> User {
         let user_repo = UserRepository::new(pool.clone());
-        user_repo.create_user(user_data).await
-            .expect("Failed to create test user")
+        let user = User {
+            id: uuid::Uuid::new_v4().to_string(),
+            email: user_data.email.clone(),
+            password_hash: "test_hash".to_string(),
+            name: user_data.name.clone(),
+            role: user_data.role.clone().unwrap_or(UserRole::Employee),
+            created_at: chrono::Utc::now().naive_utc(),
+            updated_at: chrono::Utc::now().naive_utc(),
+        };
+        user_repo.create_user(&user).await
+            .expect("Failed to create test user");
+        user
     }
 
     async fn create_test_location(pool: &SqlitePool) -> Location {
@@ -293,7 +309,8 @@ mod tests {
     async fn create_test_shift(pool: &SqlitePool, location_id: i64, assigned_user_id: Option<String>) -> Shift {
         let shift_repo = ShiftRepository::new(pool.clone());
         let mut shift_data = MockData::shift(location_id, None);
-        shift_data.assigned_user_id = assigned_user_id;
+        // Convert string user ID to i64 for the database
+        shift_data.assigned_user_id = assigned_user_id.and_then(|id| id.parse::<i64>().ok());
         shift_repo.create_shift(shift_data).await
             .expect("Failed to create test shift")
     }
@@ -321,7 +338,7 @@ mod tests {
             description: Some("Test shift".to_string()),
             location_id,
             team_id: None,
-            assigned_user_id,
+            assigned_user_id: assigned_user_id.and_then(|id| id.parse::<i64>().ok()),
             start_time,
             end_time: start_time + chrono::Duration::hours(8),
             hourly_rate: Some(20.0),

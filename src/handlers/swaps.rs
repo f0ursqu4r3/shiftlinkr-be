@@ -1,5 +1,5 @@
 use actix_web::{web, HttpResponse, Result};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::database::shift_swap_repository::ShiftSwapRepository;
 use crate::database::models::{ShiftSwapInput, ShiftSwapStatus};
@@ -20,7 +20,7 @@ pub struct SwapResponseRequest {
     pub notes: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ApprovalRequest {
     pub notes: Option<String>,
 }
@@ -60,18 +60,22 @@ pub async fn get_swap_requests(
 ) -> Result<HttpResponse> {
     // Employees can only see swaps related to them (as requester or target)
     let requesting_user_id = if !claims.is_admin() && !claims.is_manager() {
-        Some(claims.sub.clone())
+        Some(claims.sub.as_str())
     } else {
-        query.requesting_user_id.clone()
+        query.requesting_user_id.as_deref()
     };
 
-    let target_user_id = if !claims.is_admin() && !claims.is_manager() {
-        Some(claims.sub.clone())
+    // Convert status string to enum if provided
+    let status_filter = if let Some(status_str) = &query.status {
+        match status_str.parse::<ShiftSwapStatus>() {
+            Ok(status) => Some(status),
+            Err(_) => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("Invalid status")))
+        }
     } else {
-        query.target_user_id.clone()
+        None
     };
 
-    match repo.get_swap_requests(requesting_user_id, target_user_id, query.status.clone(), query.original_shift_id).await {
+    match repo.get_swap_requests(requesting_user_id, status_filter, None).await {
         Ok(requests) => {
             // For employees, filter to only include swaps they're involved in
             let filtered_requests = if !claims.is_admin() && !claims.is_manager() {
@@ -145,7 +149,7 @@ pub async fn respond_to_swap(
                 return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("Can only respond to pending swaps")));
             }
 
-            match repo.respond_to_swap(swap_id, response.target_shift_id, response.notes.clone()).await {
+            match repo.respond_to_swap(swap_id, &claims.sub, true, response.notes.clone()).await {
                 Ok(updated_swap) => Ok(HttpResponse::Ok().json(ApiResponse::success(updated_swap))),
                 Err(err) => {
                     log::error!("Error responding to swap request: {}", err);
@@ -175,7 +179,7 @@ pub async fn approve_swap_request(
 
     let swap_id = path.into_inner();
 
-    match repo.approve_swap(swap_id, &claims.sub, approval.notes.clone()).await {
+    match repo.approve_swap(swap_id, &claims.sub, approval.notes.clone().unwrap_or_default()).await {
         Ok(approved_swap) => Ok(HttpResponse::Ok().json(ApiResponse::success(approved_swap))),
         Err(err) => {
             log::error!("Error approving swap request: {}", err);
@@ -198,7 +202,7 @@ pub async fn deny_swap_request(
 
     let swap_id = path.into_inner();
 
-    match repo.deny_swap(swap_id, &claims.sub, denial.notes.clone()).await {
+    match repo.deny_swap(swap_id, &claims.sub, denial.notes.clone().unwrap_or_default()).await {
         Ok(denied_swap) => Ok(HttpResponse::Ok().json(ApiResponse::success(denied_swap))),
         Err(err) => {
             log::error!("Error denying swap request: {}", err);

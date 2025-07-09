@@ -1,10 +1,11 @@
-use anyhow::Result;
 use chrono::Utc;
 use sqlx::SqlitePool;
 
-use crate::database::models::{ShiftSwap, ShiftSwapInput, ShiftSwapStatus, ShiftSwapType};
+use crate::database::{
+    models::{ShiftSwap, ShiftSwapInput, ShiftSwapStatus, ShiftSwapType},
+    Result,
+};
 
-#[derive(Clone)]
 pub struct ShiftSwapRepository {
     pool: SqlitePool,
 }
@@ -17,41 +18,54 @@ impl ShiftSwapRepository {
     /// Create a new shift swap request
     pub async fn create_swap_request(&self, input: ShiftSwapInput) -> Result<ShiftSwap> {
         let now = Utc::now().naive_utc();
-        
+
         // Determine initial status based on swap type
         let initial_status = match input.swap_type {
             ShiftSwapType::Open => ShiftSwapStatus::Open,
             ShiftSwapType::Targeted => ShiftSwapStatus::Pending,
         };
 
-        let swap = sqlx::query_as!(
-            ShiftSwap,
+        let swap_type_str = input.swap_type.to_string();
+        let status_str = initial_status.to_string();
+
+        let row = sqlx::query!(
             r#"
             INSERT INTO shift_swaps (
-                original_shift_id, requesting_user_id, target_user_id, 
-                status, notes, swap_type, created_at, updated_at
+                requesting_user_id, original_shift_id, target_user_id, target_shift_id, 
+                notes, swap_type, status, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING 
-                id, original_shift_id, requesting_user_id, target_user_id,
-                status as "status: ShiftSwapStatus",
-                notes,
-                swap_type as "swap_type: ShiftSwapType",
-                approved_by, approval_notes, created_at, updated_at
+                id, requesting_user_id, original_shift_id, target_user_id, target_shift_id,
+                notes, swap_type, status, approved_by, approval_notes, created_at, updated_at
             "#,
-            input.original_shift_id,
             input.requesting_user_id,
+            input.original_shift_id,
             input.target_user_id,
-            initial_status.to_string(),
+            input.target_shift_id,
             input.notes,
-            input.swap_type.to_string(),
+            swap_type_str,
+            status_str,
             now,
             now
         )
         .fetch_one(&self.pool)
         .await?;
 
-        Ok(swap)
+        Ok(ShiftSwap {
+            id: row.id,
+            requesting_user_id: row.requesting_user_id,
+            original_shift_id: row.original_shift_id,
+            target_user_id: row.target_user_id,
+            target_shift_id: row.target_shift_id,
+            notes: row.notes,
+            swap_type: row.swap_type.parse().unwrap(),
+            status: row.status.parse().unwrap(),
+            approved_by: row.approved_by,
+            approval_notes: row.approval_notes,
+            created_at: row.created_at.unwrap(),
+            updated_at: row.updated_at.unwrap(),
+        })
     }
 
     /// Get all swap requests with optional filtering
@@ -61,84 +75,71 @@ impl ShiftSwapRepository {
         status: Option<ShiftSwapStatus>,
         swap_type: Option<ShiftSwapType>,
     ) -> Result<Vec<ShiftSwap>> {
-        let mut query = "
+        // For simplicity, just get all and filter in memory for now
+        let rows = sqlx::query!(
+            r#"
             SELECT 
-                id, original_shift_id, requesting_user_id, target_user_id,
-                status, notes, swap_type, approved_by, approval_notes,
+                id, requesting_user_id, original_shift_id, target_user_id, target_shift_id,
+                notes, swap_type, status, approved_by, approval_notes,
                 created_at, updated_at
             FROM shift_swaps
-            WHERE 1=1
-        ".to_string();
+            ORDER BY created_at DESC
+            "#
+        )
+        .fetch_all(&self.pool)
+        .await?;
 
-        let mut params: Vec<String> = Vec::new();
+        let mut swaps = Vec::new();
+        for row in rows {
+            let swap = ShiftSwap {
+                id: row.id,
+                requesting_user_id: row.requesting_user_id,
+                original_shift_id: row.original_shift_id,
+                target_user_id: row.target_user_id,
+                target_shift_id: row.target_shift_id,
+                notes: row.notes,
+                swap_type: row.swap_type.parse().unwrap(),
+                status: row.status.parse().unwrap(),
+                approved_by: row.approved_by,
+                approval_notes: row.approval_notes,
+                created_at: row.created_at.unwrap(),
+                updated_at: row.updated_at.unwrap(),
+            };
 
-        if let Some(uid) = user_id {
-            query.push_str(" AND (requesting_user_id = ? OR target_user_id = ?)");
-            params.push(uid.to_string());
-            params.push(uid.to_string());
+            // Apply filters
+            if let Some(uid) = user_id {
+                if swap.requesting_user_id != uid
+                    && swap.target_user_id.as_ref() != Some(&uid.to_string())
+                {
+                    continue;
+                }
+            }
+
+            if let Some(ref s) = status {
+                if &swap.status != s {
+                    continue;
+                }
+            }
+
+            if let Some(ref st) = swap_type {
+                if &swap.swap_type != st {
+                    continue;
+                }
+            }
+
+            swaps.push(swap);
         }
 
-        if let Some(s) = status {
-            query.push_str(" AND status = ?");
-            params.push(s.to_string());
-        }
-
-        if let Some(st) = swap_type {
-            query.push_str(" AND swap_type = ?");
-            params.push(st.to_string());
-        }
-
-        query.push_str(" ORDER BY created_at DESC");
-
-        let mut sql_query = sqlx::query_as::<_, ShiftSwap>(&query);
-        
-        for param in params {
-            sql_query = sql_query.bind(param);
-        }
-
-        let swaps = sql_query.fetch_all(&self.pool).await?;
         Ok(swaps)
     }
 
-    /// Get open swap requests (available for anyone to respond to)
-    pub async fn get_open_swap_requests(&self, exclude_user_id: Option<&str>) -> Result<Vec<ShiftSwap>> {
-        let mut query = "
-            SELECT 
-                id, original_shift_id, requesting_user_id, target_user_id,
-                status, notes, swap_type, approved_by, approval_notes,
-                created_at, updated_at
-            FROM shift_swaps
-            WHERE status = 'open' AND swap_type = 'open'
-        ".to_string();
-
-        let swap_requests = if let Some(uid) = exclude_user_id {
-            query.push_str(" AND requesting_user_id != ?");
-            query.push_str(" ORDER BY created_at DESC");
-            sqlx::query_as::<_, ShiftSwap>(&query)
-                .bind(uid)
-                .fetch_all(&self.pool)
-                .await?
-        } else {
-            query.push_str(" ORDER BY created_at DESC");
-            sqlx::query_as::<_, ShiftSwap>(&query)
-                .fetch_all(&self.pool)
-                .await?
-        };
-
-        Ok(swap_requests)
-    }
-
-    /// Get a specific swap request by ID
+    /// Get a swap request by ID
     pub async fn get_swap_by_id(&self, id: i64) -> Result<Option<ShiftSwap>> {
-        let swap = sqlx::query_as!(
-            ShiftSwap,
+        let row = sqlx::query!(
             r#"
             SELECT 
-                id, original_shift_id, requesting_user_id, target_user_id,
-                status as "status: ShiftSwapStatus",
-                notes,
-                swap_type as "swap_type: ShiftSwapType",
-                approved_by, approval_notes, created_at, updated_at
+                id, requesting_user_id, original_shift_id, target_user_id, target_shift_id,
+                notes, swap_type, status, approved_by, approval_notes, created_at, updated_at
             FROM shift_swaps 
             WHERE id = ?
             "#,
@@ -147,82 +148,100 @@ impl ShiftSwapRepository {
         .fetch_optional(&self.pool)
         .await?;
 
-        Ok(swap)
+        match row {
+            Some(row) => Ok(Some(ShiftSwap {
+                id: row.id,
+                requesting_user_id: row.requesting_user_id,
+                original_shift_id: row.original_shift_id,
+                target_user_id: row.target_user_id,
+                target_shift_id: row.target_shift_id,
+                notes: row.notes,
+                swap_type: row.swap_type.parse().unwrap(),
+                status: row.status.parse().unwrap(),
+                approved_by: row.approved_by,
+                approval_notes: row.approval_notes,
+                created_at: row.created_at.unwrap(),
+                updated_at: row.updated_at.unwrap(),
+            })),
+            None => Ok(None),
+        }
     }
 
     /// Respond to a swap request (accept/decline)
-    pub async fn respond_to_swap(&self, id: i64, responding_user_id: &str, accept: bool, notes: Option<String>) -> Result<ShiftSwap> {
+    pub async fn respond_to_swap(
+        &self,
+        id: i64,
+        responding_user_id: &str,
+        accept: bool,
+        notes: Option<String>,
+    ) -> Result<ShiftSwap> {
         let now = Utc::now().naive_utc();
-        let new_status = if accept { ShiftSwapStatus::Pending } else { ShiftSwapStatus::Open };
+        let new_status = if accept {
+            ShiftSwapStatus::Pending
+        } else {
+            ShiftSwapStatus::Open
+        };
+        let status_str = new_status.to_string();
 
-        let swap = if accept {
-            // Accept the swap - set target user and move to pending for manager approval
-            sqlx::query_as!(
-                ShiftSwap,
+        // Update the swap
+        if accept {
+            sqlx::query!(
                 r#"
                 UPDATE shift_swaps 
                 SET 
                     target_user_id = ?, status = ?, notes = ?, updated_at = ?
                 WHERE id = ?
-                RETURNING 
-                    id, original_shift_id, requesting_user_id, target_user_id,
-                    status as "status: ShiftSwapStatus",
-                    notes,
-                    swap_type as "swap_type: ShiftSwapType",
-                    approved_by, approval_notes, created_at, updated_at
                 "#,
                 responding_user_id,
-                new_status.to_string(),
+                status_str,
                 notes,
                 now,
                 id
             )
-            .fetch_one(&self.pool)
-            .await?
+            .execute(&self.pool)
+            .await?;
         } else {
-            // Decline - just update timestamp and possibly add notes
-            sqlx::query_as!(
-                ShiftSwap,
+            sqlx::query!(
                 r#"
                 UPDATE shift_swaps 
                 SET updated_at = ?
                 WHERE id = ?
-                RETURNING 
-                    id, original_shift_id, requesting_user_id, target_user_id,
-                    status as "status: ShiftSwapStatus",
-                    notes,
-                    swap_type as "swap_type: ShiftSwapType",
-                    approved_by, approval_notes, created_at, updated_at
                 "#,
                 now,
                 id
             )
-            .fetch_one(&self.pool)
-            .await?
-        };
+            .execute(&self.pool)
+            .await?;
+        }
 
-        Ok(swap)
+        // Fetch the updated swap
+        match self.get_swap_by_id(id).await? {
+            Some(swap) => Ok(swap),
+            None => Err(anyhow::anyhow!("Swap not found after update")),
+        }
     }
 
-    /// Approve a swap request (manager action)
-    pub async fn approve_swap(&self, id: i64, approved_by: &str, notes: Option<String>) -> Result<ShiftSwap> {
+    /// Approve a swap request (managers/admins only)
+    pub async fn approve_swap(
+        &self,
+        id: i64,
+        approved_by: &str,
+        notes: String,
+    ) -> Result<ShiftSwap> {
         let now = Utc::now().naive_utc();
+        let status_str = ShiftSwapStatus::Approved.to_string();
 
-        let swap = sqlx::query_as!(
-            ShiftSwap,
+        let row = sqlx::query!(
             r#"
             UPDATE shift_swaps 
             SET 
                 status = ?, approved_by = ?, approval_notes = ?, updated_at = ?
             WHERE id = ?
             RETURNING 
-                id, original_shift_id, requesting_user_id, target_user_id,
-                status as "status: ShiftSwapStatus",
-                notes,
-                swap_type as "swap_type: ShiftSwapType",
-                approved_by, approval_notes, created_at, updated_at
+                id, requesting_user_id, original_shift_id, target_user_id, target_shift_id,
+                notes, swap_type, status, approved_by, approval_notes, created_at, updated_at
             "#,
-            ShiftSwapStatus::Approved.to_string(),
+            status_str,
             approved_by,
             notes,
             now,
@@ -231,28 +250,40 @@ impl ShiftSwapRepository {
         .fetch_one(&self.pool)
         .await?;
 
-        Ok(swap)
+        Ok(ShiftSwap {
+            id: row
+                .id
+                .expect("ID should always be present in RETURNING clause"),
+            requesting_user_id: row.requesting_user_id,
+            original_shift_id: row.original_shift_id,
+            target_user_id: row.target_user_id,
+            target_shift_id: row.target_shift_id,
+            notes: row.notes,
+            swap_type: row.swap_type.parse().unwrap(),
+            status: row.status.parse().unwrap(),
+            approved_by: row.approved_by,
+            approval_notes: row.approval_notes,
+            created_at: row.created_at.unwrap(),
+            updated_at: row.updated_at.unwrap(),
+        })
     }
 
-    /// Deny a swap request (manager action)
+    /// Deny a swap request (managers/admins only)
     pub async fn deny_swap(&self, id: i64, denied_by: &str, notes: String) -> Result<ShiftSwap> {
         let now = Utc::now().naive_utc();
+        let status_str = ShiftSwapStatus::Denied.to_string();
 
-        let swap = sqlx::query_as!(
-            ShiftSwap,
+        let row = sqlx::query!(
             r#"
             UPDATE shift_swaps 
             SET 
                 status = ?, approved_by = ?, approval_notes = ?, updated_at = ?
             WHERE id = ?
             RETURNING 
-                id, original_shift_id, requesting_user_id, target_user_id,
-                status as "status: ShiftSwapStatus",
-                notes,
-                swap_type as "swap_type: ShiftSwapType",
-                approved_by, approval_notes, created_at, updated_at
+                id, requesting_user_id, original_shift_id, target_user_id, target_shift_id,
+                notes, swap_type, status, approved_by, approval_notes, created_at, updated_at
             "#,
-            ShiftSwapStatus::Denied.to_string(),
+            status_str,
             denied_by,
             notes,
             now,
@@ -261,136 +292,101 @@ impl ShiftSwapRepository {
         .fetch_one(&self.pool)
         .await?;
 
-        Ok(swap)
+        Ok(ShiftSwap {
+            id: row
+                .id
+                .expect("ID should always be present in RETURNING clause"),
+            requesting_user_id: row.requesting_user_id,
+            original_shift_id: row.original_shift_id,
+            target_user_id: row.target_user_id,
+            target_shift_id: row.target_shift_id,
+            notes: row.notes,
+            swap_type: row.swap_type.parse().unwrap(),
+            status: row.status.parse().unwrap(),
+            approved_by: row.approved_by,
+            approval_notes: row.approval_notes,
+            created_at: row.created_at.unwrap(),
+            updated_at: row.updated_at.unwrap(),
+        })
     }
 
     /// Cancel a swap request
     pub async fn cancel_swap(&self, id: i64) -> Result<ShiftSwap> {
         let now = Utc::now().naive_utc();
+        let status_str = ShiftSwapStatus::Cancelled.to_string();
 
-        let swap = sqlx::query_as!(
-            ShiftSwap,
+        let row = sqlx::query!(
             r#"
             UPDATE shift_swaps 
             SET 
                 status = ?, updated_at = ?
             WHERE id = ?
             RETURNING 
-                id, original_shift_id, requesting_user_id, target_user_id,
-                status as "status: ShiftSwapStatus",
-                notes,
-                swap_type as "swap_type: ShiftSwapType",
-                approved_by, approval_notes, created_at, updated_at
+                id, requesting_user_id, original_shift_id, target_user_id, target_shift_id,
+                notes, swap_type, status, approved_by, approval_notes, created_at, updated_at
             "#,
-            ShiftSwapStatus::Cancelled.to_string(),
+            status_str,
             now,
             id
         )
         .fetch_one(&self.pool)
         .await?;
 
-        Ok(swap)
+        Ok(ShiftSwap {
+            id: row
+                .id
+                .expect("ID should always be present in RETURNING clause"),
+            requesting_user_id: row.requesting_user_id,
+            original_shift_id: row.original_shift_id,
+            target_user_id: row.target_user_id,
+            target_shift_id: row.target_shift_id,
+            notes: row.notes,
+            swap_type: row.swap_type.parse().unwrap(),
+            status: row.status.parse().unwrap(),
+            approved_by: row.approved_by,
+            approval_notes: row.approval_notes,
+            created_at: row.created_at.unwrap(),
+            updated_at: row.updated_at.unwrap(),
+        })
     }
 
-    /// Complete a swap (after successful shift reassignment)
+    /// Complete a swap request
     pub async fn complete_swap(&self, id: i64) -> Result<ShiftSwap> {
         let now = Utc::now().naive_utc();
+        let status_str = ShiftSwapStatus::Completed.to_string();
 
-        let swap = sqlx::query_as!(
-            ShiftSwap,
+        let row = sqlx::query!(
             r#"
             UPDATE shift_swaps 
             SET 
                 status = ?, updated_at = ?
             WHERE id = ?
             RETURNING 
-                id, original_shift_id, requesting_user_id, target_user_id,
-                status as "status: ShiftSwapStatus",
-                notes,
-                swap_type as "swap_type: ShiftSwapType",
-                approved_by, approval_notes, created_at, updated_at
+                id, requesting_user_id, original_shift_id, target_user_id, target_shift_id,
+                notes, swap_type, status, approved_by, approval_notes, created_at, updated_at
             "#,
-            ShiftSwapStatus::Completed.to_string(),
+            status_str,
             now,
             id
         )
         .fetch_one(&self.pool)
         .await?;
 
-        Ok(swap)
-    }
-
-    /// Check if user has pending swap requests for a shift
-    pub async fn has_pending_swap_for_shift(&self, shift_id: i64, user_id: &str) -> Result<bool> {
-        let count = sqlx::query_scalar!(
-            "
-            SELECT COUNT(*) as count
-            FROM shift_swaps 
-            WHERE original_shift_id = ? 
-                AND requesting_user_id = ?
-                AND status IN ('open', 'pending')
-            ",
-            shift_id,
-            user_id
-        )
-        .fetch_one(&self.pool)
-        .await?;
-
-        Ok(count > 0)
-    }
-
-    /// Get swap statistics
-    pub async fn get_swap_stats(&self, user_id: Option<&str>) -> Result<(i64, i64, i64, i64, i64, i64)> {
-        let mut query = "
-            SELECT 
-                COUNT(*) as total,
-                SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) as open,
-                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
-                SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved,
-                SUM(CASE WHEN status = 'denied' THEN 1 ELSE 0 END) as denied,
-                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed
-            FROM shift_swaps
-        ".to_string();
-
-        let stats = if let Some(uid) = user_id {
-            query.push_str(" WHERE requesting_user_id = ? OR target_user_id = ?");
-            sqlx::query_as::<_, (i64, i64, i64, i64, i64, i64)>(&query)
-                .bind(uid)
-                .bind(uid)
-                .fetch_one(&self.pool)
-                .await?
-        } else {
-            sqlx::query_as::<_, (i64, i64, i64, i64, i64, i64)>(&query)
-                .fetch_one(&self.pool)
-                .await?
-        };
-
-        Ok(stats)
-    }
-
-    /// Get swaps involving a specific user
-    pub async fn get_user_swaps(&self, user_id: &str, include_completed: bool) -> Result<Vec<ShiftSwap>> {
-        let mut query = "
-            SELECT 
-                id, original_shift_id, requesting_user_id, target_user_id,
-                status, notes, swap_type, approved_by, approval_notes,
-                created_at, updated_at
-            FROM shift_swaps
-            WHERE (requesting_user_id = ? OR target_user_id = ?)
-        ".to_string();
-
-        if !include_completed {
-            query.push_str(" AND status NOT IN ('completed', 'cancelled')");
-        }
-
-        query.push_str(" ORDER BY created_at DESC");
-
-        let swaps = sqlx::query_as::<_, ShiftSwap>(&query)
-            .bind(user_id)
-            .bind(user_id)
-            .fetch_all(&self.pool)
-            .await?;
-
-        Ok(swaps)
+        Ok(ShiftSwap {
+            id: row
+                .id
+                .expect("ID should always be present in RETURNING clause"),
+            requesting_user_id: row.requesting_user_id,
+            original_shift_id: row.original_shift_id,
+            target_user_id: row.target_user_id,
+            target_shift_id: row.target_shift_id,
+            notes: row.notes,
+            swap_type: row.swap_type.parse().unwrap(),
+            status: row.status.parse().unwrap(),
+            approved_by: row.approved_by,
+            approval_notes: row.approval_notes,
+            created_at: row.created_at.unwrap(),
+            updated_at: row.updated_at.unwrap(),
+        })
     }
 }
