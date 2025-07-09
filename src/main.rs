@@ -11,9 +11,10 @@ use auth::AuthService;
 use config::Config;
 use database::{
     init_database, invite_repository::InviteRepository, location_repository::LocationRepository,
-    password_reset_repository::PasswordResetTokenRepository, shift_repository::ShiftRepository,
-    shift_swap_repository::ShiftSwapRepository, stats_repository::StatsRepository,
-    time_off_repository::TimeOffRepository, user_repository::UserRepository,
+    password_reset_repository::PasswordResetTokenRepository, pto_balance_repository::PtoBalanceRepository,
+    shift_repository::ShiftRepository, shift_swap_repository::ShiftSwapRepository, 
+    stats_repository::StatsRepository, time_off_repository::TimeOffRepository, 
+    user_repository::UserRepository,
 };
 
 pub struct AppState {
@@ -63,6 +64,7 @@ async fn main() -> Result<()> {
     let time_off_repository = TimeOffRepository::new(pool.clone());
     let shift_swap_repository = ShiftSwapRepository::new(pool.clone());
     let stats_repository = StatsRepository::new(pool.clone());
+    let pto_balance_repository = PtoBalanceRepository::new(pool.clone());
     let auth_service = AuthService::new(user_repository, password_reset_repository, config.clone());
 
     // Create app state and repository data
@@ -73,6 +75,7 @@ async fn main() -> Result<()> {
     let time_off_repo_data = web::Data::new(time_off_repository);
     let shift_swap_repo_data = web::Data::new(shift_swap_repository);
     let stats_repo_data = web::Data::new(stats_repository);
+    let pto_balance_repo_data = web::Data::new(pto_balance_repository);
     let config_data = web::Data::new(config.clone());
 
     let server_address = config.server_address();
@@ -88,6 +91,7 @@ async fn main() -> Result<()> {
             .app_data(time_off_repo_data.clone())
             .app_data(shift_swap_repo_data.clone())
             .app_data(stats_repo_data.clone())
+            .app_data(pto_balance_repo_data.clone())
             .app_data(config_data.clone())
             .wrap(
                 Cors::default()
@@ -209,7 +213,7 @@ async fn main() -> Result<()> {
                             )
                             .route(
                                 "/{id}/approve",
-                                web::post().to(handlers::time_off::approve_time_off_request),
+                                web::post().to(handlers::time_off::approve_time_off_request_endpoint),
                             )
                             .route(
                                 "/{id}/deny",
@@ -244,6 +248,26 @@ async fn main() -> Result<()> {
                             .route(
                                 "/time-off",
                                 web::get().to(handlers::stats::get_time_off_stats),
+                            ),
+                    )
+                    .service(
+                        web::scope("/pto-balance")
+                            .route("", web::get().to(handlers::pto_balance::get_pto_balance))
+                            .route(
+                                "/{user_id}",
+                                web::put().to(handlers::pto_balance::update_pto_balance),
+                            )
+                            .route(
+                                "/{user_id}/adjust",
+                                web::post().to(handlers::pto_balance::adjust_pto_balance),
+                            )
+                            .route(
+                                "/{user_id}/history",
+                                web::get().to(handlers::pto_balance::get_pto_balance_history),
+                            )
+                            .route(
+                                "/{user_id}/accrual",
+                                web::post().to(handlers::pto_balance::process_pto_accrual),
                             ),
                     ),
             )

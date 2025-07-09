@@ -30,6 +30,16 @@ impl<T> ApiResponse<T> {
     }
 }
 
+impl ApiResponse<()> {
+    pub fn success_with_message(message: &str) -> Self {
+        Self {
+            success: true,
+            data: None,
+            message: Some(message.to_string()),
+        }
+    }
+}
+
 // Location handlers
 pub async fn create_location(
     claims: Claims,
