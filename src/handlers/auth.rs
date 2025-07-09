@@ -1,6 +1,7 @@
 use actix_web::{web, HttpRequest, HttpResponse, Result};
 use serde_json::json;
 
+use crate::config::Config;
 use crate::database::invite_repository::InviteRepository;
 use crate::database::models::{
     AcceptInviteRequest, CreateInviteRequest, CreateUserRequest, ForgotPasswordRequest,
@@ -72,12 +73,22 @@ fn extract_token_from_header(req: &HttpRequest) -> Option<String> {
 
 pub async fn forgot_password(
     data: web::Data<AppState>,
+    config: web::Data<Config>,
     request: web::Json<ForgotPasswordRequest>,
 ) -> Result<HttpResponse> {
     match data.auth_service.forgot_password(&request.email).await {
-        Ok(_token) => Ok(HttpResponse::Ok().json(json!({
-            "message": "If the email exists, a password reset link has been sent."
-        }))),
+        Ok(token) => {
+            let mut response = serde_json::json!({
+                "message": "If the email exists, a password reset link has been sent."
+            });
+
+            // Return token in development/test mode for testing purposes
+            if config.environment == "development" || config.environment == "test" {
+                response["token"] = serde_json::Value::String(token);
+            }
+
+            Ok(HttpResponse::Ok().json(response))
+        }
         Err(_) => {
             // Don't reveal whether the email exists or not for security
             Ok(HttpResponse::Ok().json(json!({
