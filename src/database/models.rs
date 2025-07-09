@@ -661,18 +661,18 @@ impl Default for ShiftSwapStatus {
 }
 
 // Request/Response DTOs for approvals
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct ApprovalRequest {
     pub notes: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct DenialRequest {
     pub notes: String, // Required for denials
 }
 
 // Statistics models
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 pub struct DashboardStats {
     pub total_shifts: i64,
     pub upcoming_shifts: i64,
@@ -683,7 +683,7 @@ pub struct DashboardStats {
     pub team_coverage: f64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 pub struct ShiftStats {
     pub total_shifts: i64,
     pub assigned_shifts: i64,
@@ -692,7 +692,7 @@ pub struct ShiftStats {
     pub cancelled_shifts: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 pub struct TimeOffStats {
     pub total_requests: i64,
     pub approved_requests: i64,

@@ -176,7 +176,7 @@ impl TimeOffRepository {
         .await?;
 
         Ok(TimeOffRequest {
-            id: row.id.unwrap(),
+            id: row.id.expect("Row ID should not be null"),
             user_id: row.user_id,
             start_date: row.start_date,
             end_date: row.end_date,
@@ -220,7 +220,7 @@ impl TimeOffRepository {
         .await?;
 
         Ok(TimeOffRequest {
-            id: row.id.unwrap(),
+            id: row.id.expect("Row ID should not be null"),
             user_id: row.user_id,
             start_date: row.start_date,
             end_date: row.end_date,
@@ -264,7 +264,7 @@ impl TimeOffRepository {
         .await?;
 
         Ok(TimeOffRequest {
-            id: row.id.unwrap(),
+            id: row.id.expect("Row ID should not be null"),
             user_id: row.user_id,
             start_date: row.start_date,
             end_date: row.end_date,
@@ -301,7 +301,7 @@ impl TimeOffRepository {
         .await?;
 
         Ok(TimeOffRequest {
-            id: row.id.unwrap(),
+            id: row.id.expect("Row ID should not be null"),
             user_id: row.user_id,
             start_date: row.start_date,
             end_date: row.end_date,

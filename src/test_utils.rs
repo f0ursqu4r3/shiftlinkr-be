@@ -14,12 +14,7 @@ use uuid::Uuid;
 
 use crate::auth::AuthService;
 use crate::config::Config;
-use crate::database::invite_repository::InviteRepository;
-use crate::database::location_repository::LocationRepository;
 use crate::database::models::*;
-use crate::database::password_reset_repository::PasswordResetTokenRepository;
-use crate::database::shift_repository::ShiftRepository;
-use crate::database::user_repository::UserRepository;
 use crate::database::*;
 use crate::handlers;
 use crate::AppState;
@@ -89,12 +84,6 @@ impl TestApp {
         let shift_repository = ShiftRepository::new(self.db.pool.clone());
         let password_reset_repository = PasswordResetTokenRepository::new(self.db.pool.clone());
         let invite_repository = InviteRepository::new(self.db.pool.clone());
-        let time_off_repository =
-            crate::database::time_off_repository::TimeOffRepository::new(self.db.pool.clone());
-        let swap_repository =
-            crate::database::shift_swap_repository::ShiftSwapRepository::new(self.db.pool.clone());
-        let stats_repository =
-            crate::database::stats_repository::StatsRepository::new(self.db.pool.clone());
         let auth_service = AuthService::new(
             user_repository,
             password_reset_repository,
@@ -106,9 +95,6 @@ impl TestApp {
         let location_repo_data = web::Data::new(location_repository);
         let shift_repo_data = web::Data::new(shift_repository);
         let invite_repo_data = web::Data::new(invite_repository);
-        let time_off_repo_data = web::Data::new(time_off_repository);
-        let swap_repo_data = web::Data::new(swap_repository);
-        let stats_repo_data = web::Data::new(stats_repository);
         let config_data = web::Data::new(self.config.clone());
 
         App::new()
@@ -116,9 +102,6 @@ impl TestApp {
             .app_data(location_repo_data)
             .app_data(shift_repo_data)
             .app_data(invite_repo_data)
-            .app_data(time_off_repo_data)
-            .app_data(swap_repo_data)
-            .app_data(stats_repo_data)
             .app_data(config_data)
             .service(
                 web::scope("/api/v1")
@@ -203,56 +186,6 @@ impl TestApp {
                                 web::post().to(handlers::shifts::update_shift_status),
                             )
                             .route("/{id}/claim", web::post().to(handlers::shifts::claim_shift)),
-                    )
-                    .service(
-                        web::scope("/time-off")
-                            .route(
-                                "",
-                                web::post().to(handlers::time_off::create_time_off_request),
-                            )
-                            .route("", web::get().to(handlers::time_off::get_time_off_requests))
-                            .route(
-                                "/{id}/approve",
-                                web::post().to(handlers::time_off::approve_time_off_request),
-                            )
-                            .route(
-                                "/{id}/deny",
-                                web::post().to(handlers::time_off::deny_time_off_request),
-                            )
-                            .route(
-                                "/{id}",
-                                web::put().to(handlers::time_off::update_time_off_request),
-                            ),
-                    )
-                    .service(
-                        web::scope("/swaps")
-                            .route("", web::post().to(handlers::swaps::create_swap_request))
-                            .route("", web::get().to(handlers::swaps::get_swap_requests))
-                            .route("/{id}", web::get().to(handlers::swaps::get_swap_request))
-                            .route(
-                                "/{id}/respond",
-                                web::post().to(handlers::swaps::respond_to_swap),
-                            )
-                            .route(
-                                "/{id}/approve",
-                                web::post().to(handlers::swaps::approve_swap_request),
-                            )
-                            .route(
-                                "/{id}/deny",
-                                web::post().to(handlers::swaps::deny_swap_request),
-                            ),
-                    )
-                    .service(
-                        web::scope("/stats")
-                            .route(
-                                "/dashboard",
-                                web::get().to(handlers::stats::get_dashboard_stats),
-                            )
-                            .route("/shifts", web::get().to(handlers::stats::get_shift_stats))
-                            .route(
-                                "/time-off",
-                                web::get().to(handlers::stats::get_time_off_stats),
-                            ),
                     ),
             )
     }
@@ -269,7 +202,6 @@ impl AuthHelper {
 
         let claims = Claims {
             sub: user.id.clone(),
-            email: user.email.clone(),
             exp: (Utc::now() + chrono::Duration::hours(24)).timestamp() as usize,
             role: user.role.to_string(),
         };
@@ -326,9 +258,11 @@ impl MockData {
     pub fn location() -> LocationInput {
         LocationInput {
             name: format!("{} Office", Name().fake::<String>()),
-            address: Some(format!("{} Main St", (1..9999).fake::<i32>())),
-            phone: Some("+1234567890".to_string()),
-            email: Some("test@location.com".to_string()),
+            address: format!("{} Main St", (1..9999).fake::<i32>()),
+            city: "Test City".to_string(),
+            state: "TC".to_string(),
+            zip_code: "12345".to_string(),
+            phone: "+1234567890".to_string(),
         }
     }
 
@@ -343,10 +277,17 @@ impl MockData {
 
     /// Generate a random shift
     pub fn shift(location_id: i64, team_id: Option<i64>) -> ShiftInput {
-        let start_time: NaiveDateTime = chrono::NaiveDate::from_ymd_opt(2025, 1, 1)
-            .unwrap()
-            .and_hms_opt(9, 0, 0)
-            .unwrap();
+        let start_time: NaiveDateTime = DateTimeBetween(
+            chrono::NaiveDate::from_ymd_opt(2025, 1, 1)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            chrono::NaiveDate::from_ymd_opt(2025, 12, 31)
+                .unwrap()
+                .and_hms_opt(17, 0, 0)
+                .unwrap(),
+        )
+        .fake();
 
         let end_time = start_time + chrono::Duration::hours(8);
 
@@ -364,10 +305,17 @@ impl MockData {
 
     /// Generate random time-off request data
     pub fn time_off_request(user_id: String) -> TimeOffRequestInput {
-        let start_date = chrono::NaiveDate::from_ymd_opt(2025, 8, 1)
-            .unwrap()
-            .and_hms_opt(0, 0, 0)
-            .unwrap();
+        let start_date = DateTimeBetween(
+            chrono::NaiveDate::from_ymd_opt(2025, 8, 1)
+                .unwrap()
+                .and_hms_opt(0, 0, 0)
+                .unwrap(),
+            chrono::NaiveDate::from_ymd_opt(2025, 12, 31)
+                .unwrap()
+                .and_hms_opt(0, 0, 0)
+                .unwrap(),
+        )
+        .fake();
 
         let end_date = start_date + chrono::Duration::days((1..14).fake());
 
@@ -386,7 +334,6 @@ impl MockData {
             original_shift_id,
             requesting_user_id,
             target_user_id: None,
-            target_shift_id: None,
             notes: Some("Test swap request".to_string()),
             swap_type: ShiftSwapType::Open,
         }
@@ -412,7 +359,7 @@ impl TestAssertions {
     }
 
     /// Assert that response is an error with expected message
-    pub fn assert_error_response(body: &str, _expected_status: u16) {
+    pub fn assert_error_response(body: &str, expected_status: u16) {
         let response: serde_json::Value =
             serde_json::from_str(body).expect("Response should be valid JSON");
 
@@ -458,7 +405,6 @@ impl Config {
             environment: "test".to_string(),
             database_url: ":memory:".to_string(), // Will be overridden by TestDb
             jwt_secret: "test_jwt_secret_key_for_testing_only".to_string(),
-            jwt_expiration_days: 30,
             host: "127.0.0.1".to_string(),
             port: 0, // Let OS choose available port
         })

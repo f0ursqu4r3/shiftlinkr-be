@@ -1,9 +1,9 @@
 use actix_web::{web, HttpResponse, Result};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
-use crate::database::shift_swap_repository::ShiftSwapRepository;
-use crate::database::models::{ShiftSwapInput, ShiftSwapStatus};
 use crate::auth::Claims;
+use crate::database::models::{ShiftSwapInput, ShiftSwapStatus};
+use crate::database::shift_swap_repository::ShiftSwapRepository;
 use crate::handlers::admin::ApiResponse;
 
 #[derive(Debug, Deserialize)]
@@ -20,7 +20,7 @@ pub struct SwapResponseRequest {
     pub notes: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct ApprovalRequest {
     pub notes: Option<String>,
 }
@@ -33,9 +33,12 @@ pub async fn create_swap_request(
 ) -> Result<HttpResponse> {
     // Users can only create swap requests for themselves unless they're managers/admins
     let mut request_input = input.into_inner();
-    
-    if !claims.is_admin() && !claims.is_manager() && request_input.requesting_user_id != claims.sub {
-        return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error("Can only create swap requests for yourself")));
+
+    if !claims.is_admin() && !claims.is_manager() && request_input.requesting_user_id != claims.sub
+    {
+        return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
+            "Can only create swap requests for yourself",
+        )));
     }
 
     // If employee, force requesting_user_id to be their own ID
@@ -47,7 +50,8 @@ pub async fn create_swap_request(
         Ok(swap_request) => Ok(HttpResponse::Created().json(ApiResponse::success(swap_request))),
         Err(err) => {
             log::error!("Error creating swap request: {}", err);
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("Failed to create swap request")))
+            Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error("Failed to create swap request")))
         }
     }
 }
@@ -69,20 +73,28 @@ pub async fn get_swap_requests(
     let status_filter = if let Some(status_str) = &query.status {
         match status_str.parse::<ShiftSwapStatus>() {
             Ok(status) => Some(status),
-            Err(_) => return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("Invalid status")))
+            Err(_) => {
+                return Ok(
+                    HttpResponse::BadRequest().json(ApiResponse::<()>::error("Invalid status"))
+                )
+            }
         }
     } else {
         None
     };
 
-    match repo.get_swap_requests(requesting_user_id, status_filter, None).await {
+    match repo
+        .get_swap_requests(requesting_user_id, status_filter, None)
+        .await
+    {
         Ok(requests) => {
             // For employees, filter to only include swaps they're involved in
             let filtered_requests = if !claims.is_admin() && !claims.is_manager() {
-                requests.into_iter()
+                requests
+                    .into_iter()
                     .filter(|swap| {
-                        swap.requesting_user_id == claims.sub || 
-                        swap.target_user_id.as_ref() == Some(&claims.sub)
+                        swap.requesting_user_id == claims.sub
+                            || swap.target_user_id.as_ref() == Some(&claims.sub)
                     })
                     .collect()
             } else {
@@ -93,7 +105,8 @@ pub async fn get_swap_requests(
         }
         Err(err) => {
             log::error!("Error fetching swap requests: {}", err);
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("Failed to fetch swap requests")))
+            Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error("Failed to fetch swap requests")))
         }
     }
 }
@@ -110,19 +123,24 @@ pub async fn get_swap_request(
         Ok(Some(swap_request)) => {
             // Check if user has permission to view this swap
             if !claims.is_admin() && !claims.is_manager() {
-                let is_involved = swap_request.requesting_user_id == claims.sub || 
-                                swap_request.target_user_id.as_ref() == Some(&claims.sub);
+                let is_involved = swap_request.requesting_user_id == claims.sub
+                    || swap_request.target_user_id.as_ref() == Some(&claims.sub);
                 if !is_involved {
-                    return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error("Cannot view other users' swap requests")));
+                    return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
+                        "Cannot view other users' swap requests",
+                    )));
                 }
             }
 
             Ok(HttpResponse::Ok().json(ApiResponse::success(swap_request)))
         }
-        Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("Swap request not found"))),
+        Ok(None) => {
+            Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("Swap request not found")))
+        }
         Err(err) => {
             log::error!("Error fetching swap request: {}", err);
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("Failed to fetch swap request")))
+            Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error("Failed to fetch swap request")))
         }
     }
 }
@@ -141,26 +159,40 @@ pub async fn respond_to_swap(
         Ok(Some(swap_request)) => {
             // Only the target user can respond to a targeted swap
             if swap_request.target_user_id.as_ref() != Some(&claims.sub) {
-                return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error("Only the target user can respond to this swap")));
+                return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
+                    "Only the target user can respond to this swap",
+                )));
             }
 
             // Can only respond to pending swaps
             if swap_request.status != ShiftSwapStatus::Pending {
-                return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error("Can only respond to pending swaps")));
+                return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
+                    "Can only respond to pending swaps",
+                )));
             }
 
-            match repo.respond_to_swap(swap_id, &claims.sub, true, response.notes.clone()).await {
+            match repo
+                .respond_to_swap(swap_id, &claims.sub, true, response.notes.clone())
+                .await
+            {
                 Ok(updated_swap) => Ok(HttpResponse::Ok().json(ApiResponse::success(updated_swap))),
                 Err(err) => {
                     log::error!("Error responding to swap request: {}", err);
-                    Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("Failed to respond to swap request")))
+                    Ok(
+                        HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                            "Failed to respond to swap request",
+                        )),
+                    )
                 }
             }
         }
-        Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("Swap request not found"))),
+        Ok(None) => {
+            Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("Swap request not found")))
+        }
         Err(err) => {
             log::error!("Error fetching swap request for response: {}", err);
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("Failed to fetch swap request")))
+            Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error("Failed to fetch swap request")))
         }
     }
 }
@@ -174,16 +206,26 @@ pub async fn approve_swap_request(
 ) -> Result<HttpResponse> {
     // Only managers and admins can approve swap requests
     if !claims.is_admin() && !claims.is_manager() {
-        return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error("Insufficient permissions to approve swap requests")));
+        return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
+            "Insufficient permissions to approve swap requests",
+        )));
     }
 
     let swap_id = path.into_inner();
 
-    match repo.approve_swap(swap_id, &claims.sub, approval.notes.clone().unwrap_or_default()).await {
+    match repo
+        .approve_swap(
+            swap_id,
+            &claims.sub,
+            approval.notes.clone().unwrap_or_default(),
+        )
+        .await
+    {
         Ok(approved_swap) => Ok(HttpResponse::Ok().json(ApiResponse::success(approved_swap))),
         Err(err) => {
             log::error!("Error approving swap request: {}", err);
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("Failed to approve swap request")))
+            Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error("Failed to approve swap request")))
         }
     }
 }
@@ -197,16 +239,26 @@ pub async fn deny_swap_request(
 ) -> Result<HttpResponse> {
     // Only managers and admins can deny swap requests
     if !claims.is_admin() && !claims.is_manager() {
-        return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error("Insufficient permissions to deny swap requests")));
+        return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
+            "Insufficient permissions to deny swap requests",
+        )));
     }
 
     let swap_id = path.into_inner();
 
-    match repo.deny_swap(swap_id, &claims.sub, denial.notes.clone().unwrap_or_default()).await {
+    match repo
+        .deny_swap(
+            swap_id,
+            &claims.sub,
+            denial.notes.clone().unwrap_or_default(),
+        )
+        .await
+    {
         Ok(denied_swap) => Ok(HttpResponse::Ok().json(ApiResponse::success(denied_swap))),
         Err(err) => {
             log::error!("Error denying swap request: {}", err);
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error("Failed to deny swap request")))
+            Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error("Failed to deny swap request")))
         }
     }
 }

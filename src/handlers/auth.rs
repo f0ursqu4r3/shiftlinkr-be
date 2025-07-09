@@ -1,12 +1,12 @@
-use actix_web::{HttpRequest, HttpResponse, Result, web};
+use actix_web::{web, HttpRequest, HttpResponse, Result};
 use serde_json::json;
 
-use crate::AppState;
 use crate::database::invite_repository::InviteRepository;
 use crate::database::models::{
     AcceptInviteRequest, CreateInviteRequest, CreateUserRequest, ForgotPasswordRequest,
     LoginRequest, ResetPasswordRequest,
 };
+use crate::AppState;
 
 pub async fn register(
     data: web::Data<AppState>,

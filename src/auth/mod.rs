@@ -1,13 +1,13 @@
 use actix_web::{
-    Error as ActixError, FromRequest, HttpRequest, dev::Payload, error::ErrorUnauthorized,
-    web::Data,
+    dev::Payload, error::ErrorUnauthorized, web::Data, Error as ActixError, FromRequest,
+    HttpRequest,
 };
-use anyhow::{Result, anyhow};
-use bcrypt::{DEFAULT_COST, hash, verify};
+use anyhow::{anyhow, Result};
+use bcrypt::{hash, verify, DEFAULT_COST};
 use chrono::{Duration, Utc};
-use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
-use std::future::{Ready, ready};
+use std::future::{ready, Ready};
 
 use crate::config::Config;
 use crate::database::models::{AuthResponse, CreateUserRequest, LoginRequest, User};

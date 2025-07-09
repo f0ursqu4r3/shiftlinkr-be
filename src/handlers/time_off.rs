@@ -1,6 +1,6 @@
 use actix_web::{web, HttpResponse, Result};
 use chrono::NaiveDateTime;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::auth::Claims;
 use crate::database::models::{TimeOffRequestInput, TimeOffStatus};
@@ -15,7 +15,7 @@ pub struct TimeOffQuery {
     pub end_date: Option<NaiveDateTime>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct ApprovalRequest {
     pub notes: Option<String>,
 }
