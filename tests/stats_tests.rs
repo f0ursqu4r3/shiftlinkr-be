@@ -6,10 +6,8 @@ use serial_test::serial;
 
 mod common;
 
-#[actix_web::test]
-#[serial]
-async fn test_get_dashboard_stats_unauthorized() {
-    // Arrange
+// Helper function to create test app state and dependencies
+async fn setup_test_app() -> (web::Data<AppState>, web::Data<be::Config>) {
     common::setup_test_env();
     let ctx = common::TestContext::new().await.unwrap();
 
@@ -18,104 +16,40 @@ async fn test_get_dashboard_stats_unauthorized() {
     });
     let config_data = web::Data::new(ctx.config);
 
-    let app = test::init_service(
-        App::new()
-            .app_data(app_state)
-            .app_data(config_data)
-            .service(
-                web::scope("/api/v1").service(
-                    web::scope("/stats")
-                        .route("/dashboard", web::get().to(stats::get_dashboard_stats))
-                        .route("/shifts", web::get().to(stats::get_shift_stats))
-                        .route("/time-off", web::get().to(stats::get_time_off_stats)),
-                ),
-            ),
-    )
-    .await;
-
-    // Act
-    let req = test::TestRequest::get()
-        .uri("/api/v1/stats/dashboard")
-        .to_request();
-
-    let resp = test::call_service(&app, req).await;
-
-    // Assert
-    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    (app_state, config_data)
 }
 
-#[actix_web::test]
-#[serial]
-async fn test_get_shift_stats_unauthorized() {
-    // Arrange
-    common::setup_test_env();
-    let ctx = common::TestContext::new().await.unwrap();
+// Macro to generate unauthorized access tests
+macro_rules! test_unauthorized {
+    ($test_name:ident, $method:ident, $uri:expr) => {
+        #[actix_web::test]
+        #[serial]
+        async fn $test_name() {
+            let (app_state, config_data) = setup_test_app().await;
+            
+            let app = test::init_service(
+                App::new()
+                    .app_data(app_state)
+                    .app_data(config_data)
+                    .service(
+                        web::scope("/api/v1").service(
+                            web::scope("/stats")
+                                .route("/dashboard", web::get().to(stats::get_dashboard_stats))
+                                .route("/shifts", web::get().to(stats::get_shift_stats))
+                                .route("/time-off", web::get().to(stats::get_time_off_stats)),
+                        ),
+                    ),
+            )
+            .await;
 
-    let app_state = web::Data::new(AppState {
-        auth_service: ctx.auth_service,
-    });
-    let config_data = web::Data::new(ctx.config);
-
-    let app = test::init_service(
-        App::new()
-            .app_data(app_state)
-            .app_data(config_data)
-            .service(
-                web::scope("/api/v1").service(
-                    web::scope("/stats")
-                        .route("/dashboard", web::get().to(stats::get_dashboard_stats))
-                        .route("/shifts", web::get().to(stats::get_shift_stats))
-                        .route("/time-off", web::get().to(stats::get_time_off_stats)),
-                ),
-            ),
-    )
-    .await;
-
-    // Act
-    let req = test::TestRequest::get()
-        .uri("/api/v1/stats/shifts")
-        .to_request();
-
-    let resp = test::call_service(&app, req).await;
-
-    // Assert
-    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+            let req = test::TestRequest::$method().uri($uri).to_request();
+            let resp = test::call_service(&app, req).await;
+            assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        }
+    };
 }
 
-#[actix_web::test]
-#[serial]
-async fn test_get_time_off_stats_unauthorized() {
-    // Arrange
-    common::setup_test_env();
-    let ctx = common::TestContext::new().await.unwrap();
-
-    let app_state = web::Data::new(AppState {
-        auth_service: ctx.auth_service,
-    });
-    let config_data = web::Data::new(ctx.config);
-
-    let app = test::init_service(
-        App::new()
-            .app_data(app_state)
-            .app_data(config_data)
-            .service(
-                web::scope("/api/v1").service(
-                    web::scope("/stats")
-                        .route("/dashboard", web::get().to(stats::get_dashboard_stats))
-                        .route("/shifts", web::get().to(stats::get_shift_stats))
-                        .route("/time-off", web::get().to(stats::get_time_off_stats)),
-                ),
-            ),
-    )
-    .await;
-
-    // Act
-    let req = test::TestRequest::get()
-        .uri("/api/v1/stats/time-off")
-        .to_request();
-
-    let resp = test::call_service(&app, req).await;
-
-    // Assert
-    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
-}
+// Stats endpoint tests
+test_unauthorized!(test_get_dashboard_stats_unauthorized, get, "/api/v1/stats/dashboard");
+test_unauthorized!(test_get_shift_stats_unauthorized, get, "/api/v1/stats/shifts");
+test_unauthorized!(test_get_time_off_stats_unauthorized, get, "/api/v1/stats/time-off");
