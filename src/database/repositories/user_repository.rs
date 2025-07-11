@@ -36,7 +36,7 @@ impl UserRepository {
     pub async fn find_by_email(&self, email: &str) -> Result<Option<User>> {
         let user = sqlx::query_as::<_, User>(
             r#"
-            SELECT id, email, password_hash, name, role, pto_balance_hours, sick_balance_hours, personal_balance_hours, pto_accrual_rate, hire_date, last_accrual_date, created_at, updated_at
+            SELECT id, email, password_hash, name, hire_date, created_at, updated_at
             FROM users
             WHERE email = ?
             "#,
@@ -51,7 +51,7 @@ impl UserRepository {
     pub async fn find_by_id(&self, id: &str) -> Result<Option<User>> {
         let user = sqlx::query_as::<_, User>(
             r#"
-            SELECT id, email, password_hash, name, role, pto_balance_hours, sick_balance_hours, personal_balance_hours, pto_accrual_rate, hire_date, last_accrual_date, created_at, updated_at
+            SELECT id, email, password_hash, name, hire_date, created_at, updated_at
             FROM users
             WHERE id = ?
             "#,
@@ -66,7 +66,7 @@ impl UserRepository {
     pub async fn get_all_users(&self) -> Result<Vec<User>> {
         let users = sqlx::query_as::<_, User>(
             r#"
-            SELECT id, email, password_hash, name, role, pto_balance_hours, sick_balance_hours, personal_balance_hours, pto_accrual_rate, hire_date, last_accrual_date, created_at, updated_at
+            SELECT id, email, password_hash, name, hire_date, created_at, updated_at
             FROM users
             ORDER BY created_at DESC
             "#,

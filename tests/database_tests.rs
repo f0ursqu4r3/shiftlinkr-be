@@ -1,4 +1,4 @@
-use be::database::models::{User, UserRole};
+use be::database::models::User;
 use be::database::repositories::user_repository::UserRepository;
 use chrono::Utc;
 
@@ -14,7 +14,6 @@ async fn test_create_user() {
         "test@example.com".to_string(),
         "hashed_password".to_string(),
         "Test User".to_string(),
-        UserRole::Employee,
     );
 
     let result = repo.create_user(&user).await;
@@ -31,7 +30,6 @@ async fn test_find_user_by_email() {
         "findme@example.com".to_string(),
         "hashed_password".to_string(),
         "Find Me".to_string(),
-        UserRole::Manager,
     );
 
     repo.create_user(&user).await.unwrap();
@@ -42,7 +40,6 @@ async fn test_find_user_by_email() {
     let found_user = found_user.unwrap();
     assert_eq!(found_user.email, "findme@example.com");
     assert_eq!(found_user.name, "Find Me");
-    assert!(matches!(found_user.role, UserRole::Manager));
 }
 
 #[tokio::test]
@@ -55,7 +52,6 @@ async fn test_find_user_by_id() {
         "findbyid@example.com".to_string(),
         "hashed_password".to_string(),
         "Find By ID".to_string(),
-        UserRole::Admin,
     );
 
     repo.create_user(&user).await.unwrap();
@@ -66,7 +62,6 @@ async fn test_find_user_by_id() {
     let found_user = found_user.unwrap();
     assert_eq!(found_user.id, user.id);
     assert_eq!(found_user.email, "findbyid@example.com");
-    assert!(matches!(found_user.role, UserRole::Admin));
 }
 
 #[tokio::test]
@@ -84,7 +79,6 @@ async fn test_email_exists() {
         "exists@example.com".to_string(),
         "hashed_password".to_string(),
         "Exists User".to_string(),
-        UserRole::Employee,
     );
 
     repo.create_user(&user).await.unwrap();
@@ -95,31 +89,28 @@ async fn test_email_exists() {
 }
 
 #[tokio::test]
-async fn test_user_roles() {
+async fn test_multiple_users() {
     common::setup_test_env();
     let ctx = common::TestContext::new().await.unwrap();
     let repo = UserRepository::new(ctx.pool.clone());
 
-    // Test all roles
+    // Test multiple users
     let admin_user = User::new(
         "admin@example.com".to_string(),
         "password".to_string(),
         "Admin User".to_string(),
-        UserRole::Admin,
     );
 
     let manager_user = User::new(
         "manager@example.com".to_string(),
         "password".to_string(),
         "Manager User".to_string(),
-        UserRole::Manager,
     );
 
     let employee_user = User::new(
         "employee@example.com".to_string(),
         "password".to_string(),
         "Employee User".to_string(),
-        UserRole::Employee,
     );
 
     // Create all users
@@ -127,7 +118,7 @@ async fn test_user_roles() {
     repo.create_user(&manager_user).await.unwrap();
     repo.create_user(&employee_user).await.unwrap();
 
-    // Verify roles
+    // Verify users can be found
     let found_admin = repo
         .find_by_email("admin@example.com")
         .await
@@ -144,32 +135,31 @@ async fn test_user_roles() {
         .unwrap()
         .unwrap();
 
-    assert!(matches!(found_admin.role, UserRole::Admin));
-    assert!(matches!(found_manager.role, UserRole::Manager));
-    assert!(matches!(found_employee.role, UserRole::Employee));
+    assert_eq!(found_admin.name, "Admin User");
+    assert_eq!(found_manager.name, "Manager User");
+    assert_eq!(found_employee.name, "Employee User");
 }
 
 #[tokio::test]
-async fn test_user_creation_with_default_role() {
+async fn test_user_creation_basic() {
     common::setup_test_env();
     let ctx = common::TestContext::new().await.unwrap();
     let repo = UserRepository::new(ctx.pool.clone());
 
     let user = User::new(
-        "default@example.com".to_string(),
+        "basic@example.com".to_string(),
         "password".to_string(),
-        "Default User".to_string(),
-        UserRole::Employee, // Default role
+        "Basic User".to_string(),
     );
 
     repo.create_user(&user).await.unwrap();
 
     let found_user = repo
-        .find_by_email("default@example.com")
+        .find_by_email("basic@example.com")
         .await
         .unwrap()
         .unwrap();
-    assert!(matches!(found_user.role, UserRole::Employee));
+    assert_eq!(found_user.name, "Basic User");
 }
 
 #[tokio::test]
@@ -182,14 +172,12 @@ async fn test_duplicate_email_constraint() {
         "duplicate@example.com".to_string(),
         "password1".to_string(),
         "User One".to_string(),
-        UserRole::Employee,
     );
 
     let user2 = User::new(
         "duplicate@example.com".to_string(),
         "password2".to_string(),
         "User Two".to_string(),
-        UserRole::Manager,
     );
 
     // First user should succeed
@@ -206,13 +194,11 @@ fn test_user_model_creation() {
         "model@example.com".to_string(),
         "hashed_password".to_string(),
         "Model User".to_string(),
-        UserRole::Admin,
     );
 
     assert_eq!(user.email, "model@example.com");
     assert_eq!(user.name, "Model User");
     assert_eq!(user.password_hash, "hashed_password");
-    assert!(matches!(user.role, UserRole::Admin));
     assert!(!user.id.is_empty());
 
     // Check that timestamps are reasonable (within last minute)
@@ -220,17 +206,4 @@ fn test_user_model_creation() {
     assert!(user.created_at <= now);
     assert!(user.updated_at <= now);
     assert!(user.created_at > now - chrono::Duration::minutes(1));
-}
-
-#[test]
-fn test_user_role_display() {
-    assert_eq!(UserRole::Admin.to_string(), "admin");
-    assert_eq!(UserRole::Manager.to_string(), "manager");
-    assert_eq!(UserRole::Employee.to_string(), "employee");
-}
-
-#[test]
-fn test_user_role_default() {
-    let default_role = UserRole::default();
-    assert!(matches!(default_role, UserRole::Employee));
 }

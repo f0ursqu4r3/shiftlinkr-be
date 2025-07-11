@@ -1,7 +1,5 @@
+use be::database::models::{LocationInput, ShiftClaimInput, ShiftClaimStatus, ShiftInput, User};
 use be::database::repositories::location_repository::LocationRepository;
-use be::database::models::{
-    LocationInput, ShiftClaimInput, ShiftClaimStatus, ShiftInput, User, UserRole,
-};
 use be::database::repositories::shift_claim_repository::ShiftClaimRepository;
 use be::database::repositories::shift_repository::ShiftRepository;
 use be::database::repositories::user_repository::UserRepository;
@@ -20,21 +18,11 @@ async fn test_shift_claim_repository(pool: SqlitePool) -> Result<(), sqlx::Error
     let location_repo = LocationRepository::new(pool.clone());
     let shift_repo = ShiftRepository::new(pool.clone());
     let shift_claim_repo = ShiftClaimRepository::new(pool.clone()); // Create test user
-    let user = User {
-        id: "test_user_123".to_string(),
-        email: "test@example.com".to_string(),
-        password_hash: "hash123".to_string(),
-        name: "Test User".to_string(),
-        role: UserRole::Employee,
-        pto_balance_hours: 0,
-        sick_balance_hours: 0,
-        personal_balance_hours: 0,
-        pto_accrual_rate: 0.0,
-        hire_date: None,
-        last_accrual_date: None,
-        created_at: Utc::now().naive_utc(),
-        updated_at: Utc::now().naive_utc(),
-    };
+    let user = User::new(
+        "test@example.com".to_string(),
+        "hash123".to_string(),
+        "Test User".to_string(),
+    );
 
     // Debug: Check if user creation succeeds
     match user_repo.create_user(&user).await {
@@ -49,21 +37,11 @@ async fn test_shift_claim_repository(pool: SqlitePool) -> Result<(), sqlx::Error
     }
 
     // Create manager user for approval
-    let manager = User {
-        id: "manager_123".to_string(),
-        email: "manager@example.com".to_string(),
-        password_hash: "hash456".to_string(),
-        name: "Manager User".to_string(),
-        role: UserRole::Manager,
-        pto_balance_hours: 0,
-        sick_balance_hours: 0,
-        personal_balance_hours: 0,
-        pto_accrual_rate: 0.0,
-        hire_date: None,
-        last_accrual_date: None,
-        created_at: Utc::now().naive_utc(),
-        updated_at: Utc::now().naive_utc(),
-    };
+    let manager = User::new(
+        "manager@example.com".to_string(),
+        "hash456".to_string(),
+        "Manager User".to_string(),
+    );
 
     // Debug: Check if manager creation succeeds
     match user_repo.create_user(&manager).await {
@@ -278,39 +256,19 @@ async fn test_shift_claim_cancel_and_reject(pool: SqlitePool) -> Result<(), sqlx
     let shift_claim_repo = ShiftClaimRepository::new(pool.clone());
 
     // Create test user
-    let user = User {
-        id: "test_user_456".to_string(),
-        email: "test2@example.com".to_string(),
-        password_hash: "hash456".to_string(),
-        name: "Test User2".to_string(),
-        role: UserRole::Employee,
-        pto_balance_hours: 0,
-        sick_balance_hours: 0,
-        personal_balance_hours: 0,
-        pto_accrual_rate: 0.0,
-        hire_date: None,
-        last_accrual_date: None,
-        created_at: Utc::now().naive_utc(),
-        updated_at: Utc::now().naive_utc(),
-    };
+    let user = User::new(
+        "test2@example.com".to_string(),
+        "hash456".to_string(),
+        "Test User2".to_string(),
+    );
     user_repo.create_user(&user).await.unwrap();
 
     // Create manager user for approval
-    let manager = User {
-        id: "manager_456".to_string(),
-        email: "manager2@example.com".to_string(),
-        password_hash: "hash789".to_string(),
-        name: "Manager User2".to_string(),
-        role: UserRole::Manager,
-        pto_balance_hours: 0,
-        sick_balance_hours: 0,
-        personal_balance_hours: 0,
-        pto_accrual_rate: 0.0,
-        hire_date: None,
-        last_accrual_date: None,
-        created_at: Utc::now().naive_utc(),
-        updated_at: Utc::now().naive_utc(),
-    };
+    let manager = User::new(
+        "manager2@example.com".to_string(),
+        "hash789".to_string(),
+        "Manager User2".to_string(),
+    );
     user_repo.create_user(&manager).await.unwrap();
 
     // Create test location

@@ -1,4 +1,4 @@
-use be::database::models::{CreateUserRequest, UserRole};
+use be::database::models::CreateUserRequest;
 use chrono::Utc;
 
 mod common;
@@ -13,7 +13,6 @@ async fn test_forgot_password_valid_email() {
         email: "forgot@example.com".to_string(),
         password: "password123".to_string(),
         name: "Forgot User".to_string(),
-        role: Some(UserRole::Employee),
     };
 
     let registration = ctx.auth_service.register(register_request).await;
@@ -52,7 +51,6 @@ async fn test_reset_password_valid_token() {
         email: "reset@example.com".to_string(),
         password: "oldpassword123".to_string(),
         name: "Reset User".to_string(),
-        role: Some(UserRole::Employee),
     };
 
     let registration = ctx.auth_service.register(register_request).await;
@@ -120,7 +118,6 @@ async fn test_reset_password_used_token() {
         email: "used@example.com".to_string(),
         password: "password123".to_string(),
         name: "Used Token User".to_string(),
-        role: Some(UserRole::Employee),
     };
 
     let registration = ctx.auth_service.register(register_request).await;
@@ -162,7 +159,6 @@ async fn test_multiple_reset_tokens_invalidated() {
         email: "multiple@example.com".to_string(),
         password: "password123".to_string(),
         name: "Multiple Tokens User".to_string(),
-        role: Some(UserRole::Employee),
     };
 
     let registration = ctx.auth_service.register(register_request).await;
@@ -205,7 +201,6 @@ async fn test_password_reset_repository_create_token() {
         "repo-test@example.com".to_string(),
         "hashed_password".to_string(),
         "Repo Test User".to_string(),
-        UserRole::Employee,
     );
 
     let user_repo =
@@ -238,7 +233,6 @@ async fn test_password_reset_repository_find_valid_token() {
         "find-test@example.com".to_string(),
         "hashed_password".to_string(),
         "Find Test User".to_string(),
-        UserRole::Employee,
     );
 
     let user_repo =
@@ -277,7 +271,6 @@ async fn test_password_reset_repository_mark_token_used() {
         "mark-used@example.com".to_string(),
         "hashed_password".to_string(),
         "Mark Used User".to_string(),
-        UserRole::Employee,
     );
 
     let user_repo =
@@ -314,7 +307,6 @@ async fn test_password_reset_repository_cleanup_expired() {
         "cleanup@example.com".to_string(),
         "hashed_password".to_string(),
         "Cleanup User".to_string(),
-        UserRole::Employee,
     );
 
     let user_repo =
@@ -344,7 +336,6 @@ async fn test_password_reset_repository_invalidate_user_tokens() {
         "invalidate@example.com".to_string(),
         "hashed_password".to_string(),
         "Invalidate User".to_string(),
-        UserRole::Employee,
     );
 
     let user_repo =
@@ -399,7 +390,6 @@ async fn test_user_repository_update_password() {
         "update-pwd@example.com".to_string(),
         "old_hashed_password".to_string(),
         "Update Password User".to_string(),
-        UserRole::Employee,
     );
 
     let user_repo =

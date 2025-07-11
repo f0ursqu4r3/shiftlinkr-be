@@ -1,4 +1,4 @@
-use be::database::models::{CreateUserRequest, LoginRequest, UserRole};
+use be::database::models::{CreateUserRequest, LoginRequest};
 use chrono::Utc;
 
 mod common;
@@ -12,7 +12,6 @@ async fn test_user_registration() {
         email: "register@example.com".to_string(),
         password: "password123".to_string(),
         name: "Register User".to_string(),
-        role: Some(UserRole::Employee),
     };
 
     let result = ctx.auth_service.register(request).await;
@@ -22,7 +21,6 @@ async fn test_user_registration() {
     assert!(!response.token.is_empty());
     assert_eq!(response.user.email, "register@example.com");
     assert_eq!(response.user.name, "Register User");
-    assert!(matches!(response.user.role, UserRole::Employee));
 }
 
 #[tokio::test]
@@ -34,7 +32,6 @@ async fn test_duplicate_email_registration() {
         email: "duplicate@example.com".to_string(),
         password: "password123".to_string(),
         name: "First User".to_string(),
-        role: Some(UserRole::Employee),
     };
 
     // First registration should succeed
@@ -46,7 +43,6 @@ async fn test_duplicate_email_registration() {
         email: "duplicate@example.com".to_string(),
         password: "different_password".to_string(),
         name: "Second User".to_string(),
-        role: Some(UserRole::Manager),
     };
 
     let result2 = ctx.auth_service.register(request2).await;
@@ -67,7 +63,6 @@ async fn test_user_login() {
         email: "login@example.com".to_string(),
         password: "password123".to_string(),
         name: "Login User".to_string(),
-        role: Some(UserRole::Manager),
     };
 
     ctx.auth_service.register(register_request).await.unwrap();
@@ -85,7 +80,6 @@ async fn test_user_login() {
     assert!(!response.token.is_empty());
     assert_eq!(response.user.email, "login@example.com");
     assert_eq!(response.user.name, "Login User");
-    assert!(matches!(response.user.role, UserRole::Manager));
 }
 
 #[tokio::test]
@@ -98,7 +92,6 @@ async fn test_login_with_wrong_password() {
         email: "wrongpass@example.com".to_string(),
         password: "correct_password".to_string(),
         name: "Wrong Pass User".to_string(),
-        role: Some(UserRole::Employee),
     };
 
     ctx.auth_service.register(register_request).await.unwrap();
@@ -145,7 +138,6 @@ async fn test_jwt_token_verification() {
         email: "jwt@example.com".to_string(),
         password: "password123".to_string(),
         name: "JWT User".to_string(),
-        role: Some(UserRole::Admin),
     };
 
     let auth_response = ctx.auth_service.register(register_request).await.unwrap();
@@ -185,7 +177,6 @@ async fn test_get_user_from_token() {
         email: "tokenuser@example.com".to_string(),
         password: "password123".to_string(),
         name: "Token User".to_string(),
-        role: Some(UserRole::Manager),
     };
 
     let auth_response = ctx.auth_service.register(register_request).await.unwrap();
@@ -198,7 +189,6 @@ async fn test_get_user_from_token() {
     let user = user_result.unwrap();
     assert_eq!(user.email, "tokenuser@example.com");
     assert_eq!(user.name, "Token User");
-    assert!(matches!(user.role, UserRole::Manager));
 }
 
 #[tokio::test]
@@ -212,56 +202,6 @@ async fn test_get_user_from_invalid_token() {
 }
 
 #[tokio::test]
-async fn test_registration_with_different_roles() {
-    common::setup_test_env();
-    let ctx = common::TestContext::new().await.unwrap();
-
-    // Test Admin role
-    let admin_request = CreateUserRequest {
-        email: "admin@example.com".to_string(),
-        password: "password123".to_string(),
-        name: "Admin User".to_string(),
-        role: Some(UserRole::Admin),
-    };
-
-    let admin_response = ctx.auth_service.register(admin_request).await.unwrap();
-    assert!(matches!(admin_response.user.role, UserRole::Admin));
-
-    // Test Manager role
-    let manager_request = CreateUserRequest {
-        email: "manager@example.com".to_string(),
-        password: "password123".to_string(),
-        name: "Manager User".to_string(),
-        role: Some(UserRole::Manager),
-    };
-
-    let manager_response = ctx.auth_service.register(manager_request).await.unwrap();
-    assert!(matches!(manager_response.user.role, UserRole::Manager));
-
-    // Test Employee role (explicit)
-    let employee_request = CreateUserRequest {
-        email: "employee@example.com".to_string(),
-        password: "password123".to_string(),
-        name: "Employee User".to_string(),
-        role: Some(UserRole::Employee),
-    };
-
-    let employee_response = ctx.auth_service.register(employee_request).await.unwrap();
-    assert!(matches!(employee_response.user.role, UserRole::Employee));
-
-    // Test default role (None)
-    let default_request = CreateUserRequest {
-        email: "default@example.com".to_string(),
-        password: "password123".to_string(),
-        name: "Default User".to_string(),
-        role: None,
-    };
-
-    let default_response = ctx.auth_service.register(default_request).await.unwrap();
-    assert!(matches!(default_response.user.role, UserRole::Employee));
-}
-
-#[tokio::test]
 async fn test_jwt_token_expiration_configuration() {
     common::setup_test_env();
     let ctx = common::TestContext::new().await.unwrap();
@@ -271,7 +211,6 @@ async fn test_jwt_token_expiration_configuration() {
         email: "expiry@example.com".to_string(),
         password: "password123".to_string(),
         name: "Expiry User".to_string(),
-        role: Some(UserRole::Employee),
     };
 
     let auth_response = ctx.auth_service.register(register_request).await.unwrap();

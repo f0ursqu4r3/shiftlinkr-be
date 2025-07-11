@@ -1,6 +1,7 @@
 use anyhow::Result;
 use chrono::{Datelike, Utc};
 use sqlx::SqlitePool;
+use std::str::FromStr;
 
 use crate::database::models::{
     PtoBalance, PtoBalanceAdjustment, PtoBalanceHistory, PtoBalanceType, PtoBalanceUpdate,
@@ -17,121 +18,172 @@ impl PtoBalanceRepository {
         Self { pool }
     }
 
-    /// Get PTO balance for a user
-    pub async fn get_balance(&self, user_id: &str) -> Result<Option<PtoBalance>> {
+    /// Get PTO balance for a user in a specific company
+    pub async fn get_balance_for_company(
+        &self,
+        user_id: &str,
+        company_id: i64,
+    ) -> Result<Option<PtoBalance>> {
         let row = sqlx::query!(
             r#"
             SELECT 
-                id as user_id,
+                user_id,
                 pto_balance_hours,
                 sick_balance_hours,
                 personal_balance_hours,
                 pto_accrual_rate,
                 hire_date,
                 last_accrual_date
-            FROM users 
-            WHERE id = ?
+            FROM user_company 
+            WHERE user_id = ? AND company_id = ?
             "#,
-            user_id
+            user_id,
+            company_id
         )
         .fetch_optional(&self.pool)
         .await?;
 
         if let Some(row) = row {
             Ok(Some(PtoBalance {
-                user_id: row.user_id.unwrap_or_default(),
-                pto_balance_hours: row.pto_balance_hours.unwrap_or(0) as i32,
-                sick_balance_hours: row.sick_balance_hours.unwrap_or(0) as i32,
-                personal_balance_hours: row.personal_balance_hours.unwrap_or(0) as i32,
-                pto_accrual_rate: row.pto_accrual_rate.unwrap_or(0.0) as f32,
-                hire_date: row.hire_date.map(|d| d.and_hms_opt(0, 0, 0).unwrap()),
-                last_accrual_date: row
-                    .last_accrual_date
-                    .map(|d| d.and_hms_opt(0, 0, 0).unwrap()),
+                user_id: row.user_id,
+                pto_balance_hours: row.pto_balance_hours as i32,
+                sick_balance_hours: row.sick_balance_hours as i32,
+                personal_balance_hours: row.personal_balance_hours as i32,
+                pto_accrual_rate: row.pto_accrual_rate as f32,
+                hire_date: row.hire_date,
+                last_accrual_date: row.last_accrual_date,
             }))
         } else {
             Ok(None)
         }
     }
 
-    /// Update PTO balance for a user
-    pub async fn update_balance(
+    /// Get PTO balance for a user (legacy method - gets from first company)
+    /// TODO: This should be deprecated in favor of get_balance_for_company
+    pub async fn get_balance(&self, user_id: &str) -> Result<Option<PtoBalance>> {
+        // Get the first company this user belongs to
+        let company_id = sqlx::query_scalar!(
+            "SELECT company_id FROM company_employees WHERE user_id = ? LIMIT 1",
+            user_id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(company_id) = company_id {
+            self.get_balance_for_company(user_id, company_id).await
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Update PTO balance for a user in a specific company
+    pub async fn update_balance_for_company(
         &self,
         user_id: &str,
+        company_id: i64,
         update: PtoBalanceUpdate,
     ) -> Result<PtoBalance> {
         let now = Utc::now().naive_utc();
 
         // Get current balance first
-        let current = self.get_balance(user_id).await?;
+        let current = self.get_balance_for_company(user_id, company_id).await?;
         if current.is_none() {
-            return Err(anyhow::anyhow!("User not found"));
+            return Err(anyhow::anyhow!("User not found in company"));
         }
 
         // Execute updates for each field that's provided
         if let Some(hours) = update.pto_balance_hours {
-            sqlx::query("UPDATE users SET pto_balance_hours = ?, updated_at = ? WHERE id = ?")
+            sqlx::query("UPDATE user_company SET pto_balance_hours = ?, updated_at = ? WHERE user_id = ? AND company_id = ?")
                 .bind(hours)
                 .bind(now)
                 .bind(user_id)
+                .bind(company_id)
                 .execute(&self.pool)
                 .await?;
         }
 
         if let Some(hours) = update.sick_balance_hours {
-            sqlx::query("UPDATE users SET sick_balance_hours = ?, updated_at = ? WHERE id = ?")
+            sqlx::query("UPDATE user_company SET sick_balance_hours = ?, updated_at = ? WHERE user_id = ? AND company_id = ?")
                 .bind(hours)
                 .bind(now)
                 .bind(user_id)
+                .bind(company_id)
                 .execute(&self.pool)
                 .await?;
         }
 
         if let Some(hours) = update.personal_balance_hours {
-            sqlx::query("UPDATE users SET personal_balance_hours = ?, updated_at = ? WHERE id = ?")
+            sqlx::query("UPDATE user_company SET personal_balance_hours = ?, updated_at = ? WHERE user_id = ? AND company_id = ?")
                 .bind(hours)
                 .bind(now)
                 .bind(user_id)
+                .bind(company_id)
                 .execute(&self.pool)
                 .await?;
         }
 
         if let Some(rate) = update.pto_accrual_rate {
-            sqlx::query("UPDATE users SET pto_accrual_rate = ?, updated_at = ? WHERE id = ?")
+            sqlx::query("UPDATE user_company SET pto_accrual_rate = ?, updated_at = ? WHERE user_id = ? AND company_id = ?")
                 .bind(rate)
                 .bind(now)
                 .bind(user_id)
+                .bind(company_id)
                 .execute(&self.pool)
                 .await?;
         }
 
         if let Some(hire_date) = update.hire_date {
-            sqlx::query("UPDATE users SET hire_date = ?, updated_at = ? WHERE id = ?")
+            sqlx::query("UPDATE user_company SET hire_date = ?, updated_at = ? WHERE user_id = ? AND company_id = ?")
                 .bind(hire_date.date())
                 .bind(now)
                 .bind(user_id)
+                .bind(company_id)
                 .execute(&self.pool)
                 .await?;
         }
 
         // Return updated balance
-        self.get_balance(user_id)
+        self.get_balance_for_company(user_id, company_id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Failed to retrieve updated balance"))
     }
 
-    /// Adjust PTO balance and create history record
-    pub async fn adjust_balance(
+    /// Update PTO balance for a user (legacy method - updates for first company)
+    /// TODO: This should be deprecated in favor of update_balance_for_company
+    pub async fn update_balance(
         &self,
         user_id: &str,
+        update: PtoBalanceUpdate,
+    ) -> Result<PtoBalance> {
+        // Get the first company this user belongs to
+        let company_id = sqlx::query_scalar!(
+            "SELECT company_id FROM company_employees WHERE user_id = ? LIMIT 1",
+            user_id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(company_id) = company_id {
+            self.update_balance_for_company(user_id, company_id, update)
+                .await
+        } else {
+            Err(anyhow::anyhow!("User is not associated with any company"))
+        }
+    }
+
+    /// Adjust PTO balance and create history record for a specific company
+    pub async fn adjust_balance_for_company(
+        &self,
+        user_id: &str,
+        company_id: i64,
         adjustment: PtoBalanceAdjustment,
     ) -> Result<PtoBalanceHistory> {
         let now = Utc::now().naive_utc();
 
         // Get current balance
-        let current_balance = self.get_balance(user_id).await?;
+        let current_balance = self.get_balance_for_company(user_id, company_id).await?;
         if current_balance.is_none() {
-            return Err(anyhow::anyhow!("User not found"));
+            return Err(anyhow::anyhow!("User not found in company"));
         }
         let current_balance = current_balance.unwrap();
 
@@ -159,15 +211,16 @@ impl PtoBalanceRepository {
             return Err(anyhow::anyhow!("Insufficient balance"));
         }
 
-        // Update balance in users table
+        // Update balance in user_company table
         let query = format!(
-            "UPDATE users SET {} = ?, updated_at = ? WHERE id = ?",
+            "UPDATE user_company SET {} = ?, updated_at = ? WHERE user_id = ? AND company_id = ?",
             field_name
         );
         sqlx::query(&query)
             .bind(new_balance)
             .bind(now)
             .bind(user_id)
+            .bind(company_id)
             .execute(&self.pool)
             .await?;
 
@@ -214,6 +267,29 @@ impl PtoBalanceRepository {
             related_time_off_id: history_row.related_time_off_id,
             created_at: history_row.created_at.unwrap_or(now),
         })
+    }
+
+    /// Adjust PTO balance and create history record (legacy method - adjusts for first company)
+    /// TODO: This should be deprecated in favor of adjust_balance_for_company
+    pub async fn adjust_balance(
+        &self,
+        user_id: &str,
+        adjustment: PtoBalanceAdjustment,
+    ) -> Result<PtoBalanceHistory> {
+        // Get the first company this user belongs to
+        let company_id = sqlx::query_scalar!(
+            "SELECT company_id FROM company_employees WHERE user_id = ? LIMIT 1",
+            user_id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(company_id) = company_id {
+            self.adjust_balance_for_company(user_id, company_id, adjustment)
+                .await
+        } else {
+            Err(anyhow::anyhow!("User is not associated with any company"))
+        }
     }
 
     /// Get PTO balance history for a user
@@ -265,11 +341,15 @@ impl PtoBalanceRepository {
         Ok(history)
     }
 
-    /// Process PTO accrual for a user
-    pub async fn process_accrual(&self, user_id: &str) -> Result<Option<PtoBalanceHistory>> {
-        let current_balance = self.get_balance(user_id).await?;
+    /// Process PTO accrual for a user in a specific company
+    pub async fn process_accrual_for_company(
+        &self,
+        user_id: &str,
+        company_id: i64,
+    ) -> Result<Option<PtoBalanceHistory>> {
+        let current_balance = self.get_balance_for_company(user_id, company_id).await?;
         if current_balance.is_none() {
-            return Err(anyhow::anyhow!("User not found"));
+            return Err(anyhow::anyhow!("User balance not found for company"));
         }
         let current_balance = current_balance.unwrap();
 
@@ -297,16 +377,17 @@ impl PtoBalanceRepository {
             return Ok(None);
         }
 
-        // Update balance
+        // Update balance in user_company table
         let new_balance = current_balance.pto_balance_hours + hours_to_accrue;
         let accrual_date = now.date();
 
         sqlx::query!(
-            "UPDATE users SET pto_balance_hours = ?, last_accrual_date = ?, updated_at = ? WHERE id = ?",
+            "UPDATE user_company SET pto_balance_hours = ?, last_accrual_date = ?, updated_at = ? WHERE user_id = ? AND company_id = ?",
             new_balance,
             accrual_date,
             now,
-            user_id
+            user_id,
+            company_id
         )
         .execute(&self.pool)
         .await?;
@@ -314,6 +395,7 @@ impl PtoBalanceRepository {
         // Create history record
         let balance_type_str = PtoBalanceType::Pto.to_string();
         let change_type_str = PtoChangeType::Accrual.to_string();
+        let description = format!("Monthly accrual of {} hours", hours_to_accrue);
 
         let history_row = sqlx::query!(
             r#"
@@ -332,7 +414,7 @@ impl PtoBalanceRepository {
             hours_to_accrue,
             current_balance.pto_balance_hours,
             new_balance,
-            "Monthly PTO accrual",
+            description,
             now
         )
         .fetch_one(&self.pool)
@@ -341,25 +423,44 @@ impl PtoBalanceRepository {
         Ok(Some(PtoBalanceHistory {
             id: history_row.id,
             user_id: history_row.user_id,
-            balance_type: balance_type_str
-                .parse()
-                .map_err(|e: String| anyhow::anyhow!(e))?,
-            change_type: change_type_str
-                .parse()
-                .map_err(|e: String| anyhow::anyhow!(e))?,
+            balance_type: PtoBalanceType::from_str(&history_row.balance_type)
+                .map_err(|e| anyhow::anyhow!(e))?,
+            change_type: PtoChangeType::from_str(&history_row.change_type)
+                .map_err(|e| anyhow::anyhow!(e))?,
             hours_changed: history_row.hours_changed as i32,
             previous_balance: history_row.previous_balance as i32,
             new_balance: history_row.new_balance as i32,
             description: history_row.description,
             related_time_off_id: history_row.related_time_off_id,
-            created_at: history_row.created_at.unwrap_or(now),
+            created_at: history_row
+                .created_at
+                .unwrap_or_else(|| Utc::now().naive_utc()),
         }))
     }
 
-    /// Use PTO balance for a time-off request
-    pub async fn use_balance_for_time_off(
+    /// Process PTO accrual for a user (legacy method - processes for first company)
+    /// TODO: This should be deprecated in favor of process_accrual_for_company
+    pub async fn process_accrual(&self, user_id: &str) -> Result<Option<PtoBalanceHistory>> {
+        // Get the first company this user belongs to
+        let company_id = sqlx::query_scalar!(
+            "SELECT company_id FROM company_employees WHERE user_id = ? LIMIT 1",
+            user_id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(company_id) = company_id {
+            self.process_accrual_for_company(user_id, company_id).await
+        } else {
+            Err(anyhow::anyhow!("User is not associated with any company"))
+        }
+    }
+
+    /// Use PTO balance for a time-off request in a specific company
+    pub async fn use_balance_for_time_off_for_company(
         &self,
         user_id: &str,
+        company_id: i64,
         time_off_id: i64,
         balance_type: PtoBalanceType,
         hours_used: i32,
@@ -367,9 +468,9 @@ impl PtoBalanceRepository {
         let now = Utc::now().naive_utc();
 
         // Get current balance
-        let current_balance = self.get_balance(user_id).await?;
+        let current_balance = self.get_balance_for_company(user_id, company_id).await?;
         if current_balance.is_none() {
-            return Err(anyhow::anyhow!("User not found"));
+            return Err(anyhow::anyhow!("User not found in company"));
         }
         let current_balance = current_balance.unwrap();
 
@@ -397,15 +498,16 @@ impl PtoBalanceRepository {
             return Err(anyhow::anyhow!("Insufficient balance"));
         }
 
-        // Update balance in users table
+        // Update balance in user_company table
         let query = format!(
-            "UPDATE users SET {} = ?, updated_at = ? WHERE id = ?",
+            "UPDATE user_company SET {} = ?, updated_at = ? WHERE user_id = ? AND company_id = ?",
             field_name
         );
         sqlx::query(&query)
             .bind(new_balance)
             .bind(now)
             .bind(user_id)
+            .bind(company_id)
             .execute(&self.pool)
             .await?;
 
@@ -454,5 +556,36 @@ impl PtoBalanceRepository {
             related_time_off_id: history_row.related_time_off_id,
             created_at: history_row.created_at.unwrap_or(now),
         })
+    }
+
+    /// Use PTO balance for a time-off request (legacy method - uses balance from first company)
+    /// TODO: This should be deprecated in favor of use_balance_for_time_off_for_company
+    pub async fn use_balance_for_time_off(
+        &self,
+        user_id: &str,
+        time_off_id: i64,
+        balance_type: PtoBalanceType,
+        hours_used: i32,
+    ) -> Result<PtoBalanceHistory> {
+        // Get the first company this user belongs to
+        let company_id = sqlx::query_scalar!(
+            "SELECT company_id FROM company_employees WHERE user_id = ? LIMIT 1",
+            user_id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(company_id) = company_id {
+            self.use_balance_for_time_off_for_company(
+                user_id,
+                company_id,
+                time_off_id,
+                balance_type,
+                hours_used,
+            )
+            .await
+        } else {
+            Err(anyhow::anyhow!("User is not associated with any company"))
+        }
     }
 }
