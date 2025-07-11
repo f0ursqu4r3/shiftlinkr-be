@@ -1,6 +1,7 @@
-use actix_web::{App, http::StatusCode, test, web};
-use be::AppState;
+use actix_web::{http::StatusCode, test, web, App};
+use be::database::repositories::company_repository::CompanyRepository;
 use be::handlers::auth;
+use be::AppState;
 use serde_json::json;
 
 mod common;
@@ -12,6 +13,7 @@ async fn test_register_endpoint() {
 
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service,
+        company_repository: CompanyRepository::new(ctx.pool.clone()),
     });
     let config_data = web::Data::new(ctx.config);
 
@@ -58,6 +60,7 @@ async fn test_login_endpoint() {
 
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service,
+        company_repository: CompanyRepository::new(ctx.pool.clone()),
     });
     let config_data = web::Data::new(ctx.config);
 
@@ -117,6 +120,7 @@ async fn test_me_endpoint() {
 
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service,
+        company_repository: CompanyRepository::new(ctx.pool.clone()),
     });
     let config_data = web::Data::new(ctx.config);
 
@@ -172,6 +176,7 @@ async fn test_me_endpoint_without_token() {
 
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service,
+        company_repository: CompanyRepository::new(ctx.pool.clone()),
     });
     let config_data = web::Data::new(ctx.config);
 
@@ -196,12 +201,10 @@ async fn test_me_endpoint_without_token() {
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 
     let body: serde_json::Value = test::read_body_json(resp).await;
-    assert!(
-        body["error"]
-            .as_str()
-            .unwrap()
-            .contains("Missing or invalid authorization header")
-    );
+    assert!(body["error"]
+        .as_str()
+        .unwrap()
+        .contains("Missing or invalid authorization header"));
 }
 
 #[actix_web::test]
@@ -211,6 +214,7 @@ async fn test_register_duplicate_email() {
 
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service,
+        company_repository: CompanyRepository::new(ctx.pool.clone()),
     });
     let config_data = web::Data::new(ctx.config);
 
@@ -253,12 +257,10 @@ async fn test_register_duplicate_email() {
     assert_eq!(resp2.status(), StatusCode::BAD_REQUEST);
 
     let body: serde_json::Value = test::read_body_json(resp2).await;
-    assert!(
-        body["error"]
-            .as_str()
-            .unwrap()
-            .contains("Email already exists")
-    );
+    assert!(body["error"]
+        .as_str()
+        .unwrap()
+        .contains("Email already exists"));
 }
 
 #[actix_web::test]
@@ -268,6 +270,7 @@ async fn test_login_wrong_password() {
 
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service,
+        company_repository: CompanyRepository::new(ctx.pool.clone()),
     });
     let config_data = web::Data::new(ctx.config);
 
@@ -314,12 +317,10 @@ async fn test_login_wrong_password() {
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
     let body: serde_json::Value = test::read_body_json(resp).await;
-    assert!(
-        body["error"]
-            .as_str()
-            .unwrap()
-            .contains("Invalid email or password")
-    );
+    assert!(body["error"]
+        .as_str()
+        .unwrap()
+        .contains("Invalid email or password"));
 }
 
 #[actix_web::test]
@@ -329,6 +330,7 @@ async fn test_forgot_password_endpoint() {
 
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service,
+        company_repository: CompanyRepository::new(ctx.pool.clone()),
     });
     let config_data = web::Data::new(ctx.config);
 
@@ -376,12 +378,10 @@ async fn test_forgot_password_endpoint() {
     assert_eq!(resp.status(), StatusCode::OK);
 
     let body: serde_json::Value = test::read_body_json(resp).await;
-    assert!(
-        body["message"]
-            .as_str()
-            .unwrap()
-            .contains("password reset link has been sent")
-    );
+    assert!(body["message"]
+        .as_str()
+        .unwrap()
+        .contains("password reset link has been sent"));
 }
 
 #[actix_web::test]
@@ -391,6 +391,7 @@ async fn test_forgot_password_nonexistent_email() {
 
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service,
+        company_repository: CompanyRepository::new(ctx.pool.clone()),
     });
     let config_data = web::Data::new(ctx.config);
 
@@ -421,12 +422,10 @@ async fn test_forgot_password_nonexistent_email() {
     assert_eq!(resp.status(), StatusCode::OK);
 
     let body: serde_json::Value = test::read_body_json(resp).await;
-    assert!(
-        body["message"]
-            .as_str()
-            .unwrap()
-            .contains("password reset link has been sent")
-    );
+    assert!(body["message"]
+        .as_str()
+        .unwrap()
+        .contains("password reset link has been sent"));
 }
 
 #[actix_web::test]
@@ -436,6 +435,7 @@ async fn test_reset_password_invalid_token() {
 
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service,
+        company_repository: CompanyRepository::new(ctx.pool.clone()),
     });
     let config_data = web::Data::new(ctx.config);
 
@@ -463,12 +463,10 @@ async fn test_reset_password_invalid_token() {
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
     let body: serde_json::Value = test::read_body_json(resp).await;
-    assert!(
-        body["error"]
-            .as_str()
-            .unwrap()
-            .contains("Invalid or expired reset token")
-    );
+    assert!(body["error"]
+        .as_str()
+        .unwrap()
+        .contains("Invalid or expired reset token"));
 }
 
 #[actix_web::test]
@@ -478,6 +476,7 @@ async fn test_complete_password_reset_flow() {
 
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service.clone(),
+        company_repository: CompanyRepository::new(ctx.pool.clone()),
     });
     let config_data = web::Data::new(ctx.config);
 
@@ -544,12 +543,10 @@ async fn test_complete_password_reset_flow() {
     assert_eq!(reset_resp.status(), StatusCode::OK);
 
     let reset_body: serde_json::Value = test::read_body_json(reset_resp).await;
-    assert!(
-        reset_body["message"]
-            .as_str()
-            .unwrap()
-            .contains("Password has been reset successfully")
-    );
+    assert!(reset_body["message"]
+        .as_str()
+        .unwrap()
+        .contains("Password has been reset successfully"));
 
     // 5. Verify old password doesn't work
     let old_login_data = json!({

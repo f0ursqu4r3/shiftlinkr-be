@@ -1,4 +1,5 @@
 use actix_web::{http::StatusCode, test, web, App};
+use be::database::repositories::company_repository::CompanyRepository;
 use be::database::repositories::invite_repository::InviteRepository;
 use be::handlers::auth;
 use be::AppState;
@@ -19,6 +20,7 @@ async fn setup_test_app() -> (
 
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service,
+        company_repository: CompanyRepository::new(ctx.pool.clone()),
     });
     let invite_repo_data = web::Data::new(InviteRepository::new(ctx.pool.clone()));
     let config_data = web::Data::new(ctx.config);

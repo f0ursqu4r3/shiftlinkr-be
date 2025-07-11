@@ -7,6 +7,7 @@ use crate::database::models::{
     CompanyRole, CreateCompanyRequest,
 };
 
+#[derive(Clone)]
 pub struct CompanyRepository {
     pool: SqlitePool,
 }

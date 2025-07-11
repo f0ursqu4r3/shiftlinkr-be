@@ -1,4 +1,5 @@
 use actix_web::{http::StatusCode, test, web, App};
+use be::database::repositories::company_repository::CompanyRepository;
 use be::database::repositories::invite_repository::InviteRepository;
 use be::handlers::auth;
 use be::AppState;
@@ -16,6 +17,7 @@ async fn test_auth_register_and_login_workflow() {
 
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service.clone(),
+        company_repository: CompanyRepository::new(ctx.pool.clone()),
     });
     let invite_repo_data = web::Data::new(InviteRepository::new(ctx.pool.clone()));
     let config_data = web::Data::new(ctx.config.clone());
@@ -104,6 +106,7 @@ async fn test_auth_invalid_credentials() {
 
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service,
+        company_repository: CompanyRepository::new(ctx.pool.clone()),
     });
     let invite_repo_data = web::Data::new(InviteRepository::new(ctx.pool.clone()));
     let config_data = web::Data::new(ctx.config);
@@ -146,6 +149,7 @@ async fn test_auth_duplicate_email_registration() {
 
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service,
+        company_repository: CompanyRepository::new(ctx.pool.clone()),
     });
     let invite_repo_data = web::Data::new(InviteRepository::new(ctx.pool.clone()));
     let config_data = web::Data::new(ctx.config);
@@ -206,6 +210,7 @@ async fn test_auth_invite_workflow() {
 
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service,
+        company_repository: CompanyRepository::new(ctx.pool.clone()),
     });
     let invite_repo_data = web::Data::new(InviteRepository::new(ctx.pool.clone()));
     let config_data = web::Data::new(ctx.config);
@@ -325,6 +330,7 @@ async fn test_auth_password_reset_workflow() {
 
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service,
+        company_repository: CompanyRepository::new(ctx.pool.clone()),
     });
     let invite_repo_data = web::Data::new(InviteRepository::new(ctx.pool.clone()));
     let mut config = ctx.config;

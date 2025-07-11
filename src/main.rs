@@ -20,6 +20,7 @@ use database::{
 
 pub struct AppState {
     pub auth_service: AuthService,
+    pub company_repository: CompanyRepository,
 }
 
 #[get("/")]
@@ -75,7 +76,10 @@ async fn main() -> Result<()> {
     );
 
     // Create app state and repository data
-    let app_state = web::Data::new(AppState { auth_service });
+    let app_state = web::Data::new(AppState {
+        auth_service,
+        company_repository: company_repository.clone(),
+    });
     let user_repo_data = web::Data::new(user_repository);
     let location_repo_data = web::Data::new(location_repository);
     let shift_repo_data = web::Data::new(shift_repository);

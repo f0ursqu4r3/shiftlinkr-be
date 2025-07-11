@@ -5,6 +5,7 @@ use anyhow::Result;
 use be::auth::AuthService;
 use be::config::Config;
 use be::database::init_database;
+use be::database::repositories::company_repository::CompanyRepository;
 use be::database::repositories::location_repository::LocationRepository;
 use be::database::repositories::password_reset_repository::PasswordResetTokenRepository;
 use be::database::repositories::user_repository::UserRepository;
@@ -67,6 +68,7 @@ pub async fn create_admin_app_data() -> (
 
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service.clone(),
+        company_repository: CompanyRepository::new(ctx.pool.clone()),
     });
     let location_repo_data = web::Data::new(LocationRepository::new(ctx.pool.clone()));
     let config_data = web::Data::new(ctx.config.clone());

@@ -2,11 +2,11 @@ use actix_web::{web, HttpRequest, HttpResponse, Result};
 use serde_json::json;
 
 use crate::config::Config;
-use crate::database::repositories::invite_repository::InviteRepository;
 use crate::database::models::{
     AcceptInviteRequest, CreateInviteRequest, CreateUserRequest, ForgotPasswordRequest,
     LoginRequest, ResetPasswordRequest,
 };
+use crate::database::repositories::invite_repository::InviteRepository;
 use crate::AppState;
 
 pub async fn register(
@@ -46,14 +46,38 @@ pub async fn me(data: web::Data<AppState>, req: HttpRequest) -> Result<HttpRespo
 
     // Verify token and get user
     match data.auth_service.get_user_from_token(&token).await {
-        Ok(user) => Ok(HttpResponse::Ok().json(json!({
-            "user": {
-                "id": user.id,
-                "email": user.email,
-                "name": user.name,
-                "role": user.role,
-            }
-        }))),
+        Ok(user) => {
+            // Get user's companies
+            let companies = match data
+                .company_repository
+                .get_companies_for_user(&user.id)
+                .await
+            {
+                Ok(companies) => companies,
+                Err(_) => vec![], // If error getting companies, return empty list
+            };
+
+            // Get primary company
+            let primary_company = match data
+                .company_repository
+                .get_primary_company_for_user(&user.id)
+                .await
+            {
+                Ok(company) => company,
+                Err(_) => None,
+            };
+
+            Ok(HttpResponse::Ok().json(json!({
+                "user": {
+                    "id": user.id,
+                    "email": user.email,
+                    "name": user.name,
+                    "role": user.role,
+                },
+                "companies": companies,
+                "primary_company": primary_company
+            })))
+        }
         Err(err) => Ok(HttpResponse::Unauthorized().json(json!({
             "error": err.to_string()
         }))),

@@ -1,4 +1,5 @@
 use actix_web::{http::StatusCode, test, web, App};
+use be::database::repositories::company_repository::CompanyRepository;
 use be::database::repositories::location_repository::LocationRepository;
 use be::handlers::admin;
 use be::AppState;
@@ -173,6 +174,7 @@ async fn test_team_create_success() {
 
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service,
+        company_repository: CompanyRepository::new(ctx.pool.clone()),
     });
     let location_repo_data = web::Data::new(LocationRepository::new(ctx.pool.clone()));
     let config_data = web::Data::new(ctx.config);

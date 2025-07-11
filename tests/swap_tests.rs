@@ -1,4 +1,5 @@
 use actix_web::{http::StatusCode, test, web, App};
+use be::database::repositories::company_repository::CompanyRepository;
 use be::handlers::swaps;
 use be::AppState;
 use pretty_assertions::assert_eq;
@@ -14,6 +15,7 @@ async fn setup_test_app() -> (web::Data<AppState>, web::Data<be::Config>) {
 
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service,
+        company_repository: CompanyRepository::new(ctx.pool.clone()),
     });
     let config_data = web::Data::new(ctx.config);
 
@@ -27,7 +29,7 @@ macro_rules! test_unauthorized {
         #[serial]
         async fn $test_name() {
             let (app_state, config_data) = setup_test_app().await;
-            
+
             let app = test::init_service(
                 App::new()
                     .app_data(app_state)
@@ -56,7 +58,7 @@ macro_rules! test_unauthorized {
         #[serial]
         async fn $test_name() {
             let (app_state, config_data) = setup_test_app().await;
-            
+
             let app = test::init_service(
                 App::new()
                     .app_data(app_state)
@@ -86,22 +88,42 @@ macro_rules! test_unauthorized {
 }
 
 // Swap request tests
-test_unauthorized!(test_create_swap_unauthorized, post, "/api/v1/swaps", json!({
-    "original_shift_id": 1,
-    "requesting_user_id": "user123",
-    "swap_type": "open"
-}));
+test_unauthorized!(
+    test_create_swap_unauthorized,
+    post,
+    "/api/v1/swaps",
+    json!({
+        "original_shift_id": 1,
+        "requesting_user_id": "user123",
+        "swap_type": "open"
+    })
+);
 
 test_unauthorized!(test_get_swaps_unauthorized, get, "/api/v1/swaps");
 test_unauthorized!(test_get_swap_by_id_unauthorized, get, "/api/v1/swaps/123");
-test_unauthorized!(test_respond_to_swap_unauthorized, post, "/api/v1/swaps/123/respond", json!({
-    "response": "accept",
-    "responding_user_id": "user456"
-}));
-test_unauthorized!(test_approve_swap_unauthorized, post, "/api/v1/swaps/123/approve", json!({
-    "approving_user_id": "manager123"
-}));
-test_unauthorized!(test_deny_swap_unauthorized, post, "/api/v1/swaps/123/deny", json!({
-    "denying_user_id": "manager123",
-    "reason": "Insufficient coverage"
-}));
+test_unauthorized!(
+    test_respond_to_swap_unauthorized,
+    post,
+    "/api/v1/swaps/123/respond",
+    json!({
+        "response": "accept",
+        "responding_user_id": "user456"
+    })
+);
+test_unauthorized!(
+    test_approve_swap_unauthorized,
+    post,
+    "/api/v1/swaps/123/approve",
+    json!({
+        "approving_user_id": "manager123"
+    })
+);
+test_unauthorized!(
+    test_deny_swap_unauthorized,
+    post,
+    "/api/v1/swaps/123/deny",
+    json!({
+        "denying_user_id": "manager123",
+        "reason": "Insufficient coverage"
+    })
+);
