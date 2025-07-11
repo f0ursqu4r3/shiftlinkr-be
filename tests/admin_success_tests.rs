@@ -71,7 +71,8 @@ async fn test_location_create_success() {
         "name": "Test Location",
         "address": "123 Test St",
         "phone": "555-1234",
-        "email": "test@location.com"
+        "email": "test@location.com",
+        "company_id": 1
     });
 
     let req = test::TestRequest::post()
@@ -135,7 +136,8 @@ async fn test_location_list_success() {
         "name": "Test Location",
         "address": "123 Test St",
         "phone": "555-1234",
-        "email": "test@location.com"
+        "email": "test@location.com",
+        "company_id": 1
     });
 
     let create_req = test::TestRequest::post()
@@ -217,7 +219,8 @@ async fn test_team_create_success() {
         "name": "Test Location",
         "address": "123 Test St",
         "phone": "555-1234",
-        "email": "test@location.com"
+        "email": "test@location.com",
+        "company_id": 1
     });
 
     let create_loc_req = test::TestRequest::post()

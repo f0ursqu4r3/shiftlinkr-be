@@ -104,12 +104,10 @@ async fn test_reset_password_invalid_token() {
         .reset_password("invalid-token", "newpassword123")
         .await;
     assert!(result.is_err());
-    assert!(
-        result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid or expired reset token")
-    );
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("Invalid or expired reset token"));
 }
 
 #[tokio::test]
@@ -148,12 +146,10 @@ async fn test_reset_password_used_token() {
         .reset_password(&token, "anotherpassword123")
         .await;
     assert!(second_reset.is_err());
-    assert!(
-        second_reset
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid or expired reset token")
-    );
+    assert!(second_reset
+        .unwrap_err()
+        .to_string()
+        .contains("Invalid or expired reset token"));
 }
 
 #[tokio::test]
@@ -209,16 +205,18 @@ async fn test_password_reset_repository_create_token() {
         "repo-test@example.com".to_string(),
         "hashed_password".to_string(),
         "Repo Test User".to_string(),
-        UserRole::Employee),
+        UserRole::Employee,
     );
 
-    let user_repo = be::database::repositories::user_repository::UserRepository::new(ctx.pool.clone());
+    let user_repo =
+        be::database::repositories::user_repository::UserRepository::new(ctx.pool.clone());
     user_repo.create_user(&user).await.unwrap();
 
     // Create password reset token repository
-    let reset_repo = be::database::repositories::password_reset_repository::PasswordResetTokenRepository::new(
-        ctx.pool.clone(),
-    );
+    let reset_repo =
+        be::database::repositories::password_reset_repository::PasswordResetTokenRepository::new(
+            ctx.pool.clone(),
+        );
 
     // Create a token
     let token = reset_repo.create_token(&user.id).await.unwrap();
@@ -240,15 +238,17 @@ async fn test_password_reset_repository_find_valid_token() {
         "find-test@example.com".to_string(),
         "hashed_password".to_string(),
         "Find Test User".to_string(),
-        UserRole::Employee),
+        UserRole::Employee,
     );
 
-    let user_repo = be::database::repositories::user_repository::UserRepository::new(ctx.pool.clone());
+    let user_repo =
+        be::database::repositories::user_repository::UserRepository::new(ctx.pool.clone());
     user_repo.create_user(&user).await.unwrap();
 
-    let reset_repo = be::database::repositories::password_reset_repository::PasswordResetTokenRepository::new(
-        ctx.pool.clone(),
-    );
+    let reset_repo =
+        be::database::repositories::password_reset_repository::PasswordResetTokenRepository::new(
+            ctx.pool.clone(),
+        );
 
     // Create a token
     let created_token = reset_repo.create_token(&user.id).await.unwrap();
@@ -277,15 +277,17 @@ async fn test_password_reset_repository_mark_token_used() {
         "mark-used@example.com".to_string(),
         "hashed_password".to_string(),
         "Mark Used User".to_string(),
-        UserRole::Employee),
+        UserRole::Employee,
     );
 
-    let user_repo = be::database::repositories::user_repository::UserRepository::new(ctx.pool.clone());
+    let user_repo =
+        be::database::repositories::user_repository::UserRepository::new(ctx.pool.clone());
     user_repo.create_user(&user).await.unwrap();
 
-    let reset_repo = be::database::repositories::password_reset_repository::PasswordResetTokenRepository::new(
-        ctx.pool.clone(),
-    );
+    let reset_repo =
+        be::database::repositories::password_reset_repository::PasswordResetTokenRepository::new(
+            ctx.pool.clone(),
+        );
 
     // Create a token
     let created_token = reset_repo.create_token(&user.id).await.unwrap();
@@ -312,15 +314,17 @@ async fn test_password_reset_repository_cleanup_expired() {
         "cleanup@example.com".to_string(),
         "hashed_password".to_string(),
         "Cleanup User".to_string(),
-        UserRole::Employee),
+        UserRole::Employee,
     );
 
-    let user_repo = be::database::repositories::user_repository::UserRepository::new(ctx.pool.clone());
+    let user_repo =
+        be::database::repositories::user_repository::UserRepository::new(ctx.pool.clone());
     user_repo.create_user(&user).await.unwrap();
 
-    let reset_repo = be::database::repositories::password_reset_repository::PasswordResetTokenRepository::new(
-        ctx.pool.clone(),
-    );
+    let reset_repo =
+        be::database::repositories::password_reset_repository::PasswordResetTokenRepository::new(
+            ctx.pool.clone(),
+        );
 
     // Create a token
     let _token = reset_repo.create_token(&user.id).await.unwrap();
@@ -340,55 +344,49 @@ async fn test_password_reset_repository_invalidate_user_tokens() {
         "invalidate@example.com".to_string(),
         "hashed_password".to_string(),
         "Invalidate User".to_string(),
-        UserRole::Employee),
+        UserRole::Employee,
     );
 
-    let user_repo = be::database::repositories::user_repository::UserRepository::new(ctx.pool.clone());
+    let user_repo =
+        be::database::repositories::user_repository::UserRepository::new(ctx.pool.clone());
     user_repo.create_user(&user).await.unwrap();
 
-    let reset_repo = be::database::repositories::password_reset_repository::PasswordResetTokenRepository::new(
-        ctx.pool.clone(),
-    );
+    let reset_repo =
+        be::database::repositories::password_reset_repository::PasswordResetTokenRepository::new(
+            ctx.pool.clone(),
+        );
 
     // Create multiple tokens
     let token1 = reset_repo.create_token(&user.id).await.unwrap();
     let token2 = reset_repo.create_token(&user.id).await.unwrap();
 
     // Both should be valid initially
-    assert!(
-        reset_repo
-            .find_valid_token(&token1.token)
-            .await
-            .unwrap()
-            .is_some()
-    );
-    assert!(
-        reset_repo
-            .find_valid_token(&token2.token)
-            .await
-            .unwrap()
-            .is_some()
-    );
+    assert!(reset_repo
+        .find_valid_token(&token1.token)
+        .await
+        .unwrap()
+        .is_some());
+    assert!(reset_repo
+        .find_valid_token(&token2.token)
+        .await
+        .unwrap()
+        .is_some());
 
     // Invalidate all tokens for user
     let invalidate_result = reset_repo.invalidate_user_tokens(&user.id).await;
     assert!(invalidate_result.is_ok());
 
     // Both tokens should now be invalid
-    assert!(
-        reset_repo
-            .find_valid_token(&token1.token)
-            .await
-            .unwrap()
-            .is_none()
-    );
-    assert!(
-        reset_repo
-            .find_valid_token(&token2.token)
-            .await
-            .unwrap()
-            .is_none()
-    );
+    assert!(reset_repo
+        .find_valid_token(&token1.token)
+        .await
+        .unwrap()
+        .is_none());
+    assert!(reset_repo
+        .find_valid_token(&token2.token)
+        .await
+        .unwrap()
+        .is_none());
 }
 
 #[tokio::test]
@@ -401,10 +399,11 @@ async fn test_user_repository_update_password() {
         "update-pwd@example.com".to_string(),
         "old_hashed_password".to_string(),
         "Update Password User".to_string(),
-        UserRole::Employee),
+        UserRole::Employee,
     );
 
-    let user_repo = be::database::repositories::user_repository::UserRepository::new(ctx.pool.clone());
+    let user_repo =
+        be::database::repositories::user_repository::UserRepository::new(ctx.pool.clone());
     user_repo.create_user(&user).await.unwrap();
 
     // Update password
