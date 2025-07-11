@@ -209,14 +209,14 @@ async fn test_password_reset_repository_create_token() {
         "repo-test@example.com".to_string(),
         "hashed_password".to_string(),
         "Repo Test User".to_string(),
-        Some(UserRole::Employee),
+        UserRole::Employee),
     );
 
-    let user_repo = be::database::user_repository::UserRepository::new(ctx.pool.clone());
+    let user_repo = be::database::repositories::user_repository::UserRepository::new(ctx.pool.clone());
     user_repo.create_user(&user).await.unwrap();
 
     // Create password reset token repository
-    let reset_repo = be::database::password_reset_repository::PasswordResetTokenRepository::new(
+    let reset_repo = be::database::repositories::password_reset_repository::PasswordResetTokenRepository::new(
         ctx.pool.clone(),
     );
 
@@ -240,13 +240,13 @@ async fn test_password_reset_repository_find_valid_token() {
         "find-test@example.com".to_string(),
         "hashed_password".to_string(),
         "Find Test User".to_string(),
-        Some(UserRole::Employee),
+        UserRole::Employee),
     );
 
-    let user_repo = be::database::user_repository::UserRepository::new(ctx.pool.clone());
+    let user_repo = be::database::repositories::user_repository::UserRepository::new(ctx.pool.clone());
     user_repo.create_user(&user).await.unwrap();
 
-    let reset_repo = be::database::password_reset_repository::PasswordResetTokenRepository::new(
+    let reset_repo = be::database::repositories::password_reset_repository::PasswordResetTokenRepository::new(
         ctx.pool.clone(),
     );
 
@@ -277,13 +277,13 @@ async fn test_password_reset_repository_mark_token_used() {
         "mark-used@example.com".to_string(),
         "hashed_password".to_string(),
         "Mark Used User".to_string(),
-        Some(UserRole::Employee),
+        UserRole::Employee),
     );
 
-    let user_repo = be::database::user_repository::UserRepository::new(ctx.pool.clone());
+    let user_repo = be::database::repositories::user_repository::UserRepository::new(ctx.pool.clone());
     user_repo.create_user(&user).await.unwrap();
 
-    let reset_repo = be::database::password_reset_repository::PasswordResetTokenRepository::new(
+    let reset_repo = be::database::repositories::password_reset_repository::PasswordResetTokenRepository::new(
         ctx.pool.clone(),
     );
 
@@ -312,13 +312,13 @@ async fn test_password_reset_repository_cleanup_expired() {
         "cleanup@example.com".to_string(),
         "hashed_password".to_string(),
         "Cleanup User".to_string(),
-        Some(UserRole::Employee),
+        UserRole::Employee),
     );
 
-    let user_repo = be::database::user_repository::UserRepository::new(ctx.pool.clone());
+    let user_repo = be::database::repositories::user_repository::UserRepository::new(ctx.pool.clone());
     user_repo.create_user(&user).await.unwrap();
 
-    let reset_repo = be::database::password_reset_repository::PasswordResetTokenRepository::new(
+    let reset_repo = be::database::repositories::password_reset_repository::PasswordResetTokenRepository::new(
         ctx.pool.clone(),
     );
 
@@ -340,13 +340,13 @@ async fn test_password_reset_repository_invalidate_user_tokens() {
         "invalidate@example.com".to_string(),
         "hashed_password".to_string(),
         "Invalidate User".to_string(),
-        Some(UserRole::Employee),
+        UserRole::Employee),
     );
 
-    let user_repo = be::database::user_repository::UserRepository::new(ctx.pool.clone());
+    let user_repo = be::database::repositories::user_repository::UserRepository::new(ctx.pool.clone());
     user_repo.create_user(&user).await.unwrap();
 
-    let reset_repo = be::database::password_reset_repository::PasswordResetTokenRepository::new(
+    let reset_repo = be::database::repositories::password_reset_repository::PasswordResetTokenRepository::new(
         ctx.pool.clone(),
     );
 
@@ -401,10 +401,10 @@ async fn test_user_repository_update_password() {
         "update-pwd@example.com".to_string(),
         "old_hashed_password".to_string(),
         "Update Password User".to_string(),
-        Some(UserRole::Employee),
+        UserRole::Employee),
     );
 
-    let user_repo = be::database::user_repository::UserRepository::new(ctx.pool.clone());
+    let user_repo = be::database::repositories::user_repository::UserRepository::new(ctx.pool.clone());
     user_repo.create_user(&user).await.unwrap();
 
     // Update password

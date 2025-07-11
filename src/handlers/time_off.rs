@@ -4,8 +4,8 @@ use serde::Deserialize;
 
 use crate::auth::Claims;
 use crate::database::models::{PtoBalanceType, TimeOffRequestInput, TimeOffStatus, TimeOffType};
-use crate::database::time_off_repository::TimeOffRepository;
-use crate::database::pto_balance_repository::PtoBalanceRepository;
+use crate::database::repositories::time_off_repository::TimeOffRepository;
+use crate::database::repositories::pto_balance_repository::PtoBalanceRepository;
 use crate::handlers::admin::ApiResponse;
 
 #[derive(Debug, Deserialize)]

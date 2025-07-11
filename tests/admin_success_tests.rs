@@ -1,5 +1,5 @@
 use actix_web::{http::StatusCode, test, web, App};
-use be::database::location_repository::LocationRepository;
+use be::database::repositories::location_repository::LocationRepository;
 use be::handlers::admin;
 use be::AppState;
 use pretty_assertions::assert_eq;

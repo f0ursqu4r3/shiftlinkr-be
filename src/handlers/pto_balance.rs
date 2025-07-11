@@ -3,7 +3,7 @@ use serde::Deserialize;
 
 use crate::auth::Claims;
 use crate::database::models::{PtoBalanceAdjustment, PtoBalanceUpdate};
-use crate::database::pto_balance_repository::PtoBalanceRepository;
+use crate::database::repositories::pto_balance_repository::PtoBalanceRepository;
 use crate::handlers::admin::ApiResponse;
 
 #[derive(Debug, Deserialize)]

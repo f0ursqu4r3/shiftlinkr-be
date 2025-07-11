@@ -2,8 +2,8 @@ use anyhow::Result;
 use chrono::{NaiveDateTime, Utc};
 use sqlx::SqlitePool;
 
-use super::models::{Shift, ShiftInput, ShiftStatus};
-use super::types::ShiftRow;
+use crate::database::models::{Shift, ShiftInput, ShiftStatus};
+use crate::database::types::ShiftRow;
 
 pub struct ShiftRepository {
     pool: SqlitePool,

@@ -3,7 +3,7 @@ use chrono::NaiveDateTime;
 use serde::Deserialize;
 
 use crate::auth::Claims;
-use crate::database::stats_repository::StatsRepository;
+use crate::database::repositories::stats_repository::StatsRepository;
 use crate::handlers::admin::ApiResponse;
 
 #[derive(Debug, Deserialize)]

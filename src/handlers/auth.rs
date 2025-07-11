@@ -2,7 +2,7 @@ use actix_web::{web, HttpRequest, HttpResponse, Result};
 use serde_json::json;
 
 use crate::config::Config;
-use crate::database::invite_repository::InviteRepository;
+use crate::database::repositories::invite_repository::InviteRepository;
 use crate::database::models::{
     AcceptInviteRequest, CreateInviteRequest, CreateUserRequest, ForgotPasswordRequest,
     LoginRequest, ResetPasswordRequest,

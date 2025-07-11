@@ -1,5 +1,5 @@
 use actix_web::{http::StatusCode, test, web, App};
-use be::database::invite_repository::InviteRepository;
+use be::database::repositories::invite_repository::InviteRepository;
 use be::handlers::auth;
 use be::AppState;
 use pretty_assertions::assert_eq;

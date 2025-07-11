@@ -1,9 +1,9 @@
-use sqlx::SqlitePool;
 use anyhow::Result;
 use chrono::Utc;
+use sqlx::SqlitePool;
 
-use super::models::{Location, LocationInput, Team, TeamInput, TeamMember};
-use super::types::{TeamRow, TeamMemberRow};
+use crate::database::models::{Location, LocationInput, Team, TeamInput, TeamMember};
+use crate::database::types::{TeamMemberRow, TeamRow};
 
 pub struct LocationRepository {
     pool: SqlitePool,
@@ -16,20 +16,20 @@ impl LocationRepository {
 
     pub async fn create_location(&self, input: LocationInput) -> Result<Location> {
         let now = Utc::now().naive_utc();
-        let location = sqlx::query_as!(
-            Location,
+        let location = sqlx::query_as::<_, Location>(
             r#"
-            INSERT INTO locations (name, address, phone, email, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            RETURNING id, name, address, phone, email, created_at, updated_at
+            INSERT INTO locations (name, address, phone, email, company_id, created_at, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            RETURNING id, name, address, phone, email, company_id, created_at, updated_at
             "#,
-            input.name,
-            input.address,
-            input.phone,
-            input.email,
-            now,
-            now
         )
+        .bind(&input.name)
+        .bind(&input.address)
+        .bind(&input.phone)
+        .bind(&input.email)
+        .bind(input.company_id)
+        .bind(now)
+        .bind(now)
         .fetch_one(&self.pool)
         .await?;
 
@@ -37,11 +37,10 @@ impl LocationRepository {
     }
 
     pub async fn get_location_by_id(&self, id: i64) -> Result<Option<Location>> {
-        let location = sqlx::query_as!(
-            Location,
-            "SELECT id, name, address, phone, email, created_at, updated_at FROM locations WHERE id = ?",
-            id
+        let location = sqlx::query_as::<_, Location>(
+            "SELECT id, name, address, phone, email, company_id, created_at, updated_at FROM locations WHERE id = ?1"
         )
+        .bind(id)
         .fetch_optional(&self.pool)
         .await?;
 
@@ -49,10 +48,20 @@ impl LocationRepository {
     }
 
     pub async fn get_all_locations(&self) -> Result<Vec<Location>> {
-        let locations = sqlx::query_as!(
-            Location,
-            "SELECT id, name, address, phone, email, created_at, updated_at FROM locations ORDER BY name"
+        let locations = sqlx::query_as::<_, Location>(
+            "SELECT id, name, address, phone, email, company_id, created_at, updated_at FROM locations ORDER BY name"
         )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(locations)
+    }
+
+    pub async fn get_locations_by_company(&self, company_id: i64) -> Result<Vec<Location>> {
+        let locations = sqlx::query_as::<_, Location>(
+            "SELECT id, name, address, phone, email, company_id, created_at, updated_at FROM locations WHERE company_id = ?1 ORDER BY name"
+        )
+        .bind(company_id)
         .fetch_all(&self.pool)
         .await?;
 
@@ -61,45 +70,31 @@ impl LocationRepository {
 
     pub async fn update_location(&self, id: i64, input: LocationInput) -> Result<Option<Location>> {
         let now = Utc::now().naive_utc();
-        let row = sqlx::query!(
+        let location = sqlx::query_as::<_, Location>(
             r#"
             UPDATE locations 
-            SET name = ?, address = ?, phone = ?, email = ?, updated_at = ?
-            WHERE id = ?
-            RETURNING id, name, address, phone, email, created_at, updated_at
+            SET name = ?1, address = ?2, phone = ?3, email = ?4, company_id = ?5, updated_at = ?6
+            WHERE id = ?7
+            RETURNING id, name, address, phone, email, company_id, created_at, updated_at
             "#,
-            input.name,
-            input.address,
-            input.phone,
-            input.email,
-            now,
-            id
         )
+        .bind(&input.name)
+        .bind(&input.address)
+        .bind(&input.phone)
+        .bind(&input.email)
+        .bind(input.company_id)
+        .bind(now)
+        .bind(id)
         .fetch_optional(&self.pool)
         .await?;
 
-        if let Some(row) = row {
-            Ok(Some(Location {
-                id: row.id.unwrap(),
-                name: row.name,
-                address: row.address,
-                phone: row.phone,
-                email: row.email,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
-            }))
-        } else {
-            Ok(None)
-        }
+        Ok(location)
     }
 
     pub async fn delete_location(&self, id: i64) -> Result<bool> {
-        let result = sqlx::query!(
-            "DELETE FROM locations WHERE id = ?",
-            id
-        )
-        .execute(&self.pool)
-        .await?;
+        let result = sqlx::query!("DELETE FROM locations WHERE id = ?", id)
+            .execute(&self.pool)
+            .await?;
 
         Ok(result.rows_affected() > 0)
     }
@@ -168,7 +163,7 @@ impl LocationRepository {
             SET name = ?, description = ?, location_id = ?, updated_at = ?
             WHERE id = ?
             RETURNING id, name, description, location_id, created_at, updated_at
-            "#
+            "#,
         )
         .bind(input.name)
         .bind(input.description)
@@ -182,12 +177,9 @@ impl LocationRepository {
     }
 
     pub async fn delete_team(&self, id: i64) -> Result<bool> {
-        let result = sqlx::query!(
-            "DELETE FROM teams WHERE id = ?",
-            id
-        )
-        .execute(&self.pool)
-        .await?;
+        let result = sqlx::query!("DELETE FROM teams WHERE id = ?", id)
+            .execute(&self.pool)
+            .await?;
 
         Ok(result.rows_affected() > 0)
     }
@@ -214,7 +206,7 @@ impl LocationRepository {
 
     pub async fn get_team_members(&self, team_id: i64) -> Result<Vec<TeamMember>> {
         let rows = sqlx::query_as::<_, TeamMemberRow>(
-            "SELECT id, team_id, user_id, created_at FROM team_members WHERE team_id = ?"
+            "SELECT id, team_id, user_id, created_at FROM team_members WHERE team_id = ?",
         )
         .bind(team_id)
         .fetch_all(&self.pool)

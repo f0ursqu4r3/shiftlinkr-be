@@ -3,7 +3,7 @@ use serde::Deserialize;
 
 use crate::auth::Claims;
 use crate::database::models::{ShiftSwapInput, ShiftSwapStatus};
-use crate::database::shift_swap_repository::ShiftSwapRepository;
+use crate::database::repositories::shift_swap_repository::ShiftSwapRepository;
 use crate::handlers::admin::ApiResponse;
 
 #[derive(Debug, Deserialize)]

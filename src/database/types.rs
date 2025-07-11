@@ -8,6 +8,7 @@ pub struct LocationRow {
     pub address: Option<String>,
     pub phone: Option<String>,
     pub email: Option<String>,
+    pub company_id: i64,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
 }
@@ -55,6 +56,7 @@ impl From<LocationRow> for super::models::Location {
             address: row.address,
             phone: row.phone,
             email: row.email,
+            company_id: row.company_id,
             created_at: row.created_at,
             updated_at: row.updated_at,
         }

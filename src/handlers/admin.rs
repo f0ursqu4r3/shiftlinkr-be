@@ -2,9 +2,9 @@ use actix_web::{web, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::auth::Claims;
-use crate::database::location_repository::LocationRepository;
+use crate::database::repositories::location_repository::LocationRepository;
 use crate::database::models::{LocationInput, TeamInput, UserRole};
-use crate::database::user_repository::UserRepository;
+use crate::database::repositories::user_repository::UserRepository;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ApiResponse<T> {

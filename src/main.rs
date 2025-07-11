@@ -10,12 +10,12 @@ pub mod handlers;
 use auth::AuthService;
 use config::Config;
 use database::{
-    init_database, invite_repository::InviteRepository, location_repository::LocationRepository,
-    password_reset_repository::PasswordResetTokenRepository,
-    pto_balance_repository::PtoBalanceRepository, shift_claim_repository::ShiftClaimRepository,
-    shift_repository::ShiftRepository, shift_swap_repository::ShiftSwapRepository,
-    stats_repository::StatsRepository, time_off_repository::TimeOffRepository,
-    user_repository::UserRepository,
+    init_database,
+    repositories::{
+        CompanyRepository, InviteRepository, LocationRepository, PasswordResetTokenRepository,
+        PtoBalanceRepository, ShiftClaimRepository, ShiftRepository, ShiftSwapRepository,
+        StatsRepository, TimeOffRepository, UserRepository,
+    },
 };
 
 pub struct AppState {
@@ -67,6 +67,7 @@ async fn main() -> Result<()> {
     let stats_repository = StatsRepository::new(pool.clone());
     let pto_balance_repository = PtoBalanceRepository::new(pool.clone());
     let shift_claim_repository = ShiftClaimRepository::new(pool.clone());
+    let company_repository = CompanyRepository::new(pool.clone());
     let auth_service = AuthService::new(
         user_repository.clone(),
         password_reset_repository,
@@ -84,6 +85,7 @@ async fn main() -> Result<()> {
     let stats_repo_data = web::Data::new(stats_repository);
     let pto_balance_repo_data = web::Data::new(pto_balance_repository);
     let shift_claim_repo_data = web::Data::new(shift_claim_repository);
+    let company_repo_data = web::Data::new(company_repository);
     let config_data = web::Data::new(config.clone());
 
     let server_address = config.server_address();
@@ -102,6 +104,7 @@ async fn main() -> Result<()> {
             .app_data(stats_repo_data.clone())
             .app_data(pto_balance_repo_data.clone())
             .app_data(shift_claim_repo_data.clone())
+            .app_data(company_repo_data.clone())
             .app_data(config_data.clone())
             .wrap(
                 Cors::default()
@@ -307,6 +310,31 @@ async fn main() -> Result<()> {
                             .route(
                                 "/{user_id}/accrual",
                                 web::post().to(handlers::pto_balance::process_pto_accrual),
+                            ),
+                    )
+                    .service(
+                        web::scope("/companies")
+                            .route("", web::get().to(handlers::company::get_user_companies))
+                            .route("", web::post().to(handlers::company::create_company))
+                            .route(
+                                "/primary",
+                                web::get().to(handlers::company::get_user_primary_company),
+                            )
+                            .route(
+                                "/{company_id}/employees",
+                                web::get().to(handlers::company::get_company_employees),
+                            )
+                            .route(
+                                "/{company_id}/employees",
+                                web::post().to(handlers::company::add_employee_to_company),
+                            )
+                            .route(
+                                "/{company_id}/employees/{user_id}",
+                                web::delete().to(handlers::company::remove_employee_from_company),
+                            )
+                            .route(
+                                "/{company_id}/employees/{user_id}/role",
+                                web::put().to(handlers::company::update_employee_role),
                             ),
                     ),
             )

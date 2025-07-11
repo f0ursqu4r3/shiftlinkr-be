@@ -1,18 +1,9 @@
 use anyhow::Result;
 use sqlx::{migrate::MigrateDatabase, sqlite::SqlitePool, Sqlite};
 
-pub mod invite_repository;
-pub mod location_repository;
 pub mod models;
-pub mod password_reset_repository;
-pub mod pto_balance_repository;
-pub mod shift_claim_repository;
-pub mod shift_repository;
-pub mod shift_swap_repository;
-pub mod stats_repository;
-pub mod time_off_repository;
+pub mod repositories;
 pub mod types;
-pub mod user_repository;
 
 pub async fn init_database(database_url: &str) -> Result<SqlitePool> {
     // Create database if it doesn't exist

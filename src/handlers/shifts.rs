@@ -2,8 +2,8 @@ use actix_web::{web, HttpResponse, Result};
 use serde::Deserialize;
 use chrono::{DateTime, Utc};
 
-use crate::database::shift_repository::ShiftRepository;
-use crate::database::shift_claim_repository::ShiftClaimRepository;
+use crate::database::repositories::shift_repository::ShiftRepository;
+use crate::database::repositories::shift_claim_repository::ShiftClaimRepository;
 use crate::database::models::{ShiftInput, ShiftStatus, ShiftClaimInput};
 use crate::auth::Claims;
 use crate::handlers::admin::ApiResponse;

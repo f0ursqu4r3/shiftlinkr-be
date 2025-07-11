@@ -1,5 +1,5 @@
 use be::database::models::{User, UserRole};
-use be::database::user_repository::UserRepository;
+use be::database::repositories::user_repository::UserRepository;
 use chrono::Utc;
 
 mod common;
@@ -14,7 +14,7 @@ async fn test_create_user() {
         "test@example.com".to_string(),
         "hashed_password".to_string(),
         "Test User".to_string(),
-        Some(UserRole::Employee),
+        UserRole::Employee,
     );
 
     let result = repo.create_user(&user).await;
@@ -31,7 +31,7 @@ async fn test_find_user_by_email() {
         "findme@example.com".to_string(),
         "hashed_password".to_string(),
         "Find Me".to_string(),
-        Some(UserRole::Manager),
+        UserRole::Manager,
     );
 
     repo.create_user(&user).await.unwrap();
@@ -55,7 +55,7 @@ async fn test_find_user_by_id() {
         "findbyid@example.com".to_string(),
         "hashed_password".to_string(),
         "Find By ID".to_string(),
-        Some(UserRole::Admin),
+        UserRole::Admin,
     );
 
     repo.create_user(&user).await.unwrap();
@@ -84,7 +84,7 @@ async fn test_email_exists() {
         "exists@example.com".to_string(),
         "hashed_password".to_string(),
         "Exists User".to_string(),
-        None,
+        UserRole::Employee,
     );
 
     repo.create_user(&user).await.unwrap();
@@ -105,21 +105,21 @@ async fn test_user_roles() {
         "admin@example.com".to_string(),
         "password".to_string(),
         "Admin User".to_string(),
-        Some(UserRole::Admin),
+        UserRole::Admin,
     );
 
     let manager_user = User::new(
         "manager@example.com".to_string(),
         "password".to_string(),
         "Manager User".to_string(),
-        Some(UserRole::Manager),
+        UserRole::Manager,
     );
 
     let employee_user = User::new(
         "employee@example.com".to_string(),
         "password".to_string(),
         "Employee User".to_string(),
-        Some(UserRole::Employee),
+        UserRole::Employee,
     );
 
     // Create all users
@@ -159,7 +159,7 @@ async fn test_user_creation_with_default_role() {
         "default@example.com".to_string(),
         "password".to_string(),
         "Default User".to_string(),
-        None, // No role specified
+        UserRole::Employee, // Default role
     );
 
     repo.create_user(&user).await.unwrap();
@@ -182,14 +182,14 @@ async fn test_duplicate_email_constraint() {
         "duplicate@example.com".to_string(),
         "password1".to_string(),
         "User One".to_string(),
-        Some(UserRole::Employee),
+        UserRole::Employee,
     );
 
     let user2 = User::new(
         "duplicate@example.com".to_string(),
         "password2".to_string(),
         "User Two".to_string(),
-        Some(UserRole::Manager),
+        UserRole::Manager,
     );
 
     // First user should succeed
@@ -206,7 +206,7 @@ fn test_user_model_creation() {
         "model@example.com".to_string(),
         "hashed_password".to_string(),
         "Model User".to_string(),
-        Some(UserRole::Admin),
+        UserRole::Admin,
     );
 
     assert_eq!(user.email, "model@example.com");

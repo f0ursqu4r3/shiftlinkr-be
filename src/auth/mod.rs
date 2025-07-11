@@ -10,9 +10,9 @@ use serde::{Deserialize, Serialize};
 use std::future::{ready, Ready};
 
 use crate::config::Config;
-use crate::database::models::{AuthResponse, CreateUserRequest, LoginRequest, User};
-use crate::database::password_reset_repository::PasswordResetTokenRepository;
-use crate::database::user_repository::UserRepository;
+use crate::database::models::{AuthResponse, CreateUserRequest, LoginRequest, User, UserRole};
+use crate::database::repositories::password_reset_repository::PasswordResetTokenRepository;
+use crate::database::repositories::user_repository::UserRepository;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
@@ -107,7 +107,8 @@ impl AuthService {
         let password_hash = hash(&request.password, DEFAULT_COST)?;
 
         // Create user
-        let user = User::new(request.email, password_hash, request.name, request.role);
+        let role = request.role.unwrap_or(UserRole::Employee);
+        let user = User::new(request.email, password_hash, request.name, role);
 
         // Save to database
         self.user_repository.create_user(&user).await?;

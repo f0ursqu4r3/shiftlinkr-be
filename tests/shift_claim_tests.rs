@@ -1,10 +1,10 @@
-use be::database::location_repository::LocationRepository;
+use be::database::repositories::location_repository::LocationRepository;
 use be::database::models::{
     LocationInput, ShiftClaimInput, ShiftClaimStatus, ShiftInput, User, UserRole,
 };
-use be::database::shift_claim_repository::ShiftClaimRepository;
-use be::database::shift_repository::ShiftRepository;
-use be::database::user_repository::UserRepository;
+use be::database::repositories::shift_claim_repository::ShiftClaimRepository;
+use be::database::repositories::shift_repository::ShiftRepository;
+use be::database::repositories::user_repository::UserRepository;
 use chrono::Utc;
 use sqlx::SqlitePool;
 
@@ -83,6 +83,7 @@ async fn test_shift_claim_repository(pool: SqlitePool) -> Result<(), sqlx::Error
         address: Some("123 Test St".to_string()),
         phone: Some("555-1234".to_string()),
         email: Some("test@location.com".to_string()),
+        company_id: 1, // Default company ID
     };
     let location = match location_repo.create_location(location_input).await {
         Ok(loc) => {
@@ -318,6 +319,7 @@ async fn test_shift_claim_cancel_and_reject(pool: SqlitePool) -> Result<(), sqlx
         address: Some("456 Test Ave".to_string()),
         phone: Some("555-5678".to_string()),
         email: Some("test2@location.com".to_string()),
+        company_id: 1, // Default company ID
     };
     let location = location_repo.create_location(location_input).await.unwrap();
 

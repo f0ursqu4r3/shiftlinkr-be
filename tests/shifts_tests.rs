@@ -1,5 +1,5 @@
 use actix_web::{http::StatusCode, test, web, App};
-use be::database::shift_repository::ShiftRepository;
+use be::database::repositories::shift_repository::ShiftRepository;
 use be::handlers::shifts;
 use be::AppState;
 use pretty_assertions::assert_eq;

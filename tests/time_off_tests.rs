@@ -1,5 +1,5 @@
 use actix_web::{http::StatusCode, test, web, App};
-use be::database::time_off_repository::TimeOffRepository;
+use be::database::repositories::time_off_repository::TimeOffRepository;
 use be::handlers::time_off;
 use be::AppState;
 use pretty_assertions::assert_eq;
