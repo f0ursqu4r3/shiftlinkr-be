@@ -179,6 +179,12 @@ async fn main() -> Result<()> {
                             .route(
                                 "/teams/{team_id}/members/{user_id}",
                                 web::delete().to(handlers::admin::remove_team_member),
+                            )
+                            .route("/users", web::get().to(handlers::admin::get_users))
+                            .route("/users/{id}", web::put().to(handlers::admin::update_user))
+                            .route(
+                                "/users/{id}",
+                                web::delete().to(handlers::admin::delete_user),
                             ),
                     )
                     .service(
