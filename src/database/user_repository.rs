@@ -1,6 +1,5 @@
 use crate::database::models::User;
 use anyhow::Result;
-use chrono::Utc;
 use sqlx::SqlitePool;
 
 #[derive(Clone)]
@@ -69,50 +68,6 @@ impl UserRepository {
         Ok(user)
     }
 
-    pub async fn get_all_users(&self) -> Result<Vec<User>> {
-        let users = sqlx::query_as::<_, User>(
-            r#"
-            SELECT id, email, password_hash, name, role, pto_balance_hours, sick_balance_hours, personal_balance_hours, pto_accrual_rate, hire_date, last_accrual_date, created_at, updated_at
-            FROM users
-            ORDER BY created_at DESC
-            "#,
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(users)
-    }
-
-    pub async fn update_user(&self, id: &str, name: &str, email: &str, role: &str) -> Result<()> {
-        let updated_at = Utc::now().naive_utc();
-
-        sqlx::query(
-            r#"
-            UPDATE users
-            SET name = ?, email = ?, role = ?, updated_at = ?
-            WHERE id = ?
-            "#,
-        )
-        .bind(name)
-        .bind(email)
-        .bind(role)
-        .bind(updated_at)
-        .bind(id)
-        .execute(&self.pool)
-        .await?;
-
-        Ok(())
-    }
-
-    pub async fn delete_user(&self, id: &str) -> Result<()> {
-        sqlx::query("DELETE FROM users WHERE id = ?")
-            .bind(id)
-            .execute(&self.pool)
-            .await?;
-
-        Ok(())
-    }
-
     pub async fn email_exists(&self, email: &str) -> Result<bool> {
         let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE email = ?")
             .bind(email)
@@ -123,6 +78,8 @@ impl UserRepository {
     }
 
     pub async fn update_password(&self, user_id: &str, password_hash: &str) -> Result<()> {
+        use chrono::Utc;
+
         let updated_at = Utc::now().naive_utc();
 
         sqlx::query(
