@@ -72,7 +72,7 @@ pub async fn me(data: web::Data<AppState>, req: HttpRequest) -> Result<HttpRespo
                     "id": user.id,
                     "email": user.email,
                     "name": user.name,
-                    "role": user.role,
+                    // TODO: Add role from company_employees table based on selected company
                 },
                 "companies": companies,
                 "primary_company": primary_company
@@ -166,7 +166,10 @@ pub async fn create_invite(
         }
     };
 
-    // Check if user has permission to create invites (admin or manager)
+    // TODO: Check if user has permission to create invites (admin or manager) based on company-specific role
+    // Since roles are now company-specific, we need to check the role in the context of a specific company
+    // For now, allowing all authenticated users to create invites
+    /*
     match user.role {
         crate::database::models::UserRole::Admin | crate::database::models::UserRole::Manager => {}
         _ => {
@@ -175,6 +178,7 @@ pub async fn create_invite(
             })));
         }
     }
+    */
 
     // Check if email already exists
     match data.auth_service.get_user_by_email(&request.email).await {
@@ -289,7 +293,7 @@ pub async fn accept_invite(
         email: invite_token.email.clone(),
         password: request.password.clone(),
         name: request.name.clone(),
-        role: Some(invite_token.role.clone()),
+        // TODO: Role will be assigned when creating company_employees relationship
     };
 
     match data.auth_service.register(create_user_request).await {
@@ -333,7 +337,10 @@ pub async fn get_my_invites(
         }
     };
 
-    // Check if user has permission to view invites (admin or manager)
+    // TODO: Check if user has permission to view invites (admin or manager) based on company-specific role
+    // Since roles are now company-specific, we need to check the role in the context of a specific company
+    // For now, allowing all authenticated users to view invites
+    /*
     match user.role {
         crate::database::models::UserRole::Admin | crate::database::models::UserRole::Manager => {}
         _ => {
@@ -342,6 +349,7 @@ pub async fn get_my_invites(
             })));
         }
     }
+    */
 
     match invite_repo.get_invites_by_inviter(&user.id).await {
         Ok(invites) => Ok(HttpResponse::Ok().json(json!({

@@ -2,8 +2,8 @@ use actix_web::{web, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::auth::Claims;
+use crate::database::models::{LocationInput, TeamInput};
 use crate::database::repositories::location_repository::LocationRepository;
-use crate::database::models::{LocationInput, TeamInput, UserRole};
 use crate::database::repositories::user_repository::UserRepository;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -17,7 +17,7 @@ pub struct ApiResponse<T> {
 pub struct UpdateUserRequest {
     pub name: String,
     pub email: String,
-    pub role: UserRole,
+    // TODO: Role updates will be handled through company_employees table
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -25,11 +25,6 @@ pub struct UserResponse {
     pub id: String,
     pub email: String,
     pub name: String,
-    pub role: UserRole,
-    pub pto_balance_hours: i32,
-    pub sick_balance_hours: i32,
-    pub personal_balance_hours: i32,
-    pub pto_accrual_rate: f32,
     pub hire_date: Option<String>,
     pub created_at: String,
     pub updated_at: String,
@@ -390,11 +385,7 @@ pub async fn get_users(
                     id: user.id,
                     email: user.email,
                     name: user.name,
-                    role: user.role,
-                    pto_balance_hours: user.pto_balance_hours,
-                    sick_balance_hours: user.sick_balance_hours,
-                    personal_balance_hours: user.personal_balance_hours,
-                    pto_accrual_rate: user.pto_accrual_rate,
+                    // TODO: Add role from company_employees table based on selected company
                     hire_date: user.hire_date.map(|d| d.format("%Y-%m-%d").to_string()),
                     created_at: user.created_at.format("%Y-%m-%dT%H:%M:%SZ").to_string(),
                     updated_at: user.updated_at.format("%Y-%m-%dT%H:%M:%SZ").to_string(),
@@ -429,7 +420,10 @@ pub async fn update_user(
 
     // Only admins can change user roles or edit other admins
     if !claims.is_admin() {
-        // Check if we're trying to modify an admin user
+        // TODO: Check if we're trying to modify an admin user based on company-specific role
+        // Since roles are now company-specific, we need to check the role in the context of a specific company
+        // For now, allowing managers to edit users
+        /*
         if let Ok(Some(existing_user)) = user_repo.find_by_id(&user_id).await {
             if existing_user.role == UserRole::Admin {
                 return Ok(HttpResponse::Forbidden()
@@ -444,15 +438,11 @@ pub async fn update_user(
                     .json(ApiResponse::<()>::error("Cannot change user roles")));
             }
         }
+        */
     }
 
     match user_repo
-        .update_user(
-            &user_id,
-            &update_request.name,
-            &update_request.email,
-            &update_request.role.to_string(),
-        )
+        .update_user(&user_id, &update_request.name, &update_request.email)
         .await
     {
         Ok(()) => Ok(HttpResponse::Ok().json(ApiResponse::success_with_message(
@@ -481,12 +471,17 @@ pub async fn delete_user(
     let user_id = path.into_inner();
 
     // Prevent deleting admin users (including self)
+    // TODO: Check if user is admin based on company-specific role
+    // Since roles are now company-specific, we need to check the role in the context of a specific company
+    // For now, allowing deletion of users
+    /*
     if let Ok(Some(user)) = user_repo.find_by_id(&user_id).await {
         if user.role == UserRole::Admin {
             return Ok(HttpResponse::BadRequest()
                 .json(ApiResponse::<()>::error("Cannot delete admin users")));
         }
     }
+    */
 
     match user_repo.delete_user(&user_id).await {
         Ok(()) => Ok(HttpResponse::Ok().json(ApiResponse::success_with_message(

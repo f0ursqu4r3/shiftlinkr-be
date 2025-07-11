@@ -16,21 +16,15 @@ impl UserRepository {
     pub async fn create_user(&self, user: &User) -> Result<()> {
         sqlx::query(
             r#"
-            INSERT INTO users (id, email, password_hash, name, role, pto_balance_hours, sick_balance_hours, personal_balance_hours, pto_accrual_rate, hire_date, last_accrual_date, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO users (id, email, password_hash, name, hire_date, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&user.id)
         .bind(&user.email)
         .bind(&user.password_hash)
         .bind(&user.name)
-        .bind(&user.role.to_string())
-        .bind(&user.pto_balance_hours)
-        .bind(&user.sick_balance_hours)
-        .bind(&user.personal_balance_hours)
-        .bind(&user.pto_accrual_rate)
         .bind(&user.hire_date)
-        .bind(&user.last_accrual_date)
         .bind(&user.created_at)
         .bind(&user.updated_at)
         .execute(&self.pool)
@@ -83,19 +77,18 @@ impl UserRepository {
         Ok(users)
     }
 
-    pub async fn update_user(&self, id: &str, name: &str, email: &str, role: &str) -> Result<()> {
+    pub async fn update_user(&self, id: &str, name: &str, email: &str) -> Result<()> {
         let updated_at = Utc::now().naive_utc();
 
         sqlx::query(
             r#"
             UPDATE users
-            SET name = ?, email = ?, role = ?, updated_at = ?
+            SET name = ?, email = ?, updated_at = ?
             WHERE id = ?
             "#,
         )
         .bind(name)
         .bind(email)
-        .bind(role)
         .bind(updated_at)
         .bind(id)
         .execute(&self.pool)

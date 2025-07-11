@@ -8,6 +8,7 @@ pub mod shift_repository;
 pub mod shift_swap_repository;
 pub mod stats_repository;
 pub mod time_off_repository;
+pub mod user_company_repository;
 pub mod user_repository;
 
 // Re-export all repositories for easy importing
@@ -21,4 +22,5 @@ pub use shift_repository::ShiftRepository;
 pub use shift_swap_repository::ShiftSwapRepository;
 pub use stats_repository::StatsRepository;
 pub use time_off_repository::TimeOffRepository;
+pub use user_company_repository::UserCompanyRepository;
 pub use user_repository::UserRepository;

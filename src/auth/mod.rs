@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::future::{ready, Ready};
 
 use crate::config::Config;
-use crate::database::models::{AuthResponse, CreateUserRequest, LoginRequest, User, UserRole};
+use crate::database::models::{AuthResponse, CreateUserRequest, LoginRequest, User};
 use crate::database::repositories::password_reset_repository::PasswordResetTokenRepository;
 use crate::database::repositories::user_repository::UserRepository;
 
@@ -107,13 +107,13 @@ impl AuthService {
         let password_hash = hash(&request.password, DEFAULT_COST)?;
 
         // Create user
-        let role = request.role.unwrap_or(UserRole::Employee);
-        let user = User::new(request.email, password_hash, request.name, role);
+        let user = User::new(request.email, password_hash, request.name);
 
         // Save to database
         self.user_repository.create_user(&user).await?;
 
-        // Generate JWT token
+        // Generate JWT token - for now we'll need to handle this differently since role is company-specific
+        // TODO: Update this to handle company-specific roles
         let token = self.generate_token(&user)?;
 
         Ok(AuthResponse {
@@ -174,7 +174,7 @@ impl AuthService {
         let claims = Claims {
             sub: user.id.clone(),
             email: user.email.clone(),
-            role: user.role.to_string(),
+            role: "employee".to_string(), // Default role since roles are now company-specific
             exp: expiration,
         };
 

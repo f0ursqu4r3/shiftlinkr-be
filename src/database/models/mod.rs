@@ -9,6 +9,7 @@ pub mod swap;
 pub mod team;
 pub mod time_off;
 pub mod user;
+pub mod user_company;
 
 // Re-export all models for easy importing
 pub use auth::*;
@@ -22,3 +23,4 @@ pub use swap::*;
 pub use team::*;
 pub use time_off::*;
 pub use user::*;
+pub use user_company::*;

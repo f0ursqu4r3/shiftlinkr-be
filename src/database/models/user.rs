@@ -8,13 +8,7 @@ pub struct User {
     #[serde(skip_serializing)]
     pub password_hash: String,
     pub name: String,
-    pub role: UserRole,
-    pub pto_balance_hours: i32,
-    pub sick_balance_hours: i32,
-    pub personal_balance_hours: i32,
-    pub pto_accrual_rate: f32,
     pub hire_date: Option<NaiveDateTime>,
-    pub last_accrual_date: Option<NaiveDateTime>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
 }
@@ -93,7 +87,6 @@ pub struct CreateUserRequest {
     pub email: String,
     pub password: String,
     pub name: String,
-    pub role: Option<UserRole>,
 }
 
 #[derive(Debug, Serialize)]
@@ -101,23 +94,16 @@ pub struct UserInfo {
     pub id: String,
     pub email: String,
     pub name: String,
-    pub role: UserRole,
 }
 
 impl User {
-    pub fn new(email: String, password_hash: String, name: String, role: UserRole) -> Self {
+    pub fn new(email: String, password_hash: String, name: String) -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
             email,
             password_hash,
             name,
-            role,
-            pto_balance_hours: 0,
-            sick_balance_hours: 0,
-            personal_balance_hours: 0,
-            pto_accrual_rate: 0.0,
             hire_date: None,
-            last_accrual_date: None,
             created_at: chrono::Utc::now().naive_utc(),
             updated_at: chrono::Utc::now().naive_utc(),
         }
@@ -130,7 +116,6 @@ impl From<User> for UserInfo {
             id: user.id,
             email: user.email,
             name: user.name,
-            role: user.role,
         }
     }
 }
