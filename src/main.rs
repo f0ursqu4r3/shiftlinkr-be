@@ -67,10 +67,15 @@ async fn main() -> Result<()> {
     let stats_repository = StatsRepository::new(pool.clone());
     let pto_balance_repository = PtoBalanceRepository::new(pool.clone());
     let shift_claim_repository = ShiftClaimRepository::new(pool.clone());
-    let auth_service = AuthService::new(user_repository, password_reset_repository, config.clone());
+    let auth_service = AuthService::new(
+        user_repository.clone(),
+        password_reset_repository,
+        config.clone(),
+    );
 
     // Create app state and repository data
     let app_state = web::Data::new(AppState { auth_service });
+    let user_repo_data = web::Data::new(user_repository);
     let location_repo_data = web::Data::new(location_repository);
     let shift_repo_data = web::Data::new(shift_repository);
     let invite_repo_data = web::Data::new(invite_repository);
@@ -88,6 +93,7 @@ async fn main() -> Result<()> {
     HttpServer::new(move || {
         App::new()
             .app_data(app_state.clone())
+            .app_data(user_repo_data.clone())
             .app_data(location_repo_data.clone())
             .app_data(shift_repo_data.clone())
             .app_data(invite_repo_data.clone())
