@@ -8,7 +8,6 @@ pub struct User {
     #[serde(skip_serializing)]
     pub password_hash: String,
     pub name: String,
-    pub hire_date: Option<NaiveDateTime>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
 }
@@ -103,7 +102,6 @@ impl User {
             email,
             password_hash,
             name,
-            hire_date: None,
             created_at: chrono::Utc::now().naive_utc(),
             updated_at: chrono::Utc::now().naive_utc(),
         }

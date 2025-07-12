@@ -16,15 +16,14 @@ impl UserRepository {
     pub async fn create_user(&self, user: &User) -> Result<()> {
         sqlx::query(
             r#"
-            INSERT INTO users (id, email, password_hash, name, hire_date, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO users (id, email, password_hash, name, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&user.id)
         .bind(&user.email)
         .bind(&user.password_hash)
         .bind(&user.name)
-        .bind(&user.hire_date)
         .bind(&user.created_at)
         .bind(&user.updated_at)
         .execute(&self.pool)
@@ -36,7 +35,7 @@ impl UserRepository {
     pub async fn find_by_email(&self, email: &str) -> Result<Option<User>> {
         let user = sqlx::query_as::<_, User>(
             r#"
-            SELECT id, email, password_hash, name, hire_date, created_at, updated_at
+            SELECT id, email, password_hash, name, created_at, updated_at
             FROM users
             WHERE email = ?
             "#,
@@ -51,7 +50,7 @@ impl UserRepository {
     pub async fn find_by_id(&self, id: &str) -> Result<Option<User>> {
         let user = sqlx::query_as::<_, User>(
             r#"
-            SELECT id, email, password_hash, name, hire_date, created_at, updated_at
+            SELECT id, email, password_hash, name, created_at, updated_at
             FROM users
             WHERE id = ?
             "#,
@@ -66,7 +65,7 @@ impl UserRepository {
     pub async fn get_all_users(&self) -> Result<Vec<User>> {
         let users = sqlx::query_as::<_, User>(
             r#"
-            SELECT id, email, password_hash, name, hire_date, created_at, updated_at
+            SELECT id, email, password_hash, name, created_at, updated_at
             FROM users
             ORDER BY created_at DESC
             "#,

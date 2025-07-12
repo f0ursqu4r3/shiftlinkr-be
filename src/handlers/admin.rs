@@ -25,7 +25,6 @@ pub struct UserResponse {
     pub id: String,
     pub email: String,
     pub name: String,
-    pub hire_date: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -386,7 +385,6 @@ pub async fn get_users(
                     email: user.email,
                     name: user.name,
                     // TODO: Add role from company_employees table based on selected company
-                    hire_date: user.hire_date.map(|d| d.format("%Y-%m-%d").to_string()),
                     created_at: user.created_at.format("%Y-%m-%dT%H:%M:%SZ").to_string(),
                     updated_at: user.updated_at.format("%Y-%m-%dT%H:%M:%SZ").to_string(),
                 })
