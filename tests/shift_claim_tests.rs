@@ -1,8 +1,8 @@
 use be::database::models::{LocationInput, ShiftClaimInput, ShiftClaimStatus, ShiftInput, User};
-use be::database::repositories::location_repository::LocationRepository;
-use be::database::repositories::shift_claim_repository::ShiftClaimRepository;
-use be::database::repositories::shift_repository::ShiftRepository;
-use be::database::repositories::user_repository::UserRepository;
+use be::database::repositories::location::LocationRepository;
+use be::database::repositories::shift::ShiftRepository;
+use be::database::repositories::shift_claim::ShiftClaimRepository;
+use be::database::repositories::user::UserRepository;
 use chrono::Utc;
 use sqlx::SqlitePool;
 

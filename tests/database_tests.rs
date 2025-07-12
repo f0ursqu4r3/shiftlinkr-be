@@ -1,5 +1,5 @@
 use be::database::models::User;
-use be::database::repositories::user_repository::UserRepository;
+use be::database::repositories::user::UserRepository;
 use chrono::Utc;
 
 mod common;

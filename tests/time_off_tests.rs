@@ -1,6 +1,6 @@
 use actix_web::{http::StatusCode, test, web, App};
-use be::database::repositories::company_repository::CompanyRepository;
-use be::database::repositories::time_off_repository::TimeOffRepository;
+use be::database::repositories::company::CompanyRepository;
+use be::database::repositories::time_off::TimeOffRepository;
 use be::handlers::time_off;
 use be::{ActivityLogger, ActivityRepository, AppState};
 use pretty_assertions::assert_eq;

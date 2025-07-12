@@ -2,7 +2,7 @@ use actix_web::{web, HttpResponse, Result};
 use serde::Deserialize;
 
 use crate::database::models::{PtoBalanceAdjustment, PtoBalanceUpdate};
-use crate::database::repositories::pto_balance_repository::PtoBalanceRepository;
+use crate::database::repositories::pto_balance::PtoBalanceRepository;
 use crate::handlers::admin::ApiResponse;
 use crate::services::auth::Claims;
 

@@ -3,8 +3,8 @@ use chrono::{DateTime, Utc};
 use serde::Deserialize;
 
 use crate::database::models::{ShiftClaimInput, ShiftInput, ShiftStatus};
-use crate::database::repositories::shift_claim_repository::ShiftClaimRepository;
-use crate::database::repositories::shift_repository::ShiftRepository;
+use crate::database::repositories::shift::ShiftRepository;
+use crate::database::repositories::shift_claim::ShiftClaimRepository;
 use crate::handlers::admin::ApiResponse;
 use crate::services::auth::Claims;
 

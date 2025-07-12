@@ -1,10 +1,10 @@
 use actix_web::{web, HttpResponse, Result};
 use serde::Deserialize;
 
-use crate::services::auth::Claims;
 use crate::database::models::{ShiftSwapInput, ShiftSwapStatus};
-use crate::database::repositories::shift_swap_repository::ShiftSwapRepository;
+use crate::database::repositories::shift_swap::ShiftSwapRepository;
 use crate::handlers::admin::ApiResponse;
+use crate::services::auth::Claims;
 
 #[derive(Debug, Deserialize)]
 pub struct SwapQuery {

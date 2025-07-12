@@ -203,15 +203,13 @@ async fn test_password_reset_repository_create_token() {
         "Repo Test User".to_string(),
     );
 
-    let user_repo =
-        be::database::repositories::user_repository::UserRepository::new(ctx.pool.clone());
+    let user_repo = be::database::repositories::user::UserRepository::new(ctx.pool.clone());
     user_repo.create_user(&user).await.unwrap();
 
     // Create password reset token repository
-    let reset_repo =
-        be::database::repositories::password_reset_repository::PasswordResetTokenRepository::new(
-            ctx.pool.clone(),
-        );
+    let reset_repo = be::database::repositories::password_reset::PasswordResetTokenRepository::new(
+        ctx.pool.clone(),
+    );
 
     // Create a token
     let token = reset_repo.create_token(&user.id).await.unwrap();
@@ -235,14 +233,12 @@ async fn test_password_reset_repository_find_valid_token() {
         "Find Test User".to_string(),
     );
 
-    let user_repo =
-        be::database::repositories::user_repository::UserRepository::new(ctx.pool.clone());
+    let user_repo = be::database::repositories::user::UserRepository::new(ctx.pool.clone());
     user_repo.create_user(&user).await.unwrap();
 
-    let reset_repo =
-        be::database::repositories::password_reset_repository::PasswordResetTokenRepository::new(
-            ctx.pool.clone(),
-        );
+    let reset_repo = be::database::repositories::password_reset::PasswordResetTokenRepository::new(
+        ctx.pool.clone(),
+    );
 
     // Create a token
     let created_token = reset_repo.create_token(&user.id).await.unwrap();
@@ -273,14 +269,12 @@ async fn test_password_reset_repository_mark_token_used() {
         "Mark Used User".to_string(),
     );
 
-    let user_repo =
-        be::database::repositories::user_repository::UserRepository::new(ctx.pool.clone());
+    let user_repo = be::database::repositories::user::UserRepository::new(ctx.pool.clone());
     user_repo.create_user(&user).await.unwrap();
 
-    let reset_repo =
-        be::database::repositories::password_reset_repository::PasswordResetTokenRepository::new(
-            ctx.pool.clone(),
-        );
+    let reset_repo = be::database::repositories::password_reset::PasswordResetTokenRepository::new(
+        ctx.pool.clone(),
+    );
 
     // Create a token
     let created_token = reset_repo.create_token(&user.id).await.unwrap();
@@ -309,14 +303,12 @@ async fn test_password_reset_repository_cleanup_expired() {
         "Cleanup User".to_string(),
     );
 
-    let user_repo =
-        be::database::repositories::user_repository::UserRepository::new(ctx.pool.clone());
+    let user_repo = be::database::repositories::user::UserRepository::new(ctx.pool.clone());
     user_repo.create_user(&user).await.unwrap();
 
-    let reset_repo =
-        be::database::repositories::password_reset_repository::PasswordResetTokenRepository::new(
-            ctx.pool.clone(),
-        );
+    let reset_repo = be::database::repositories::password_reset::PasswordResetTokenRepository::new(
+        ctx.pool.clone(),
+    );
 
     // Create a token
     let _token = reset_repo.create_token(&user.id).await.unwrap();
@@ -338,14 +330,12 @@ async fn test_password_reset_repository_invalidate_user_tokens() {
         "Invalidate User".to_string(),
     );
 
-    let user_repo =
-        be::database::repositories::user_repository::UserRepository::new(ctx.pool.clone());
+    let user_repo = be::database::repositories::user::UserRepository::new(ctx.pool.clone());
     user_repo.create_user(&user).await.unwrap();
 
-    let reset_repo =
-        be::database::repositories::password_reset_repository::PasswordResetTokenRepository::new(
-            ctx.pool.clone(),
-        );
+    let reset_repo = be::database::repositories::password_reset::PasswordResetTokenRepository::new(
+        ctx.pool.clone(),
+    );
 
     // Create multiple tokens
     let token1 = reset_repo.create_token(&user.id).await.unwrap();
@@ -392,8 +382,7 @@ async fn test_user_repository_update_password() {
         "Update Password User".to_string(),
     );
 
-    let user_repo =
-        be::database::repositories::user_repository::UserRepository::new(ctx.pool.clone());
+    let user_repo = be::database::repositories::user::UserRepository::new(ctx.pool.clone());
     user_repo.create_user(&user).await.unwrap();
 
     // Update password

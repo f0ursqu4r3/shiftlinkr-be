@@ -1,5 +1,5 @@
 use actix_web::{http::StatusCode, test, web, App};
-use be::database::repositories::company_repository::CompanyRepository;
+use be::database::repositories::company::CompanyRepository;
 use be::handlers::auth;
 use be::{ActivityLogger, ActivityRepository, AppState};
 use serde_json::json;

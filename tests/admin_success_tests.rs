@@ -1,6 +1,6 @@
 use actix_web::{http::StatusCode, test, web, App};
-use be::database::repositories::company_repository::CompanyRepository;
-use be::database::repositories::location_repository::LocationRepository;
+use be::database::repositories::company::CompanyRepository;
+use be::database::repositories::location::LocationRepository;
 use be::handlers::admin;
 use be::{ActivityLogger, ActivityRepository, AppState};
 use pretty_assertions::assert_eq;

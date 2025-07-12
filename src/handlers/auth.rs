@@ -6,7 +6,7 @@ use crate::database::models::{
     AcceptInviteRequest, CreateInviteRequest, CreateUserRequest, ForgotPasswordRequest,
     LoginRequest, ResetPasswordRequest,
 };
-use crate::database::repositories::invite_repository::InviteRepository;
+use crate::database::repositories::invite::InviteRepository;
 use crate::AppState;
 
 pub async fn register(

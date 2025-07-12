@@ -1,6 +1,6 @@
 use actix_web::{http::StatusCode, test, web, App};
-use be::database::repositories::company_repository::CompanyRepository;
-use be::database::repositories::shift_repository::ShiftRepository;
+use be::database::repositories::company::CompanyRepository;
+use be::database::repositories::shift::ShiftRepository;
 use be::handlers::shifts;
 use be::{ActivityLogger, ActivityRepository, AppState};
 use pretty_assertions::assert_eq;

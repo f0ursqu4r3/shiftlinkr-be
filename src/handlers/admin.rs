@@ -2,9 +2,9 @@ use actix_web::{web, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::database::models::{CompanyRole, LocationInput, TeamInput};
-use crate::database::repositories::company_repository::CompanyRepository;
-use crate::database::repositories::location_repository::LocationRepository;
-use crate::database::repositories::user_repository::UserRepository;
+use crate::database::repositories::company::CompanyRepository;
+use crate::database::repositories::location::LocationRepository;
+use crate::database::repositories::user::UserRepository;
 use crate::services::auth::Claims;
 
 #[derive(Debug, Serialize, Deserialize)]

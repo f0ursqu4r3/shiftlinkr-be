@@ -11,8 +11,8 @@ use std::future::{ready, Ready};
 
 use crate::config::Config;
 use crate::database::models::{AuthResponse, CreateUserRequest, LoginRequest, User};
-use crate::database::repositories::password_reset_repository::PasswordResetTokenRepository;
-use crate::database::repositories::user_repository::UserRepository;
+use crate::database::repositories::password_reset::PasswordResetTokenRepository;
+use crate::database::repositories::user::UserRepository;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
