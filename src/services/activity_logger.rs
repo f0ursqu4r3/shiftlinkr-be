@@ -123,4 +123,154 @@ impl ActivityLogger {
         self.repository.log_activity(request).await?;
         Ok(())
     }
+
+    /// Log location management activity
+    pub async fn log_location_activity(
+        &self,
+        company_id: i64,
+        user_id: Option<i64>,
+        location_id: i64,
+        action: &str,
+        description: String,
+        metadata: Option<HashMap<String, serde_json::Value>>,
+        req: &HttpRequest,
+    ) -> Result<(), sqlx::Error> {
+        let (ip_address, user_agent) = self.extract_client_info(req);
+
+        let request = CreateActivityRequest {
+            company_id,
+            user_id,
+            activity_type: ActivityType::LOCATION_MANAGEMENT.to_string(),
+            entity_type: EntityType::LOCATION.to_string(),
+            entity_id: location_id,
+            action: action.to_string(),
+            description,
+            metadata,
+            ip_address,
+            user_agent,
+        };
+
+        self.repository.log_activity(request).await?;
+        Ok(())
+    }
+
+    /// Log team management activity
+    pub async fn log_team_activity(
+        &self,
+        company_id: i64,
+        user_id: Option<i64>,
+        team_id: i64,
+        action: &str,
+        description: String,
+        metadata: Option<HashMap<String, serde_json::Value>>,
+        req: &HttpRequest,
+    ) -> Result<(), sqlx::Error> {
+        let (ip_address, user_agent) = self.extract_client_info(req);
+
+        let request = CreateActivityRequest {
+            company_id,
+            user_id,
+            activity_type: ActivityType::TEAM_MANAGEMENT.to_string(),
+            entity_type: EntityType::TEAM.to_string(),
+            entity_id: team_id,
+            action: action.to_string(),
+            description,
+            metadata,
+            ip_address,
+            user_agent,
+        };
+
+        self.repository.log_activity(request).await?;
+        Ok(())
+    }
+
+    /// Log shift management activity
+    pub async fn log_shift_activity(
+        &self,
+        company_id: i64,
+        user_id: Option<i64>,
+        shift_id: i64,
+        action: &str,
+        description: String,
+        metadata: Option<HashMap<String, serde_json::Value>>,
+        req: &HttpRequest,
+    ) -> Result<(), sqlx::Error> {
+        let (ip_address, user_agent) = self.extract_client_info(req);
+
+        let request = CreateActivityRequest {
+            company_id,
+            user_id,
+            activity_type: ActivityType::SHIFT_MANAGEMENT.to_string(),
+            entity_type: EntityType::SHIFT.to_string(),
+            entity_id: shift_id,
+            action: action.to_string(),
+            description,
+            metadata,
+            ip_address,
+            user_agent,
+        };
+
+        self.repository.log_activity(request).await?;
+        Ok(())
+    }
+
+    /// Log time off management activity
+    pub async fn log_time_off_activity(
+        &self,
+        company_id: i64,
+        user_id: Option<i64>,
+        time_off_id: i64,
+        action: &str,
+        description: String,
+        metadata: Option<HashMap<String, serde_json::Value>>,
+        req: &HttpRequest,
+    ) -> Result<(), sqlx::Error> {
+        let (ip_address, user_agent) = self.extract_client_info(req);
+
+        let request = CreateActivityRequest {
+            company_id,
+            user_id,
+            activity_type: ActivityType::TIME_OFF_MANAGEMENT.to_string(),
+            entity_type: EntityType::TIME_OFF.to_string(),
+            entity_id: time_off_id,
+            action: action.to_string(),
+            description,
+            metadata,
+            ip_address,
+            user_agent,
+        };
+
+        self.repository.log_activity(request).await?;
+        Ok(())
+    }
+
+    /// Log shift swap activity
+    pub async fn log_shift_swap_activity(
+        &self,
+        company_id: i64,
+        user_id: Option<i64>,
+        swap_id: i64,
+        action: &str,
+        description: String,
+        metadata: Option<HashMap<String, serde_json::Value>>,
+        req: &HttpRequest,
+    ) -> Result<(), sqlx::Error> {
+        let (ip_address, user_agent) = self.extract_client_info(req);
+
+        let request = CreateActivityRequest {
+            company_id,
+            user_id,
+            activity_type: ActivityType::SHIFT_MANAGEMENT.to_string(),
+            entity_type: EntityType::SHIFT_SWAP.to_string(),
+            entity_id: swap_id,
+            action: action.to_string(),
+            description,
+            metadata,
+            ip_address,
+            user_agent,
+        };
+
+        self.repository.log_activity(request).await?;
+        Ok(())
+    }
 }

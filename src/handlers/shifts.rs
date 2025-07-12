@@ -1,12 +1,16 @@
-use actix_web::{web, HttpResponse, Result};
+use actix_web::{web, HttpRequest, HttpResponse, Result};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
+use std::collections::HashMap;
 
 use crate::database::models::{ShiftClaimInput, ShiftInput, ShiftStatus};
+use crate::database::models::activity::{Action};
 use crate::database::repositories::shift::ShiftRepository;
 use crate::database::repositories::shift_claim::ShiftClaimRepository;
+use crate::database::repositories::company::CompanyRepository;
 use crate::handlers::admin::ApiResponse;
 use crate::services::auth::Claims;
+use crate::services::activity_logger::ActivityLogger;
 
 #[derive(Debug, Deserialize)]
 pub struct ShiftQuery {
@@ -32,7 +36,10 @@ pub struct UpdateShiftStatusRequest {
 pub async fn create_shift(
     claims: Claims,
     shift_repo: web::Data<ShiftRepository>,
+    company_repo: web::Data<CompanyRepository>,
+    activity_logger: web::Data<ActivityLogger>,
     input: web::Json<ShiftInput>,
+    req: HttpRequest,
 ) -> Result<HttpResponse> {
     // Check if user is admin or manager
     if !claims.is_admin() && !claims.is_manager() {
@@ -41,8 +48,45 @@ pub async fn create_shift(
         );
     }
 
-    match shift_repo.create_shift(input.into_inner()).await {
-        Ok(shift) => Ok(HttpResponse::Created().json(ApiResponse::success(shift))),
+    let shift_input = input.into_inner();
+    let location_id = shift_input.location_id;
+    let team_id = shift_input.team_id;
+    let start_time = shift_input.start_time;
+    let end_time = shift_input.end_time;
+
+    match shift_repo.create_shift(shift_input).await {
+        Ok(shift) => {
+            // Log shift creation activity
+            if let Ok(Some(company)) = company_repo
+                .get_primary_company_for_user(&claims.sub)
+                .await
+            {
+                let mut metadata = HashMap::new();
+                metadata.insert("location_id".to_string(), serde_json::Value::Number(serde_json::Number::from(location_id)));
+                if let Some(team_id) = team_id {
+                    metadata.insert("team_id".to_string(), serde_json::Value::Number(serde_json::Number::from(team_id)));
+                }
+                metadata.insert("start_time".to_string(), serde_json::Value::String(start_time.to_string()));
+                metadata.insert("end_time".to_string(), serde_json::Value::String(end_time.to_string()));
+                
+                if let Err(e) = activity_logger
+                    .log_shift_activity(
+                        company.id,
+                        Some(claims.sub.parse().unwrap_or(0)),
+                        shift.id,
+                        Action::CREATED,
+                        format!("Shift created for location {} from {} to {}", location_id, start_time, end_time),
+                        Some(metadata),
+                        &req,
+                    )
+                    .await
+                {
+                    log::warn!("Failed to log shift creation activity: {}", e);
+                }
+            }
+            
+            Ok(HttpResponse::Created().json(ApiResponse::success(shift)))
+        }
         Err(err) => {
             log::error!("Error creating shift: {}", err);
             Ok(HttpResponse::InternalServerError()
@@ -165,8 +209,11 @@ pub async fn update_shift(
 pub async fn assign_shift(
     claims: Claims,
     shift_repo: web::Data<ShiftRepository>,
+    company_repo: web::Data<CompanyRepository>,
+    activity_logger: web::Data<ActivityLogger>,
     path: web::Path<i64>,
     input: web::Json<AssignShiftRequest>,
+    req: HttpRequest,
 ) -> Result<HttpResponse> {
     // Check if user is admin or manager
     if !claims.is_admin() && !claims.is_manager() {
@@ -176,9 +223,40 @@ pub async fn assign_shift(
     }
 
     let shift_id = path.into_inner();
+    let assigned_user_id = input.user_id;
 
-    match shift_repo.assign_shift(shift_id, input.user_id).await {
-        Ok(Some(shift)) => Ok(HttpResponse::Ok().json(ApiResponse::success(shift))),
+    match shift_repo.assign_shift(shift_id, assigned_user_id).await {
+        Ok(Some(shift)) => {
+            // Log shift assignment activity
+            if let Ok(Some(company)) = company_repo
+                .get_primary_company_for_user(&claims.sub)
+                .await
+            {
+                let mut metadata = HashMap::new();
+                metadata.insert("assigned_user_id".to_string(), serde_json::Value::Number(serde_json::Number::from(assigned_user_id)));
+                metadata.insert("location_id".to_string(), serde_json::Value::Number(serde_json::Number::from(shift.location_id)));
+                if let Some(team_id) = shift.team_id {
+                    metadata.insert("team_id".to_string(), serde_json::Value::Number(serde_json::Number::from(team_id)));
+                }
+                
+                if let Err(e) = activity_logger
+                    .log_shift_activity(
+                        company.id,
+                        Some(claims.sub.parse().unwrap_or(0)),
+                        shift_id,
+                        Action::ASSIGNED,
+                        format!("Shift assigned to user {}", assigned_user_id),
+                        Some(metadata),
+                        &req,
+                    )
+                    .await
+                {
+                    log::warn!("Failed to log shift assignment activity: {}", e);
+                }
+            }
+            
+            Ok(HttpResponse::Ok().json(ApiResponse::success(shift)))
+        }
         Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("Shift not found"))),
         Err(err) => {
             log::error!("Error assigning shift {}: {}", shift_id, err);
@@ -191,7 +269,10 @@ pub async fn assign_shift(
 pub async fn unassign_shift(
     claims: Claims,
     shift_repo: web::Data<ShiftRepository>,
+    company_repo: web::Data<CompanyRepository>,
+    activity_logger: web::Data<ActivityLogger>,
     path: web::Path<i64>,
+    req: HttpRequest,
 ) -> Result<HttpResponse> {
     // Check if user is admin or manager
     if !claims.is_admin() && !claims.is_manager() {
@@ -202,8 +283,45 @@ pub async fn unassign_shift(
 
     let shift_id = path.into_inner();
 
+    // Get shift details before unassigning for logging
+    let previous_assignment = shift_repo.get_shift_by_id(shift_id).await.ok().flatten();
+
     match shift_repo.unassign_shift(shift_id).await {
-        Ok(Some(shift)) => Ok(HttpResponse::Ok().json(ApiResponse::success(shift))),
+        Ok(Some(shift)) => {
+            // Log shift unassignment activity
+            if let Ok(Some(company)) = company_repo
+                .get_primary_company_for_user(&claims.sub)
+                .await
+            {
+                let mut metadata = HashMap::new();
+                if let Some(prev_shift) = previous_assignment {
+                    if let Some(prev_user_id) = prev_shift.assigned_user_id {
+                        metadata.insert("previously_assigned_user_id".to_string(), serde_json::Value::Number(serde_json::Number::from(prev_user_id)));
+                    }
+                }
+                metadata.insert("location_id".to_string(), serde_json::Value::Number(serde_json::Number::from(shift.location_id)));
+                if let Some(team_id) = shift.team_id {
+                    metadata.insert("team_id".to_string(), serde_json::Value::Number(serde_json::Number::from(team_id)));
+                }
+                
+                if let Err(e) = activity_logger
+                    .log_shift_activity(
+                        company.id,
+                        Some(claims.sub.parse().unwrap_or(0)),
+                        shift_id,
+                        Action::UNASSIGNED,
+                        "Shift unassigned".to_string(),
+                        Some(metadata),
+                        &req,
+                    )
+                    .await
+                {
+                    log::warn!("Failed to log shift unassignment activity: {}", e);
+                }
+            }
+            
+            Ok(HttpResponse::Ok().json(ApiResponse::success(shift)))
+        }
         Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("Shift not found"))),
         Err(err) => {
             log::error!("Error unassigning shift {}: {}", shift_id, err);

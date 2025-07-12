@@ -1,11 +1,13 @@
-use actix_web::{web, HttpResponse, Result};
+use actix_web::{web, HttpRequest, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
-use crate::database::models::{CompanyRole, LocationInput, TeamInput};
+use crate::database::models::{Action, CompanyRole, LocationInput, TeamInput};
 use crate::database::repositories::company::CompanyRepository;
 use crate::database::repositories::location::LocationRepository;
 use crate::database::repositories::user::UserRepository;
 use crate::services::auth::Claims;
+use crate::services::ActivityLogger;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ApiResponse<T> {
@@ -68,7 +70,9 @@ pub async fn create_location(
     claims: Claims,
     location_repo: web::Data<LocationRepository>,
     company_repo: web::Data<CompanyRepository>,
+    activity_logger: web::Data<ActivityLogger>,
     input: web::Json<LocationInput>,
+    req: HttpRequest,
 ) -> Result<HttpResponse> {
     // Check if user is admin or manager for the specified company
     let company_id = input.company_id;
@@ -89,8 +93,39 @@ pub async fn create_location(
         }
     }
 
-    match location_repo.create_location(input.into_inner()).await {
-        Ok(location) => Ok(HttpResponse::Created().json(ApiResponse::success(location))),
+    let location_input = input.into_inner();
+    let location_name = location_input.name.clone();
+
+    match location_repo.create_location(location_input).await {
+        Ok(location) => {
+            // Log location creation activity
+            let mut metadata = HashMap::new();
+            metadata.insert(
+                "location_name".to_string(),
+                serde_json::Value::String(location_name),
+            );
+            metadata.insert(
+                "location_id".to_string(),
+                serde_json::Value::Number(location.id.into()),
+            );
+
+            if let Err(e) = activity_logger
+                .log_location_activity(
+                    company_id,
+                    Some(claims.sub.parse().unwrap_or(0)),
+                    location.id,
+                    Action::CREATED,
+                    format!("Location '{}' created", location.name),
+                    Some(metadata),
+                    &req,
+                )
+                .await
+            {
+                log::warn!("Failed to log location creation activity: {}", e);
+            }
+
+            Ok(HttpResponse::Created().json(ApiResponse::success(location)))
+        }
         Err(err) => {
             log::error!("Error creating location: {}", err);
             Ok(HttpResponse::InternalServerError()
@@ -219,11 +254,16 @@ pub async fn create_team(
     claims: Claims,
     location_repo: web::Data<LocationRepository>,
     company_repo: web::Data<CompanyRepository>,
+    activity_logger: web::Data<ActivityLogger>,
     input: web::Json<TeamInput>,
+    req: HttpRequest,
 ) -> Result<HttpResponse> {
     // Get the location to determine which company it belongs to
     let location_id = input.location_id;
-    match location_repo.get_location_by_id(location_id).await {
+    let team_input = input.into_inner();
+    let team_name = team_input.name.clone();
+
+    let company_id = match location_repo.get_location_by_id(location_id).await {
         Ok(Some(location)) => {
             // Check if user is admin or manager for the location's company
             match company_repo
@@ -232,6 +272,7 @@ pub async fn create_team(
             {
                 Ok(true) => {
                     // User has sufficient permissions, proceed
+                    location.company_id
                 }
                 Ok(false) => {
                     return Ok(HttpResponse::Forbidden()
@@ -253,10 +294,42 @@ pub async fn create_team(
             return Ok(HttpResponse::InternalServerError()
                 .json(ApiResponse::<()>::error("Failed to verify location")));
         }
-    }
+    };
 
-    match location_repo.create_team(input.into_inner()).await {
-        Ok(team) => Ok(HttpResponse::Created().json(ApiResponse::success(team))),
+    match location_repo.create_team(team_input).await {
+        Ok(team) => {
+            // Log team creation activity
+            let mut metadata = HashMap::new();
+            metadata.insert(
+                "team_name".to_string(),
+                serde_json::Value::String(team_name),
+            );
+            metadata.insert(
+                "team_id".to_string(),
+                serde_json::Value::Number(team.id.into()),
+            );
+            metadata.insert(
+                "location_id".to_string(),
+                serde_json::Value::Number(location_id.into()),
+            );
+
+            if let Err(e) = activity_logger
+                .log_team_activity(
+                    company_id,
+                    Some(claims.sub.parse().unwrap_or(0)),
+                    team.id,
+                    Action::CREATED,
+                    format!("Team '{}' created in location {}", team.name, location_id),
+                    Some(metadata),
+                    &req,
+                )
+                .await
+            {
+                log::warn!("Failed to log team creation activity: {}", e);
+            }
+
+            Ok(HttpResponse::Created().json(ApiResponse::success(team)))
+        }
         Err(err) => {
             log::error!("Error creating team: {}", err);
             Ok(HttpResponse::InternalServerError()

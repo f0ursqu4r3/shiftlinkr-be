@@ -1,9 +1,10 @@
 use actix_web::{web, HttpRequest, HttpResponse, Result};
 use serde_json::json;
+use std::collections::HashMap;
 
 use crate::config::Config;
 use crate::database::models::{
-    AcceptInviteRequest, CreateInviteRequest, CreateUserRequest, ForgotPasswordRequest,
+    AcceptInviteRequest, Action, CreateInviteRequest, CreateUserRequest, ForgotPasswordRequest,
     LoginRequest, ResetPasswordRequest,
 };
 use crate::database::repositories::invite::InviteRepository;
@@ -12,24 +13,159 @@ use crate::AppState;
 pub async fn register(
     data: web::Data<AppState>,
     request: web::Json<CreateUserRequest>,
+    req: HttpRequest,
 ) -> Result<HttpResponse> {
-    match data.auth_service.register(request.into_inner()).await {
-        Ok(response) => Ok(HttpResponse::Ok().json(response)),
-        Err(err) => Ok(HttpResponse::BadRequest().json(json!({
-            "error": err.to_string()
-        }))),
+    let register_request = request.into_inner();
+    let email = register_request.email.clone();
+
+    match data.auth_service.register(register_request).await {
+        Ok(response) => {
+            // Log successful registration activity
+            let user = &response.user;
+
+            // Get user's primary company for logging (or default to 1)
+            let company_id = if let Ok(Some(company)) = data
+                .company_repository
+                .get_primary_company_for_user(&user.id)
+                .await
+            {
+                company.id
+            } else {
+                1 // Default company
+            };
+
+            let mut metadata = HashMap::new();
+            metadata.insert("email".to_string(), serde_json::Value::String(email));
+            metadata.insert(
+                "name".to_string(),
+                serde_json::Value::String(user.name.clone()),
+            );
+
+            if let Err(e) = data
+                .activity_logger
+                .log_auth_activity(
+                    company_id,
+                    Some(user.id.parse().unwrap_or(0)),
+                    "register",
+                    format!("User {} registered successfully", user.email),
+                    Some(metadata),
+                    &req,
+                )
+                .await
+            {
+                log::warn!("Failed to log registration activity: {}", e);
+            }
+
+            Ok(HttpResponse::Ok().json(response))
+        }
+        Err(err) => {
+            // Log failed registration attempt
+            let mut metadata = HashMap::new();
+            metadata.insert(
+                "email".to_string(),
+                serde_json::Value::String(email.clone()),
+            );
+            metadata.insert(
+                "error".to_string(),
+                serde_json::Value::String(err.to_string()),
+            );
+
+            if let Err(e) = data
+                .activity_logger
+                .log_auth_activity(
+                    1, // Default company for failed registration attempts
+                    None,
+                    "register_failed",
+                    format!("Failed registration attempt for email: {}", email),
+                    Some(metadata),
+                    &req,
+                )
+                .await
+            {
+                log::warn!("Failed to log failed registration activity: {}", e);
+            }
+
+            Ok(HttpResponse::BadRequest().json(json!({
+                "error": err.to_string()
+            })))
+        }
     }
 }
 
 pub async fn login(
     data: web::Data<AppState>,
     request: web::Json<LoginRequest>,
+    req: HttpRequest,
 ) -> Result<HttpResponse> {
-    match data.auth_service.login(request.into_inner()).await {
-        Ok(response) => Ok(HttpResponse::Ok().json(response)),
-        Err(err) => Ok(HttpResponse::BadRequest().json(json!({
-            "error": err.to_string()
-        }))),
+    let login_request = request.into_inner();
+    let email = login_request.email.clone();
+
+    match data.auth_service.login(login_request).await {
+        Ok(response) => {
+            // Log successful login activity
+            let user = &response.user;
+
+            // Get user's primary company for logging
+            if let Ok(Some(company)) = data
+                .company_repository
+                .get_primary_company_for_user(&user.id)
+                .await
+            {
+                let mut metadata = HashMap::new();
+                metadata.insert("email".to_string(), serde_json::Value::String(email));
+                metadata.insert("success".to_string(), serde_json::Value::Bool(true));
+
+                if let Err(e) = data
+                    .activity_logger
+                    .log_auth_activity(
+                        company.id,
+                        Some(user.id.parse().unwrap_or(0)),
+                        Action::LOGIN,
+                        format!("User {} logged in successfully", user.email),
+                        Some(metadata),
+                        &req,
+                    )
+                    .await
+                {
+                    log::warn!("Failed to log login activity: {}", e);
+                }
+            }
+
+            Ok(HttpResponse::Ok().json(response))
+        }
+        Err(err) => {
+            // Log failed login attempt
+            let mut metadata = HashMap::new();
+            metadata.insert(
+                "email".to_string(),
+                serde_json::Value::String(email.clone()),
+            );
+            metadata.insert("success".to_string(), serde_json::Value::Bool(false));
+            metadata.insert(
+                "error".to_string(),
+                serde_json::Value::String(err.to_string()),
+            );
+
+            // For failed logins, we'll use company_id = 1 (default company) since we don't know which company
+            if let Err(e) = data
+                .activity_logger
+                .log_auth_activity(
+                    1,    // Default company for failed login attempts
+                    None, // No user_id for failed attempts
+                    "login_failed",
+                    format!("Failed login attempt for email: {}", email),
+                    Some(metadata),
+                    &req,
+                )
+                .await
+            {
+                log::warn!("Failed to log failed login activity: {}", e);
+            }
+
+            Ok(HttpResponse::BadRequest().json(json!({
+                "error": err.to_string()
+            })))
+        }
     }
 }
 
