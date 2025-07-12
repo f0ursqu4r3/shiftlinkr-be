@@ -2,7 +2,7 @@ use actix_web::{http::StatusCode, test, web, App};
 use be::database::repositories::company_repository::CompanyRepository;
 use be::database::repositories::location_repository::LocationRepository;
 use be::handlers::admin;
-use be::AppState;
+use be::{ActivityLogger, ActivityRepository, AppState};
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use serial_test::serial;
@@ -175,6 +175,8 @@ async fn test_team_create_success() {
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service,
         company_repository: CompanyRepository::new(ctx.pool.clone()),
+        activity_repository: ActivityRepository::new(ctx.pool.clone()),
+        activity_logger: ActivityLogger::new(ActivityRepository::new(ctx.pool.clone())),
     });
     let location_repo_data = web::Data::new(LocationRepository::new(ctx.pool.clone()));
     let config_data = web::Data::new(ctx.config);

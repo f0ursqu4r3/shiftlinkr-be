@@ -2,7 +2,7 @@ use actix_web::{web, HttpResponse, Result};
 use chrono::NaiveDateTime;
 use serde::Deserialize;
 
-use crate::auth::Claims;
+use crate::services::auth::Claims;
 use crate::database::repositories::stats_repository::StatsRepository;
 use crate::handlers::admin::ApiResponse;
 

@@ -1,7 +1,7 @@
 use actix_web::{http::StatusCode, test, web, App};
 use be::database::repositories::company_repository::CompanyRepository;
 use be::handlers::swaps;
-use be::AppState;
+use be::{ActivityLogger, ActivityRepository, AppState};
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use serial_test::serial;
@@ -16,6 +16,8 @@ async fn setup_test_app() -> (web::Data<AppState>, web::Data<be::Config>) {
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service,
         company_repository: CompanyRepository::new(ctx.pool.clone()),
+        activity_repository: ActivityRepository::new(ctx.pool.clone()),
+        activity_logger: ActivityLogger::new(ActivityRepository::new(ctx.pool.clone())),
     });
     let config_data = web::Data::new(ctx.config);
 

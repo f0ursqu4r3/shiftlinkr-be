@@ -1,7 +1,7 @@
 use actix_web::{http::StatusCode, test, web, App};
 use be::database::repositories::company_repository::CompanyRepository;
 use be::handlers::auth;
-use be::AppState;
+use be::{ActivityLogger, ActivityRepository, AppState};
 use serde_json::json;
 
 mod common;
@@ -14,6 +14,8 @@ async fn test_register_endpoint() {
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service,
         company_repository: CompanyRepository::new(ctx.pool.clone()),
+        activity_repository: ActivityRepository::new(ctx.pool.clone()),
+        activity_logger: ActivityLogger::new(ActivityRepository::new(ctx.pool.clone())),
     });
     let config_data = web::Data::new(ctx.config);
 
@@ -61,6 +63,8 @@ async fn test_login_endpoint() {
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service,
         company_repository: CompanyRepository::new(ctx.pool.clone()),
+        activity_repository: ActivityRepository::new(ctx.pool.clone()),
+        activity_logger: ActivityLogger::new(ActivityRepository::new(ctx.pool.clone())),
     });
     let config_data = web::Data::new(ctx.config);
 
@@ -121,6 +125,8 @@ async fn test_me_endpoint() {
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service,
         company_repository: CompanyRepository::new(ctx.pool.clone()),
+        activity_repository: ActivityRepository::new(ctx.pool.clone()),
+        activity_logger: ActivityLogger::new(ActivityRepository::new(ctx.pool.clone())),
     });
     let config_data = web::Data::new(ctx.config);
 
@@ -177,6 +183,8 @@ async fn test_me_endpoint_without_token() {
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service,
         company_repository: CompanyRepository::new(ctx.pool.clone()),
+        activity_repository: ActivityRepository::new(ctx.pool.clone()),
+        activity_logger: ActivityLogger::new(ActivityRepository::new(ctx.pool.clone())),
     });
     let config_data = web::Data::new(ctx.config);
 
@@ -215,6 +223,8 @@ async fn test_register_duplicate_email() {
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service,
         company_repository: CompanyRepository::new(ctx.pool.clone()),
+        activity_repository: ActivityRepository::new(ctx.pool.clone()),
+        activity_logger: ActivityLogger::new(ActivityRepository::new(ctx.pool.clone())),
     });
     let config_data = web::Data::new(ctx.config);
 
@@ -271,6 +281,8 @@ async fn test_login_wrong_password() {
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service,
         company_repository: CompanyRepository::new(ctx.pool.clone()),
+        activity_repository: ActivityRepository::new(ctx.pool.clone()),
+        activity_logger: ActivityLogger::new(ActivityRepository::new(ctx.pool.clone())),
     });
     let config_data = web::Data::new(ctx.config);
 
@@ -331,6 +343,8 @@ async fn test_forgot_password_endpoint() {
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service,
         company_repository: CompanyRepository::new(ctx.pool.clone()),
+        activity_repository: ActivityRepository::new(ctx.pool.clone()),
+        activity_logger: ActivityLogger::new(ActivityRepository::new(ctx.pool.clone())),
     });
     let config_data = web::Data::new(ctx.config);
 
@@ -392,6 +406,8 @@ async fn test_forgot_password_nonexistent_email() {
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service,
         company_repository: CompanyRepository::new(ctx.pool.clone()),
+        activity_repository: ActivityRepository::new(ctx.pool.clone()),
+        activity_logger: ActivityLogger::new(ActivityRepository::new(ctx.pool.clone())),
     });
     let config_data = web::Data::new(ctx.config);
 
@@ -436,6 +452,8 @@ async fn test_reset_password_invalid_token() {
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service,
         company_repository: CompanyRepository::new(ctx.pool.clone()),
+        activity_repository: ActivityRepository::new(ctx.pool.clone()),
+        activity_logger: ActivityLogger::new(ActivityRepository::new(ctx.pool.clone())),
     });
     let config_data = web::Data::new(ctx.config);
 
@@ -477,6 +495,8 @@ async fn test_complete_password_reset_flow() {
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service.clone(),
         company_repository: CompanyRepository::new(ctx.pool.clone()),
+        activity_repository: ActivityRepository::new(ctx.pool.clone()),
+        activity_logger: ActivityLogger::new(ActivityRepository::new(ctx.pool.clone())),
     });
     let config_data = web::Data::new(ctx.config);
 

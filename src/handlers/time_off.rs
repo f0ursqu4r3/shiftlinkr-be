@@ -2,11 +2,11 @@ use actix_web::{web, HttpResponse, Result};
 use chrono::NaiveDateTime;
 use serde::Deserialize;
 
-use crate::auth::Claims;
 use crate::database::models::{PtoBalanceType, TimeOffRequestInput, TimeOffStatus, TimeOffType};
-use crate::database::repositories::time_off_repository::TimeOffRepository;
 use crate::database::repositories::pto_balance_repository::PtoBalanceRepository;
+use crate::database::repositories::time_off_repository::TimeOffRepository;
 use crate::handlers::admin::ApiResponse;
+use crate::services::auth::Claims;
 
 #[derive(Debug, Deserialize)]
 pub struct TimeOffQuery {
@@ -285,8 +285,9 @@ pub async fn approve_time_off_request(
     let user_balance = match pto_repo.get_balance(&time_off_request.user_id).await {
         Ok(Some(balance)) => balance,
         Ok(None) => {
-            return Ok(HttpResponse::BadRequest()
-                .json(ApiResponse::<()>::error("User balance not found")));
+            return Ok(
+                HttpResponse::BadRequest().json(ApiResponse::<()>::error("User balance not found"))
+            );
         }
         Err(err) => {
             log::error!("Error fetching user balance: {}", err);
@@ -302,9 +303,12 @@ pub async fn approve_time_off_request(
     };
 
     if available_balance < hours_needed {
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-            &format!("Insufficient balance: {} hours needed, {} available", hours_needed, available_balance),
-        )));
+        return Ok(
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(&format!(
+                "Insufficient balance: {} hours needed, {} available",
+                hours_needed, available_balance
+            ))),
+        );
     }
 
     // Approve the request
@@ -314,22 +318,32 @@ pub async fn approve_time_off_request(
     {
         Ok(approved_request) => {
             // Deduct PTO balance
-            match pto_repo.use_balance_for_time_off(
-                &time_off_request.user_id,
-                request_id,
-                balance_type,
-                hours_needed,
-            ).await {
+            match pto_repo
+                .use_balance_for_time_off(
+                    &time_off_request.user_id,
+                    request_id,
+                    balance_type,
+                    hours_needed,
+                )
+                .await
+            {
                 Ok(_) => {
-                    log::info!("PTO balance deducted for user {} (request {}): {} hours", 
-                        time_off_request.user_id, request_id, hours_needed);
+                    log::info!(
+                        "PTO balance deducted for user {} (request {}): {} hours",
+                        time_off_request.user_id,
+                        request_id,
+                        hours_needed
+                    );
                     Ok(HttpResponse::Ok().json(ApiResponse::success(approved_request)))
                 }
                 Err(err) => {
                     log::error!("Error deducting PTO balance: {}", err);
                     // TODO: Consider rolling back the approval if balance deduction fails
-                    Ok(HttpResponse::InternalServerError()
-                        .json(ApiResponse::<()>::error("Request approved but balance deduction failed")))
+                    Ok(
+                        HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                            "Request approved but balance deduction failed",
+                        )),
+                    )
                 }
             }
         }

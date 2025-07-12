@@ -1,10 +1,10 @@
 use actix_web::{web, HttpResponse, Result};
 use serde::Deserialize;
 
-use crate::auth::Claims;
 use crate::database::models::{PtoBalanceAdjustment, PtoBalanceUpdate};
 use crate::database::repositories::pto_balance_repository::PtoBalanceRepository;
 use crate::handlers::admin::ApiResponse;
+use crate::services::auth::Claims;
 
 #[derive(Debug, Deserialize)]
 pub struct BalanceQuery {
@@ -138,9 +138,11 @@ pub async fn process_pto_accrual(
 
     match repo.process_accrual(&user_id).await {
         Ok(Some(history)) => Ok(HttpResponse::Created().json(ApiResponse::success(history))),
-        Ok(None) => Ok(HttpResponse::Ok().json(ApiResponse::<()>::success_with_message(
-            "No accrual processed",
-        ))),
+        Ok(None) => Ok(
+            HttpResponse::Ok().json(ApiResponse::<()>::success_with_message(
+                "No accrual processed",
+            )),
+        ),
         Err(err) => {
             log::error!("Error processing PTO accrual: {}", err);
             Ok(HttpResponse::InternalServerError()

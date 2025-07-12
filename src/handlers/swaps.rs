@@ -1,7 +1,7 @@
 use actix_web::{web, HttpResponse, Result};
 use serde::Deserialize;
 
-use crate::auth::Claims;
+use crate::services::auth::Claims;
 use crate::database::models::{ShiftSwapInput, ShiftSwapStatus};
 use crate::database::repositories::shift_swap_repository::ShiftSwapRepository;
 use crate::handlers::admin::ApiResponse;

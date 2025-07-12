@@ -2,26 +2,17 @@ use actix_cors::Cors;
 use actix_web::{get, middleware::Logger, web, App, HttpResponse, HttpServer, Responder};
 use anyhow::Result;
 
-pub mod auth;
-pub mod config;
-pub mod database;
-pub mod handlers;
-
-use auth::AuthService;
-use config::Config;
-use database::{
+use be::database::{
     init_database,
     repositories::{
-        CompanyRepository, InviteRepository, LocationRepository, PasswordResetTokenRepository,
-        PtoBalanceRepository, ShiftClaimRepository, ShiftRepository, ShiftSwapRepository,
-        StatsRepository, TimeOffRepository, UserRepository,
+        ActivityRepository, CompanyRepository, InviteRepository, LocationRepository,
+        PasswordResetTokenRepository, PtoBalanceRepository, ShiftClaimRepository, ShiftRepository,
+        ShiftSwapRepository, StatsRepository, TimeOffRepository, UserRepository,
     },
 };
-
-pub struct AppState {
-    pub auth_service: AuthService,
-    pub company_repository: CompanyRepository,
-}
+use be::handlers::{admin, auth, company, pto_balance, shifts, stats, swaps, time_off};
+use be::services::ActivityLogger;
+use be::{AppState, AuthService, Config};
 
 #[get("/")]
 async fn hello() -> impl Responder {
@@ -76,9 +67,14 @@ async fn main() -> Result<()> {
     );
 
     // Create app state and repository data
+    let activity_repository = ActivityRepository::new(pool.clone());
+    let activity_logger = ActivityLogger::new(activity_repository.clone());
+
     let app_state = web::Data::new(AppState {
         auth_service,
         company_repository: company_repository.clone(),
+        activity_repository,
+        activity_logger,
     });
     let user_repo_data = web::Data::new(user_repository);
     let location_repo_data = web::Data::new(location_repository);
@@ -129,216 +125,134 @@ async fn main() -> Result<()> {
                 web::scope("/api/v1")
                     .service(
                         web::scope("/auth")
-                            .route("/register", web::post().to(handlers::auth::register))
-                            .route("/login", web::post().to(handlers::auth::login))
-                            .route("/me", web::get().to(handlers::auth::me))
-                            .route(
-                                "/forgot-password",
-                                web::post().to(handlers::auth::forgot_password),
-                            )
-                            .route(
-                                "/reset-password",
-                                web::post().to(handlers::auth::reset_password),
-                            )
-                            .route("/invite", web::post().to(handlers::auth::create_invite))
-                            .route("/invite/{token}", web::get().to(handlers::auth::get_invite))
-                            .route(
-                                "/invite/accept",
-                                web::post().to(handlers::auth::accept_invite),
-                            )
-                            .route("/invites", web::get().to(handlers::auth::get_my_invites)),
+                            .route("/register", web::post().to(auth::register))
+                            .route("/login", web::post().to(auth::login))
+                            .route("/me", web::get().to(auth::me))
+                            .route("/forgot-password", web::post().to(auth::forgot_password))
+                            .route("/reset-password", web::post().to(auth::reset_password))
+                            .route("/invite", web::post().to(auth::create_invite))
+                            .route("/invite/{token}", web::get().to(auth::get_invite))
+                            .route("/invite/accept", web::post().to(auth::accept_invite))
+                            .route("/invites", web::get().to(auth::get_my_invites)),
                     )
                     .service(
                         web::scope("/admin")
-                            .route(
-                                "/locations",
-                                web::post().to(handlers::admin::create_location),
-                            )
-                            .route("/locations", web::get().to(handlers::admin::get_locations))
-                            .route(
-                                "/locations/{id}",
-                                web::get().to(handlers::admin::get_location),
-                            )
-                            .route(
-                                "/locations/{id}",
-                                web::put().to(handlers::admin::update_location),
-                            )
-                            .route(
-                                "/locations/{id}",
-                                web::delete().to(handlers::admin::delete_location),
-                            )
-                            .route("/teams", web::post().to(handlers::admin::create_team))
-                            .route("/teams", web::get().to(handlers::admin::get_teams))
-                            .route("/teams/{id}", web::get().to(handlers::admin::get_team))
-                            .route("/teams/{id}", web::put().to(handlers::admin::update_team))
-                            .route(
-                                "/teams/{id}",
-                                web::delete().to(handlers::admin::delete_team),
-                            )
+                            .route("/locations", web::post().to(admin::create_location))
+                            .route("/locations", web::get().to(admin::get_locations))
+                            .route("/locations/{id}", web::get().to(admin::get_location))
+                            .route("/locations/{id}", web::put().to(admin::update_location))
+                            .route("/locations/{id}", web::delete().to(admin::delete_location))
+                            .route("/teams", web::post().to(admin::create_team))
+                            .route("/teams", web::get().to(admin::get_teams))
+                            .route("/teams/{id}", web::get().to(admin::get_team))
+                            .route("/teams/{id}", web::put().to(admin::update_team))
+                            .route("/teams/{id}", web::delete().to(admin::delete_team))
                             .route(
                                 "/teams/{team_id}/members/{user_id}",
-                                web::post().to(handlers::admin::add_team_member),
+                                web::post().to(admin::add_team_member),
                             )
                             .route(
                                 "/teams/{team_id}/members",
-                                web::get().to(handlers::admin::get_team_members),
+                                web::get().to(admin::get_team_members),
                             )
                             .route(
                                 "/teams/{team_id}/members/{user_id}",
-                                web::delete().to(handlers::admin::remove_team_member),
+                                web::delete().to(admin::remove_team_member),
                             )
-                            .route("/users", web::get().to(handlers::admin::get_users))
-                            .route("/users/{id}", web::put().to(handlers::admin::update_user))
-                            .route(
-                                "/users/{id}",
-                                web::delete().to(handlers::admin::delete_user),
-                            ),
+                            .route("/users", web::get().to(admin::get_users))
+                            .route("/users/{id}", web::put().to(admin::update_user))
+                            .route("/users/{id}", web::delete().to(admin::delete_user)),
                     )
                     .service(
                         web::scope("/shifts")
-                            .route("", web::post().to(handlers::shifts::create_shift))
-                            .route("", web::get().to(handlers::shifts::get_shifts))
-                            .route("/{id}", web::get().to(handlers::shifts::get_shift))
-                            .route("/{id}", web::put().to(handlers::shifts::update_shift))
-                            .route("/{id}", web::delete().to(handlers::shifts::delete_shift))
-                            .route(
-                                "/{id}/assign",
-                                web::post().to(handlers::shifts::assign_shift),
-                            )
-                            .route(
-                                "/{id}/unassign",
-                                web::post().to(handlers::shifts::unassign_shift),
-                            )
-                            .route(
-                                "/{id}/status",
-                                web::post().to(handlers::shifts::update_shift_status),
-                            )
-                            .route("/{id}/claim", web::post().to(handlers::shifts::claim_shift))
-                            .route(
-                                "/{id}/claims",
-                                web::get().to(handlers::shifts::get_shift_claims),
-                            ),
+                            .route("", web::post().to(shifts::create_shift))
+                            .route("", web::get().to(shifts::get_shifts))
+                            .route("/{id}", web::get().to(shifts::get_shift))
+                            .route("/{id}", web::put().to(shifts::update_shift))
+                            .route("/{id}", web::delete().to(shifts::delete_shift))
+                            .route("/{id}/assign", web::post().to(shifts::assign_shift))
+                            .route("/{id}/unassign", web::post().to(shifts::unassign_shift))
+                            .route("/{id}/status", web::post().to(shifts::update_shift_status))
+                            .route("/{id}/claim", web::post().to(shifts::claim_shift))
+                            .route("/{id}/claims", web::get().to(shifts::get_shift_claims)),
                     )
                     // Shift claims management
                     .service(
                         web::scope("/shift-claims")
-                            .route("", web::get().to(handlers::shifts::get_pending_claims))
-                            .route("/my", web::get().to(handlers::shifts::get_my_claims))
-                            .route(
-                                "/{id}/approve",
-                                web::post().to(handlers::shifts::approve_shift_claim),
-                            )
-                            .route(
-                                "/{id}/reject",
-                                web::post().to(handlers::shifts::reject_shift_claim),
-                            )
-                            .route(
-                                "/{id}/cancel",
-                                web::post().to(handlers::shifts::cancel_shift_claim),
-                            ),
+                            .route("", web::get().to(shifts::get_pending_claims))
+                            .route("/my", web::get().to(shifts::get_my_claims))
+                            .route("/{id}/approve", web::post().to(shifts::approve_shift_claim))
+                            .route("/{id}/reject", web::post().to(shifts::reject_shift_claim))
+                            .route("/{id}/cancel", web::post().to(shifts::cancel_shift_claim)),
                     )
                     .service(
                         web::scope("/time-off")
-                            .route(
-                                "",
-                                web::post().to(handlers::time_off::create_time_off_request),
-                            )
-                            .route("", web::get().to(handlers::time_off::get_time_off_requests))
-                            .route(
-                                "/{id}",
-                                web::get().to(handlers::time_off::get_time_off_request),
-                            )
-                            .route(
-                                "/{id}",
-                                web::put().to(handlers::time_off::update_time_off_request),
-                            )
-                            .route(
-                                "/{id}",
-                                web::delete().to(handlers::time_off::delete_time_off_request),
-                            )
+                            .route("", web::post().to(time_off::create_time_off_request))
+                            .route("", web::get().to(time_off::get_time_off_requests))
+                            .route("/{id}", web::get().to(time_off::get_time_off_request))
+                            .route("/{id}", web::put().to(time_off::update_time_off_request))
+                            .route("/{id}", web::delete().to(time_off::delete_time_off_request))
                             .route(
                                 "/{id}/approve",
-                                web::post()
-                                    .to(handlers::time_off::approve_time_off_request_endpoint),
+                                web::post().to(time_off::approve_time_off_request_endpoint),
                             )
                             .route(
                                 "/{id}/deny",
-                                web::post().to(handlers::time_off::deny_time_off_request),
+                                web::post().to(time_off::deny_time_off_request),
                             ),
                     )
                     .service(
                         web::scope("/swaps")
-                            .route("", web::post().to(handlers::swaps::create_swap_request))
-                            .route("", web::get().to(handlers::swaps::get_swap_requests))
-                            .route("/{id}", web::get().to(handlers::swaps::get_swap_request))
-                            .route(
-                                "/{id}/respond",
-                                web::post().to(handlers::swaps::respond_to_swap),
-                            )
-                            .route(
-                                "/{id}/approve",
-                                web::post().to(handlers::swaps::approve_swap_request),
-                            )
-                            .route(
-                                "/{id}/deny",
-                                web::post().to(handlers::swaps::deny_swap_request),
-                            ),
+                            .route("", web::post().to(swaps::create_swap_request))
+                            .route("", web::get().to(swaps::get_swap_requests))
+                            .route("/{id}", web::get().to(swaps::get_swap_request))
+                            .route("/{id}/respond", web::post().to(swaps::respond_to_swap))
+                            .route("/{id}/approve", web::post().to(swaps::approve_swap_request))
+                            .route("/{id}/deny", web::post().to(swaps::deny_swap_request)),
                     )
                     .service(
                         web::scope("/stats")
-                            .route(
-                                "/dashboard",
-                                web::get().to(handlers::stats::get_dashboard_stats),
-                            )
-                            .route("/shifts", web::get().to(handlers::stats::get_shift_stats))
-                            .route(
-                                "/time-off",
-                                web::get().to(handlers::stats::get_time_off_stats),
-                            ),
+                            .route("/dashboard", web::get().to(stats::get_dashboard_stats))
+                            .route("/shifts", web::get().to(stats::get_shift_stats))
+                            .route("/time-off", web::get().to(stats::get_time_off_stats)),
                     )
                     .service(
                         web::scope("/pto-balance")
-                            .route("", web::get().to(handlers::pto_balance::get_pto_balance))
-                            .route(
-                                "/{user_id}",
-                                web::put().to(handlers::pto_balance::update_pto_balance),
-                            )
+                            .route("", web::get().to(pto_balance::get_pto_balance))
+                            .route("/{user_id}", web::put().to(pto_balance::update_pto_balance))
                             .route(
                                 "/{user_id}/adjust",
-                                web::post().to(handlers::pto_balance::adjust_pto_balance),
+                                web::post().to(pto_balance::adjust_pto_balance),
                             )
                             .route(
                                 "/{user_id}/history",
-                                web::get().to(handlers::pto_balance::get_pto_balance_history),
+                                web::get().to(pto_balance::get_pto_balance_history),
                             )
                             .route(
                                 "/{user_id}/accrual",
-                                web::post().to(handlers::pto_balance::process_pto_accrual),
+                                web::post().to(pto_balance::process_pto_accrual),
                             ),
                     )
                     .service(
                         web::scope("/companies")
-                            .route("", web::get().to(handlers::company::get_user_companies))
-                            .route("", web::post().to(handlers::company::create_company))
+                            .route("", web::get().to(company::get_user_companies))
+                            .route("", web::post().to(company::create_company))
+                            .route("/primary", web::get().to(company::get_user_primary_company))
                             .route(
-                                "/primary",
-                                web::get().to(handlers::company::get_user_primary_company),
+                                "/{company_id}/employees",
+                                web::get().to(company::get_company_employees),
                             )
                             .route(
                                 "/{company_id}/employees",
-                                web::get().to(handlers::company::get_company_employees),
-                            )
-                            .route(
-                                "/{company_id}/employees",
-                                web::post().to(handlers::company::add_employee_to_company),
+                                web::post().to(company::add_employee_to_company),
                             )
                             .route(
                                 "/{company_id}/employees/{user_id}",
-                                web::delete().to(handlers::company::remove_employee_from_company),
+                                web::delete().to(company::remove_employee_from_company),
                             )
                             .route(
                                 "/{company_id}/employees/{user_id}/role",
-                                web::put().to(handlers::company::update_employee_role),
+                                web::put().to(company::update_employee_role),
                             ),
                     ),
             )

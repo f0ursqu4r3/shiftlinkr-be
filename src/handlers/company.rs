@@ -1,8 +1,8 @@
-use crate::auth::Claims;
 use crate::database::models::{
     AddEmployeeToCompanyRequest, CompanyInfo, CompanyRole, CreateCompanyRequest,
 };
 use crate::database::repositories::company_repository::CompanyRepository;
+use crate::services::auth::Claims;
 use actix_web::{
     web::{Data, Json, Path},
     HttpResponse, Result,

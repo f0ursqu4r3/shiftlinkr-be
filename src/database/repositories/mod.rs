@@ -1,3 +1,4 @@
+pub mod activity;
 pub mod company_repository;
 pub mod invite_repository;
 pub mod location_repository;
@@ -12,6 +13,7 @@ pub mod user_company_repository;
 pub mod user_repository;
 
 // Re-export all repositories for easy importing
+pub use activity::ActivityRepository;
 pub use company_repository::CompanyRepository;
 pub use invite_repository::InviteRepository;
 pub use location_repository::LocationRepository;

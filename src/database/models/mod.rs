@@ -1,3 +1,4 @@
+pub mod activity;
 pub mod auth;
 pub mod company;
 pub mod invite;
@@ -12,6 +13,7 @@ pub mod user;
 pub mod user_company;
 
 // Re-export all models for easy importing
+pub use activity::*;
 pub use auth::*;
 pub use company::*;
 pub use invite::*;
