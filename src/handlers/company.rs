@@ -1,12 +1,15 @@
+use crate::database::models::activity::Action;
 use crate::database::models::{
     AddEmployeeToCompanyRequest, CompanyInfo, CompanyRole, CreateCompanyRequest,
 };
 use crate::database::repositories::company::CompanyRepository;
+use crate::services::activity_logger::ActivityLogger;
 use crate::services::auth::Claims;
 use actix_web::{
     web::{Data, Json, Path},
-    HttpResponse, Result,
+    HttpRequest, HttpResponse, Result,
 };
+use std::collections::HashMap;
 
 pub async fn get_user_companies(
     claims: Claims,
@@ -31,8 +34,12 @@ pub async fn get_user_primary_company(
 pub async fn create_company(
     claims: Claims,
     company_repo: Data<CompanyRepository>,
+    activity_logger: Data<ActivityLogger>,
     request: Json<CreateCompanyRequest>,
+    req: HttpRequest,
 ) -> Result<HttpResponse> {
+    let company_name = request.name.clone();
+
     // Create the company
     let company = match company_repo.create_company(&request).await {
         Ok(company) => company,
@@ -52,6 +59,38 @@ pub async fn create_company(
         .await
     {
         Ok(_) => {
+            // Log company creation activity
+            let mut metadata = HashMap::new();
+            metadata.insert(
+                "company_name".to_string(),
+                serde_json::Value::String(company_name.clone()),
+            );
+            metadata.insert(
+                "creator_user_id".to_string(),
+                serde_json::Value::String(claims.sub.clone()),
+            );
+            metadata.insert(
+                "creator_role".to_string(),
+                serde_json::Value::String("Admin".to_string()),
+            );
+
+            if let Err(e) = activity_logger
+                .log_activity(
+                    company.id,
+                    Some(claims.sub.parse().unwrap_or(0)),
+                    "company_management".to_string(),
+                    "company".to_string(),
+                    company.id,
+                    Action::CREATED.to_string(),
+                    format!("Company '{}' created by user {}", company_name, claims.sub),
+                    Some(metadata),
+                    &req,
+                )
+                .await
+            {
+                log::warn!("Failed to log company creation activity: {}", e);
+            }
+
             // Return the company info with the user's role
             Ok(HttpResponse::Created().json(CompanyInfo {
                 id: company.id,

@@ -3,14 +3,14 @@ use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use std::collections::HashMap;
 
+use crate::database::models::activity::Action;
 use crate::database::models::{ShiftClaimInput, ShiftInput, ShiftStatus};
-use crate::database::models::activity::{Action};
+use crate::database::repositories::company::CompanyRepository;
 use crate::database::repositories::shift::ShiftRepository;
 use crate::database::repositories::shift_claim::ShiftClaimRepository;
-use crate::database::repositories::company::CompanyRepository;
 use crate::handlers::admin::ApiResponse;
-use crate::services::auth::Claims;
 use crate::services::activity_logger::ActivityLogger;
+use crate::services::auth::Claims;
 
 #[derive(Debug, Deserialize)]
 pub struct ShiftQuery {
@@ -57,25 +57,38 @@ pub async fn create_shift(
     match shift_repo.create_shift(shift_input).await {
         Ok(shift) => {
             // Log shift creation activity
-            if let Ok(Some(company)) = company_repo
-                .get_primary_company_for_user(&claims.sub)
-                .await
+            if let Ok(Some(company)) = company_repo.get_primary_company_for_user(&claims.sub).await
             {
                 let mut metadata = HashMap::new();
-                metadata.insert("location_id".to_string(), serde_json::Value::Number(serde_json::Number::from(location_id)));
+                metadata.insert(
+                    "location_id".to_string(),
+                    serde_json::Value::Number(serde_json::Number::from(location_id)),
+                );
                 if let Some(team_id) = team_id {
-                    metadata.insert("team_id".to_string(), serde_json::Value::Number(serde_json::Number::from(team_id)));
+                    metadata.insert(
+                        "team_id".to_string(),
+                        serde_json::Value::Number(serde_json::Number::from(team_id)),
+                    );
                 }
-                metadata.insert("start_time".to_string(), serde_json::Value::String(start_time.to_string()));
-                metadata.insert("end_time".to_string(), serde_json::Value::String(end_time.to_string()));
-                
+                metadata.insert(
+                    "start_time".to_string(),
+                    serde_json::Value::String(start_time.to_string()),
+                );
+                metadata.insert(
+                    "end_time".to_string(),
+                    serde_json::Value::String(end_time.to_string()),
+                );
+
                 if let Err(e) = activity_logger
                     .log_shift_activity(
                         company.id,
                         Some(claims.sub.parse().unwrap_or(0)),
                         shift.id,
                         Action::CREATED,
-                        format!("Shift created for location {} from {} to {}", location_id, start_time, end_time),
+                        format!(
+                            "Shift created for location {} from {} to {}",
+                            location_id, start_time, end_time
+                        ),
                         Some(metadata),
                         &req,
                     )
@@ -84,7 +97,7 @@ pub async fn create_shift(
                     log::warn!("Failed to log shift creation activity: {}", e);
                 }
             }
-            
+
             Ok(HttpResponse::Created().json(ApiResponse::success(shift)))
         }
         Err(err) => {
@@ -228,17 +241,24 @@ pub async fn assign_shift(
     match shift_repo.assign_shift(shift_id, assigned_user_id).await {
         Ok(Some(shift)) => {
             // Log shift assignment activity
-            if let Ok(Some(company)) = company_repo
-                .get_primary_company_for_user(&claims.sub)
-                .await
+            if let Ok(Some(company)) = company_repo.get_primary_company_for_user(&claims.sub).await
             {
                 let mut metadata = HashMap::new();
-                metadata.insert("assigned_user_id".to_string(), serde_json::Value::Number(serde_json::Number::from(assigned_user_id)));
-                metadata.insert("location_id".to_string(), serde_json::Value::Number(serde_json::Number::from(shift.location_id)));
+                metadata.insert(
+                    "assigned_user_id".to_string(),
+                    serde_json::Value::Number(serde_json::Number::from(assigned_user_id)),
+                );
+                metadata.insert(
+                    "location_id".to_string(),
+                    serde_json::Value::Number(serde_json::Number::from(shift.location_id)),
+                );
                 if let Some(team_id) = shift.team_id {
-                    metadata.insert("team_id".to_string(), serde_json::Value::Number(serde_json::Number::from(team_id)));
+                    metadata.insert(
+                        "team_id".to_string(),
+                        serde_json::Value::Number(serde_json::Number::from(team_id)),
+                    );
                 }
-                
+
                 if let Err(e) = activity_logger
                     .log_shift_activity(
                         company.id,
@@ -254,7 +274,7 @@ pub async fn assign_shift(
                     log::warn!("Failed to log shift assignment activity: {}", e);
                 }
             }
-            
+
             Ok(HttpResponse::Ok().json(ApiResponse::success(shift)))
         }
         Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("Shift not found"))),
@@ -289,21 +309,28 @@ pub async fn unassign_shift(
     match shift_repo.unassign_shift(shift_id).await {
         Ok(Some(shift)) => {
             // Log shift unassignment activity
-            if let Ok(Some(company)) = company_repo
-                .get_primary_company_for_user(&claims.sub)
-                .await
+            if let Ok(Some(company)) = company_repo.get_primary_company_for_user(&claims.sub).await
             {
                 let mut metadata = HashMap::new();
                 if let Some(prev_shift) = previous_assignment {
                     if let Some(prev_user_id) = prev_shift.assigned_user_id {
-                        metadata.insert("previously_assigned_user_id".to_string(), serde_json::Value::Number(serde_json::Number::from(prev_user_id)));
+                        metadata.insert(
+                            "previously_assigned_user_id".to_string(),
+                            serde_json::Value::Number(serde_json::Number::from(prev_user_id)),
+                        );
                     }
                 }
-                metadata.insert("location_id".to_string(), serde_json::Value::Number(serde_json::Number::from(shift.location_id)));
+                metadata.insert(
+                    "location_id".to_string(),
+                    serde_json::Value::Number(serde_json::Number::from(shift.location_id)),
+                );
                 if let Some(team_id) = shift.team_id {
-                    metadata.insert("team_id".to_string(), serde_json::Value::Number(serde_json::Number::from(team_id)));
+                    metadata.insert(
+                        "team_id".to_string(),
+                        serde_json::Value::Number(serde_json::Number::from(team_id)),
+                    );
                 }
-                
+
                 if let Err(e) = activity_logger
                     .log_shift_activity(
                         company.id,
@@ -319,7 +346,7 @@ pub async fn unassign_shift(
                     log::warn!("Failed to log shift unassignment activity: {}", e);
                 }
             }
-            
+
             Ok(HttpResponse::Ok().json(ApiResponse::success(shift)))
         }
         Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("Shift not found"))),
@@ -396,7 +423,10 @@ pub async fn claim_shift(
     claims: Claims,
     _shift_repo: web::Data<ShiftRepository>,
     shift_claim_repo: web::Data<ShiftClaimRepository>,
+    company_repo: web::Data<CompanyRepository>,
+    activity_logger: web::Data<ActivityLogger>,
     path: web::Path<i64>,
+    req: HttpRequest,
 ) -> Result<HttpResponse> {
     let shift_id = path.into_inner();
     let user_id = claims.user_id();
@@ -504,6 +534,46 @@ pub async fn claim_shift(
                 shift_id,
                 claim.id
             );
+
+            // Log shift claim activity
+            if let Ok(Some(company)) = company_repo.get_primary_company_for_user(&claims.sub).await
+            {
+                let mut metadata = HashMap::new();
+                metadata.insert(
+                    "shift_id".to_string(),
+                    serde_json::Value::Number(serde_json::Number::from(shift_id)),
+                );
+                metadata.insert(
+                    "claiming_user_id".to_string(),
+                    serde_json::Value::String(user_id.to_string()),
+                );
+                if let Some(team_id) = shift_info.team_id {
+                    metadata.insert(
+                        "team_id".to_string(),
+                        serde_json::Value::Number(serde_json::Number::from(team_id)),
+                    );
+                }
+                metadata.insert(
+                    "start_time".to_string(),
+                    serde_json::Value::String(shift_info.start_time.to_string()),
+                );
+
+                if let Err(e) = activity_logger
+                    .log_shift_activity(
+                        company.id,
+                        Some(claims.sub.parse().unwrap_or(0)),
+                        shift_id,
+                        Action::CLAIMED,
+                        format!("User {} claimed shift {}", user_id, shift_id),
+                        Some(metadata),
+                        &req,
+                    )
+                    .await
+                {
+                    log::warn!("Failed to log shift claim activity: {}", e);
+                }
+            }
+
             Ok(HttpResponse::Created().json(ApiResponse::success(claim)))
         }
         Err(err) => {
