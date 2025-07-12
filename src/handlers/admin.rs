@@ -381,13 +381,6 @@ pub async fn get_users(
     company_repo: web::Data<CompanyRepository>,
     query: web::Query<UserQuery>,
 ) -> Result<HttpResponse> {
-    // Check if user is admin or manager
-    if !claims.is_admin() && !claims.is_manager() {
-        return Ok(
-            HttpResponse::Forbidden().json(ApiResponse::<()>::error("Insufficient permissions"))
-        );
-    }
-
     // Get company_id from query params or use user's primary company
     let company_id = if let Some(company_id) = query.company_id {
         company_id
@@ -410,6 +403,29 @@ pub async fn get_users(
             }
         }
     };
+
+    // Check if user is admin or manager for this specific company
+    match company_repo
+        .check_user_company_manager_or_admin(&claims.sub, company_id)
+        .await
+    {
+        Ok(true) => {
+            // User has permissions, proceed
+        }
+        Ok(false) => {
+            return Ok(HttpResponse::Forbidden()
+                .json(ApiResponse::<()>::error("Insufficient permissions")));
+        }
+        Err(err) => {
+            log::error!(
+                "Error checking user permissions for company {}: {}",
+                company_id,
+                err
+            );
+            return Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error("Failed to verify permissions")));
+        }
+    }
 
     match company_repo.get_company_employees(company_id).await {
         Ok(employees) => {
@@ -455,15 +471,54 @@ pub async fn update_user(
     path: web::Path<String>,
     input: web::Json<UpdateUserRequest>,
 ) -> Result<HttpResponse> {
-    // Check if user is admin or manager
-    if !claims.is_admin() && !claims.is_manager() {
-        return Ok(
-            HttpResponse::Forbidden().json(ApiResponse::<()>::error("Insufficient permissions"))
-        );
-    }
-
     let user_id = path.into_inner();
     let update_request = input.into_inner();
+
+    // Get company_id for permission check
+    let company_id = if let Some(company_id) = update_request.company_id {
+        company_id
+    } else {
+        // Get user's primary company
+        match company_repo.get_primary_company_for_user(&claims.sub).await {
+            Ok(Some(company_info)) => company_info.id,
+            Ok(None) => {
+                return Ok(HttpResponse::BadRequest()
+                    .json(ApiResponse::<()>::error("No primary company found")));
+            }
+            Err(err) => {
+                log::error!(
+                    "Error fetching primary company for user {}: {}",
+                    claims.sub,
+                    err
+                );
+                return Ok(HttpResponse::InternalServerError()
+                    .json(ApiResponse::<()>::error("Failed to fetch primary company")));
+            }
+        }
+    };
+
+    // Check if user is admin or manager for this specific company
+    match company_repo
+        .check_user_company_manager_or_admin(&claims.sub, company_id)
+        .await
+    {
+        Ok(true) => {
+            // User has permissions, proceed
+        }
+        Ok(false) => {
+            return Ok(HttpResponse::Forbidden()
+                .json(ApiResponse::<()>::error("Insufficient permissions")));
+        }
+        Err(err) => {
+            log::error!(
+                "Error checking user permissions for company {}: {}",
+                company_id,
+                err
+            );
+            return Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error("Failed to verify permissions")));
+        }
+    }
 
     // Update basic user information
     match user_repo
@@ -476,10 +531,28 @@ pub async fn update_user(
                 (&update_request.role, update_request.company_id)
             {
                 // Only admins can change roles
-                if !claims.is_admin() {
-                    return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
-                        "Only admins can change user roles",
-                    )));
+                match company_repo
+                    .check_user_company_admin(&claims.sub, company_id)
+                    .await
+                {
+                    Ok(true) => {
+                        // User is admin, can proceed
+                    }
+                    Ok(false) => {
+                        return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
+                            "Only admins can change user roles",
+                        )));
+                    }
+                    Err(err) => {
+                        log::error!(
+                            "Error checking admin permissions for user {}: {}",
+                            claims.sub,
+                            err
+                        );
+                        return Ok(HttpResponse::InternalServerError().json(
+                            ApiResponse::<()>::error("Failed to verify admin permissions"),
+                        ));
+                    }
                 }
 
                 // Parse the role
@@ -491,23 +564,39 @@ pub async fn update_user(
                     }
                 };
 
-                // Check if we're trying to modify an admin user
-                if !claims.is_admin() {
-                    match company_repo.get_company_employees(company_id).await {
-                        Ok(employees) => {
-                            if let Some(existing_employee) =
-                                employees.iter().find(|e| e.id == user_id)
-                            {
-                                if existing_employee.role == CompanyRole::Admin {
-                                    return Ok(HttpResponse::Forbidden().json(
-                                        ApiResponse::<()>::error("Cannot modify admin users"),
-                                    ));
+                // Check if we're trying to modify an admin user (only admins can modify other admins)
+                match company_repo.get_company_employees(company_id).await {
+                    Ok(employees) => {
+                        if let Some(existing_employee) = employees.iter().find(|e| e.id == user_id)
+                        {
+                            if existing_employee.role == CompanyRole::Admin {
+                                // Trying to modify admin - need to be admin
+                                match company_repo
+                                    .check_user_company_admin(&claims.sub, company_id)
+                                    .await
+                                {
+                                    Ok(true) => {
+                                        // User is admin, can proceed
+                                    }
+                                    Ok(false) => {
+                                        return Ok(HttpResponse::Forbidden().json(
+                                            ApiResponse::<()>::error("Cannot modify admin users"),
+                                        ));
+                                    }
+                                    Err(err) => {
+                                        log::error!("Error verifying admin status: {}", err);
+                                        return Ok(HttpResponse::InternalServerError().json(
+                                            ApiResponse::<()>::error("Failed to verify user role"),
+                                        ));
+                                    }
                                 }
                             }
                         }
-                        Err(err) => {
-                            log::error!("Error checking existing user role: {}", err);
-                        }
+                    }
+                    Err(err) => {
+                        log::error!("Error checking existing user role: {}", err);
+                        return Ok(HttpResponse::InternalServerError()
+                            .json(ApiResponse::<()>::error("Failed to verify user role")));
                     }
                 }
 
@@ -548,11 +637,37 @@ pub async fn delete_user(
     path: web::Path<String>,
     query: web::Query<UserQuery>,
 ) -> Result<HttpResponse> {
-    // Only admins can delete users
-    if !claims.is_admin() {
-        return Ok(
-            HttpResponse::Forbidden().json(ApiResponse::<()>::error("Insufficient permissions"))
-        );
+    // Only admins can delete users - check company-specific admin role
+    match company_repo.get_primary_company_for_user(&claims.sub).await {
+        Ok(Some(user_company)) => {
+            match company_repo
+                .check_user_company_admin(&claims.sub, user_company.id)
+                .await
+            {
+                Ok(true) => {
+                    // User is admin, can proceed
+                }
+                Ok(false) => {
+                    return Ok(HttpResponse::Forbidden()
+                        .json(ApiResponse::<()>::error("Insufficient permissions")));
+                }
+                Err(err) => {
+                    log::error!("Error verifying admin status: {}", err);
+                    return Ok(HttpResponse::InternalServerError()
+                        .json(ApiResponse::<()>::error("Failed to verify user role")));
+                }
+            }
+        }
+        Ok(None) => {
+            return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
+                "User is not associated with any company",
+            )));
+        }
+        Err(err) => {
+            log::error!("Error getting user's primary company: {}", err);
+            return Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error("Failed to verify user company")));
+        }
     }
 
     let user_id = path.into_inner();
