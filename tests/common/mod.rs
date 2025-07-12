@@ -4,6 +4,7 @@ use actix_web::web;
 use anyhow::Result;
 use be::config::Config;
 use be::database::init_database;
+use be::database::models::{AddEmployeeToCompanyRequest, CompanyRole};
 use be::database::repositories::company::CompanyRepository;
 use be::database::repositories::location::LocationRepository;
 use be::database::repositories::password_reset::PasswordResetTokenRepository;
@@ -18,7 +19,7 @@ pub struct TestContext {
     pub pool: SqlitePool,
     pub config: Config,
     pub auth_service: AuthService,
-    pub _temp_dir: TempDir, // Keep for cleanup but don't expose
+    pub _temp_dir: TempDir, // Keep temp dir alive
 }
 
 impl TestContext {
@@ -60,6 +61,7 @@ pub fn setup_test_env() {
 pub async fn create_admin_app_data() -> (
     web::Data<AppState>,
     web::Data<LocationRepository>,
+    web::Data<CompanyRepository>,
     web::Data<Config>,
     TestContext,
 ) {
@@ -73,7 +75,33 @@ pub async fn create_admin_app_data() -> (
         activity_logger: ActivityLogger::new(ActivityRepository::new(ctx.pool.clone())),
     });
     let location_repo_data = web::Data::new(LocationRepository::new(ctx.pool.clone()));
+    let company_repo_data = web::Data::new(CompanyRepository::new(ctx.pool.clone()));
     let config_data = web::Data::new(ctx.config.clone());
 
-    (app_state, location_repo_data, config_data, ctx)
+    (
+        app_state,
+        location_repo_data,
+        company_repo_data,
+        config_data,
+        ctx,
+    )
+}
+
+/// Helper function to make a user an admin of the default company (ID 1) for testing
+pub async fn make_user_admin_of_default_company(
+    company_repo: &CompanyRepository,
+    user_id: &str,
+) -> Result<()> {
+    let add_employee_request = AddEmployeeToCompanyRequest {
+        user_id: user_id.to_string(),
+        role: CompanyRole::Admin,
+        is_primary: Some(true),
+        hire_date: None,
+    };
+
+    company_repo
+        .add_employee_to_company(1, &add_employee_request)
+        .await?;
+
+    Ok(())
 }

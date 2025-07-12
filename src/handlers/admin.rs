@@ -67,13 +67,26 @@ impl ApiResponse<()> {
 pub async fn create_location(
     claims: Claims,
     location_repo: web::Data<LocationRepository>,
+    company_repo: web::Data<CompanyRepository>,
     input: web::Json<LocationInput>,
 ) -> Result<HttpResponse> {
-    // Check if user is admin or manager
-    if !claims.is_admin() && !claims.is_manager() {
-        return Ok(
-            HttpResponse::Forbidden().json(ApiResponse::<()>::error("Insufficient permissions"))
-        );
+    // Check if user is admin or manager for the specified company
+    let company_id = input.company_id;
+    match company_repo
+        .check_user_company_manager_or_admin(&claims.sub, company_id)
+        .await
+    {
+        Ok(true) => {
+            // User has sufficient permissions, proceed
+        }
+        Ok(false) => {
+            return Ok(HttpResponse::Forbidden()
+                .json(ApiResponse::<()>::error("Insufficient permissions")));
+        }
+        Err(_) => {
+            return Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error("Failed to check permissions")));
+        }
     }
 
     match location_repo.create_location(input.into_inner()).await {
@@ -87,14 +100,34 @@ pub async fn create_location(
 }
 
 pub async fn get_locations(
-    _claims: Claims,
+    claims: Claims,
     location_repo: web::Data<LocationRepository>,
+    company_repo: web::Data<CompanyRepository>,
 ) -> Result<HttpResponse> {
-    // All authenticated users can view locations
-    match location_repo.get_all_locations().await {
-        Ok(locations) => Ok(HttpResponse::Ok().json(ApiResponse::success(locations))),
+    // Get all companies the user has access to
+    match company_repo.get_companies_for_user(&claims.sub).await {
+        Ok(companies) => {
+            let mut all_locations = Vec::new();
+            // Get locations for each company the user has access to
+            for company in companies {
+                match location_repo.get_locations_by_company(company.id).await {
+                    Ok(mut locations) => {
+                        all_locations.append(&mut locations);
+                    }
+                    Err(err) => {
+                        log::error!(
+                            "Error fetching locations for company {}: {}",
+                            company.id,
+                            err
+                        );
+                        // Continue with other companies instead of failing completely
+                    }
+                }
+            }
+            Ok(HttpResponse::Ok().json(ApiResponse::success(all_locations)))
+        }
         Err(err) => {
-            log::error!("Error fetching locations: {}", err);
+            log::error!("Error fetching user companies: {}", err);
             Ok(HttpResponse::InternalServerError()
                 .json(ApiResponse::<()>::error("Failed to fetch locations")))
         }
@@ -185,13 +218,41 @@ pub async fn delete_location(
 pub async fn create_team(
     claims: Claims,
     location_repo: web::Data<LocationRepository>,
+    company_repo: web::Data<CompanyRepository>,
     input: web::Json<TeamInput>,
 ) -> Result<HttpResponse> {
-    // Check if user is admin or manager
-    if !claims.is_admin() && !claims.is_manager() {
-        return Ok(
-            HttpResponse::Forbidden().json(ApiResponse::<()>::error("Insufficient permissions"))
-        );
+    // Get the location to determine which company it belongs to
+    let location_id = input.location_id;
+    match location_repo.get_location_by_id(location_id).await {
+        Ok(Some(location)) => {
+            // Check if user is admin or manager for the location's company
+            match company_repo
+                .check_user_company_manager_or_admin(&claims.sub, location.company_id)
+                .await
+            {
+                Ok(true) => {
+                    // User has sufficient permissions, proceed
+                }
+                Ok(false) => {
+                    return Ok(HttpResponse::Forbidden()
+                        .json(ApiResponse::<()>::error("Insufficient permissions")));
+                }
+                Err(_) => {
+                    return Ok(HttpResponse::InternalServerError()
+                        .json(ApiResponse::<()>::error("Failed to check permissions")));
+                }
+            }
+        }
+        Ok(None) => {
+            return Ok(
+                HttpResponse::NotFound().json(ApiResponse::<()>::error("Location not found"))
+            );
+        }
+        Err(err) => {
+            log::error!("Error fetching location {}: {}", location_id, err);
+            return Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error("Failed to verify location")));
+        }
     }
 
     match location_repo.create_team(input.into_inner()).await {

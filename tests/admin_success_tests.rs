@@ -1,8 +1,6 @@
 use actix_web::{http::StatusCode, test, web, App};
 use be::database::repositories::company::CompanyRepository;
-use be::database::repositories::location::LocationRepository;
 use be::handlers::admin;
-use be::{ActivityLogger, ActivityRepository, AppState};
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use serial_test::serial;
@@ -12,12 +10,14 @@ mod common;
 #[actix_web::test]
 #[serial]
 async fn test_location_create_success() {
-    let (app_state, location_repo_data, config_data, _ctx) = common::create_admin_app_data().await;
+    let (app_state, location_repo_data, company_repo_data, config_data, _ctx) =
+        common::create_admin_app_data().await;
 
     let app = test::init_service(
         App::new()
             .app_data(app_state)
             .app_data(location_repo_data)
+            .app_data(company_repo_data)
             .app_data(config_data)
             .service(
                 web::scope("/api/v1")
@@ -43,7 +43,6 @@ async fn test_location_create_success() {
         "email": "admin@example.com",
         "password": "password123",
         "name": "Admin User",
-        "role": "admin"
     });
 
     let reg_req = test::TestRequest::post()
@@ -66,6 +65,13 @@ async fn test_location_create_success() {
 
     let reg_body: serde_json::Value = test::read_body_json(reg_resp).await;
     let auth_token = reg_body["token"].as_str().unwrap();
+    let user_id = reg_body["user"]["id"].as_str().unwrap();
+
+    // Make the user an admin of the default company for testing
+    let company_repo = CompanyRepository::new(_ctx.pool.clone());
+    common::make_user_admin_of_default_company(&company_repo, user_id)
+        .await
+        .expect("Failed to make user admin");
 
     // Now test creating a location with authentication
     let location_data = json!({
@@ -94,12 +100,14 @@ async fn test_location_create_success() {
 #[actix_web::test]
 #[serial]
 async fn test_location_list_success() {
-    let (app_state, location_repo_data, config_data, _ctx) = common::create_admin_app_data().await;
+    let (app_state, location_repo_data, company_repo_data, config_data, _ctx) =
+        common::create_admin_app_data().await;
 
     let app = test::init_service(
         App::new()
             .app_data(app_state)
             .app_data(location_repo_data)
+            .app_data(company_repo_data)
             .app_data(config_data)
             .service(
                 web::scope("/api/v1")
@@ -121,7 +129,6 @@ async fn test_location_list_success() {
         "email": "admin@example.com",
         "password": "password123",
         "name": "Admin User",
-        "role": "admin"
     });
 
     let reg_req = test::TestRequest::post()
@@ -131,6 +138,13 @@ async fn test_location_list_success() {
     let reg_resp = test::call_service(&app, reg_req.to_request()).await;
     let reg_body: serde_json::Value = test::read_body_json(reg_resp).await;
     let auth_token = reg_body["token"].as_str().unwrap();
+    let user_id = reg_body["user"]["id"].as_str().unwrap();
+
+    // Make the user an admin of the default company for testing
+    let company_repo = CompanyRepository::new(_ctx.pool.clone());
+    common::make_user_admin_of_default_company(&company_repo, user_id)
+        .await
+        .expect("Failed to make user admin");
 
     // Create a location first
     let location_data = json!({
@@ -169,22 +183,14 @@ async fn test_location_list_success() {
 #[actix_web::test]
 #[serial]
 async fn test_team_create_success() {
-    common::setup_test_env();
-    let ctx = common::TestContext::new().await.unwrap();
-
-    let app_state = web::Data::new(AppState {
-        auth_service: ctx.auth_service,
-        company_repository: CompanyRepository::new(ctx.pool.clone()),
-        activity_repository: ActivityRepository::new(ctx.pool.clone()),
-        activity_logger: ActivityLogger::new(ActivityRepository::new(ctx.pool.clone())),
-    });
-    let location_repo_data = web::Data::new(LocationRepository::new(ctx.pool.clone()));
-    let config_data = web::Data::new(ctx.config);
+    let (app_state, location_repo_data, company_repo_data, config_data, _ctx) =
+        common::create_admin_app_data().await;
 
     let app = test::init_service(
         App::new()
             .app_data(app_state)
             .app_data(location_repo_data)
+            .app_data(company_repo_data)
             .app_data(config_data)
             .service(
                 web::scope("/api/v1")
@@ -207,7 +213,6 @@ async fn test_team_create_success() {
         "email": "admin@example.com",
         "password": "password123",
         "name": "Admin User",
-        "role": "admin"
     });
 
     let reg_req = test::TestRequest::post()
@@ -217,6 +222,13 @@ async fn test_team_create_success() {
     let reg_resp = test::call_service(&app, reg_req.to_request()).await;
     let reg_body: serde_json::Value = test::read_body_json(reg_resp).await;
     let auth_token = reg_body["token"].as_str().unwrap();
+    let user_id = reg_body["user"]["id"].as_str().unwrap();
+
+    // Make the user an admin of the default company for testing
+    let company_repo = CompanyRepository::new(_ctx.pool.clone());
+    common::make_user_admin_of_default_company(&company_repo, user_id)
+        .await
+        .expect("Failed to make user admin");
 
     // Create a location first (required for team)
     let location_data = json!({
