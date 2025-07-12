@@ -63,7 +63,7 @@ impl PtoBalanceRepository {
     pub async fn get_balance(&self, user_id: &str) -> Result<Option<PtoBalance>> {
         // Get the first company this user belongs to
         let company_id = sqlx::query_scalar!(
-            "SELECT company_id FROM company_employees WHERE user_id = ? LIMIT 1",
+            "SELECT company_id FROM user_company WHERE user_id = ? LIMIT 1",
             user_id
         )
         .fetch_optional(&self.pool)
@@ -157,7 +157,7 @@ impl PtoBalanceRepository {
     ) -> Result<PtoBalance> {
         // Get the first company this user belongs to
         let company_id = sqlx::query_scalar!(
-            "SELECT company_id FROM company_employees WHERE user_id = ? LIMIT 1",
+            "SELECT company_id FROM user_company WHERE user_id = ? LIMIT 1",
             user_id
         )
         .fetch_optional(&self.pool)
@@ -278,7 +278,7 @@ impl PtoBalanceRepository {
     ) -> Result<PtoBalanceHistory> {
         // Get the first company this user belongs to
         let company_id = sqlx::query_scalar!(
-            "SELECT company_id FROM company_employees WHERE user_id = ? LIMIT 1",
+            "SELECT company_id FROM user_company WHERE user_id = ? LIMIT 1",
             user_id
         )
         .fetch_optional(&self.pool)
@@ -443,7 +443,7 @@ impl PtoBalanceRepository {
     pub async fn process_accrual(&self, user_id: &str) -> Result<Option<PtoBalanceHistory>> {
         // Get the first company this user belongs to
         let company_id = sqlx::query_scalar!(
-            "SELECT company_id FROM company_employees WHERE user_id = ? LIMIT 1",
+            "SELECT company_id FROM user_company WHERE user_id = ? LIMIT 1",
             user_id
         )
         .fetch_optional(&self.pool)
@@ -569,7 +569,7 @@ impl PtoBalanceRepository {
     ) -> Result<PtoBalanceHistory> {
         // Get the first company this user belongs to
         let company_id = sqlx::query_scalar!(
-            "SELECT company_id FROM company_employees WHERE user_id = ? LIMIT 1",
+            "SELECT company_id FROM user_company WHERE user_id = ? LIMIT 1",
             user_id
         )
         .fetch_optional(&self.pool)

@@ -51,11 +51,11 @@ impl CompanyRepository {
     pub async fn get_companies_for_user(&self, user_id: &str) -> Result<Vec<CompanyInfo>> {
         let rows = sqlx::query!(
             r#"
-            SELECT c.id, c.name, c.description, c.website, c.phone, c.email, c.address, c.logo_url, c.timezone, ce.role, ce.is_primary
+            SELECT c.id, c.name, c.description, c.website, c.phone, c.email, c.address, c.logo_url, c.timezone, uc.role, uc.is_primary
             FROM companies c
-            JOIN company_employees ce ON c.id = ce.company_id
-            WHERE ce.user_id = ?1
-            ORDER BY ce.is_primary DESC, c.name ASC
+            JOIN user_company uc ON c.id = uc.company_id
+            WHERE uc.user_id = ?1
+            ORDER BY uc.is_primary DESC, c.name ASC
             "#,
             user_id
         )
@@ -88,10 +88,10 @@ impl CompanyRepository {
     pub async fn get_primary_company_for_user(&self, user_id: &str) -> Result<Option<CompanyInfo>> {
         let row = sqlx::query!(
             r#"
-            SELECT c.id, c.name, c.description, c.website, c.phone, c.email, c.address, c.logo_url, c.timezone, ce.role, ce.is_primary
+            SELECT c.id, c.name, c.description, c.website, c.phone, c.email, c.address, c.logo_url, c.timezone, uc.role, uc.is_primary
             FROM companies c
-            JOIN company_employees ce ON c.id = ce.company_id
-            WHERE ce.user_id = ?1 AND ce.is_primary = true
+            JOIN user_company uc ON c.id = uc.company_id
+            WHERE uc.user_id = ?1 AND uc.is_primary = true
             "#,
             user_id
         )
@@ -123,7 +123,7 @@ impl CompanyRepository {
     ) -> Result<CompanyEmployee> {
         // If this should be the primary company, unset other primary companies for this user
         if request.is_primary.unwrap_or(false) {
-            sqlx::query("UPDATE company_employees SET is_primary = false WHERE user_id = ?1")
+            sqlx::query("UPDATE user_company SET is_primary = false WHERE user_id = ?1")
                 .bind(&request.user_id)
                 .execute(&self.pool)
                 .await?;
@@ -131,7 +131,7 @@ impl CompanyRepository {
 
         let company_employee = sqlx::query_as::<_, CompanyEmployee>(
             r#"
-            INSERT INTO company_employees (user_id, company_id, role, is_primary, hired_at)
+            INSERT INTO user_company (user_id, company_id, role, is_primary, hire_date)
             VALUES (?1, ?2, ?3, ?4, ?5)
             RETURNING *
             "#,
@@ -140,7 +140,7 @@ impl CompanyRepository {
         .bind(company_id)
         .bind(&request.role)
         .bind(request.is_primary.unwrap_or(false))
-        .bind(&request.hired_at)
+        .bind(&request.hire_date)
         .fetch_one(&self.pool)
         .await?;
 
@@ -150,11 +150,11 @@ impl CompanyRepository {
     pub async fn get_company_employees(&self, company_id: i64) -> Result<Vec<CompanyEmployeeInfo>> {
         let rows = sqlx::query!(
             r#"
-            SELECT u.id as "id!", u.email, u.name, ce.role, ce.is_primary, ce.hired_at, u.created_at, u.updated_at
+            SELECT u.id as "id!", u.email, u.name, uc.role, uc.is_primary, uc.hire_date as hired_at, u.created_at, u.updated_at
             FROM users u
-            JOIN company_employees ce ON u.id = ce.user_id
-            WHERE ce.company_id = ?1
-            ORDER BY ce.role DESC, u.name ASC
+            JOIN user_company uc ON u.id = uc.user_id
+            WHERE uc.company_id = ?1
+            ORDER BY uc.role DESC, u.name ASC
             "#,
             company_id
         )
@@ -171,7 +171,7 @@ impl CompanyRepository {
                     name: row.name,
                     role,
                     is_primary: row.is_primary,
-                    hired_at: row.hired_at,
+                    hire_date: row.hired_at,
                     created_at: row.created_at,
                     updated_at: row.updated_at,
                 }
@@ -187,7 +187,7 @@ impl CompanyRepository {
         user_id: &str,
     ) -> Result<bool> {
         let result =
-            sqlx::query("DELETE FROM company_employees WHERE company_id = ?1 AND user_id = ?2")
+            sqlx::query("DELETE FROM user_company WHERE company_id = ?1 AND user_id = ?2")
                 .bind(company_id)
                 .bind(user_id)
                 .execute(&self.pool)
@@ -203,7 +203,7 @@ impl CompanyRepository {
         role: &CompanyRole,
     ) -> Result<bool> {
         let result = sqlx::query(
-            "UPDATE company_employees SET role = ?1, updated_at = CURRENT_TIMESTAMP WHERE company_id = ?2 AND user_id = ?3",
+            "UPDATE user_company SET role = ?1, updated_at = CURRENT_TIMESTAMP WHERE company_id = ?2 AND user_id = ?3",
         )
         .bind(role)
         .bind(company_id)
@@ -220,7 +220,7 @@ impl CompanyRepository {
         company_id: i64,
     ) -> Result<Option<CompanyRole>> {
         let role = sqlx::query_scalar::<_, CompanyRole>(
-            "SELECT role FROM company_employees WHERE user_id = ?1 AND company_id = ?2",
+            "SELECT role FROM user_company WHERE user_id = ?1 AND company_id = ?2",
         )
         .bind(user_id)
         .bind(company_id)

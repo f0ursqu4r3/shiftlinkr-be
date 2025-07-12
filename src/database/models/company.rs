@@ -23,7 +23,12 @@ pub struct CompanyEmployee {
     pub company_id: i64,
     pub role: CompanyRole,
     pub is_primary: bool,
-    pub hired_at: Option<NaiveDateTime>,
+    pub hire_date: Option<NaiveDateTime>,
+    pub pto_balance_hours: i32,
+    pub sick_balance_hours: i32,
+    pub personal_balance_hours: i32,
+    pub pto_accrual_rate: f64,
+    pub last_accrual_date: Option<NaiveDateTime>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
 }
@@ -129,7 +134,7 @@ pub struct AddEmployeeToCompanyRequest {
     pub user_id: String,
     pub role: CompanyRole,
     pub is_primary: Option<bool>,
-    pub hired_at: Option<NaiveDateTime>,
+    pub hire_date: Option<NaiveDateTime>,
 }
 
 #[derive(Debug, Serialize)]
@@ -139,7 +144,7 @@ pub struct CompanyEmployeeInfo {
     pub name: String,
     pub role: CompanyRole,
     pub is_primary: bool,
-    pub hired_at: Option<NaiveDateTime>,
+    pub hire_date: Option<NaiveDateTime>,
     pub created_at: Option<NaiveDateTime>,
     pub updated_at: Option<NaiveDateTime>,
 }

@@ -421,7 +421,7 @@ pub async fn get_users(
                     name: employee.name,
                     role: employee.role.to_string(),
                     company_id,
-                    hire_date: employee.hired_at.map(|d| d.format("%Y-%m-%d").to_string()),
+                    hire_date: employee.hire_date.map(|d| d.format("%Y-%m-%d").to_string()),
                     is_primary: employee.is_primary,
                     created_at: employee
                         .created_at

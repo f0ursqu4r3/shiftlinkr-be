@@ -1,8 +1,8 @@
 use crate::auth::Claims;
-use crate::database::repositories::company_repository::CompanyRepository;
 use crate::database::models::{
     AddEmployeeToCompanyRequest, CompanyInfo, CompanyRole, CreateCompanyRequest,
 };
+use crate::database::repositories::company_repository::CompanyRepository;
 use actix_web::{
     web::{Data, Json, Path},
     HttpResponse, Result,
@@ -44,7 +44,7 @@ pub async fn create_company(
         user_id: claims.sub.clone(),
         role: CompanyRole::Admin,
         is_primary: Some(true), // Make this their primary company if they don't have one
-        hired_at: None,
+        hire_date: None,
     };
 
     match company_repo
