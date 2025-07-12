@@ -150,7 +150,7 @@ impl CompanyRepository {
     pub async fn get_company_employees(&self, company_id: i64) -> Result<Vec<CompanyEmployeeInfo>> {
         let rows = sqlx::query!(
             r#"
-            SELECT u.id as "id!", u.email, u.name, ce.role, ce.is_primary, ce.hired_at
+            SELECT u.id as "id!", u.email, u.name, ce.role, ce.is_primary, ce.hired_at, u.created_at, u.updated_at
             FROM users u
             JOIN company_employees ce ON u.id = ce.user_id
             WHERE ce.company_id = ?1
@@ -172,6 +172,8 @@ impl CompanyRepository {
                     role,
                     is_primary: row.is_primary,
                     hired_at: row.hired_at,
+                    created_at: row.created_at,
+                    updated_at: row.updated_at,
                 }
             })
             .collect();

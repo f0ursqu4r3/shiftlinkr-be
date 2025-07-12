@@ -140,4 +140,6 @@ pub struct CompanyEmployeeInfo {
     pub role: CompanyRole,
     pub is_primary: bool,
     pub hired_at: Option<NaiveDateTime>,
+    pub created_at: Option<NaiveDateTime>,
+    pub updated_at: Option<NaiveDateTime>,
 }

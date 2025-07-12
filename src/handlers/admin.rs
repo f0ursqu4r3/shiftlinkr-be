@@ -2,7 +2,8 @@ use actix_web::{web, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::auth::Claims;
-use crate::database::models::{LocationInput, TeamInput};
+use crate::database::models::{CompanyRole, LocationInput, TeamInput};
+use crate::database::repositories::company_repository::CompanyRepository;
 use crate::database::repositories::location_repository::LocationRepository;
 use crate::database::repositories::user_repository::UserRepository;
 
@@ -17,7 +18,8 @@ pub struct ApiResponse<T> {
 pub struct UpdateUserRequest {
     pub name: String,
     pub email: String,
-    // TODO: Role updates will be handled through company_employees table
+    pub role: Option<String>, // Company-specific role updates through company_employees table
+    pub company_id: Option<i64>, // Required for role updates
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -25,6 +27,10 @@ pub struct UserResponse {
     pub id: String,
     pub email: String,
     pub name: String,
+    pub role: String,
+    pub company_id: i64,
+    pub hire_date: Option<String>,
+    pub is_primary: bool,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -364,10 +370,16 @@ pub struct TeamQuery {
     pub location_id: Option<i64>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct UserQuery {
+    pub company_id: Option<i64>,
+}
+
 // User management handlers
 pub async fn get_users(
     claims: Claims,
-    user_repo: web::Data<UserRepository>,
+    company_repo: web::Data<CompanyRepository>,
+    query: web::Query<UserQuery>,
 ) -> Result<HttpResponse> {
     // Check if user is admin or manager
     if !claims.is_admin() && !claims.is_manager() {
@@ -376,24 +388,60 @@ pub async fn get_users(
         );
     }
 
-    match user_repo.get_all_users().await {
-        Ok(users) => {
-            let user_responses: Vec<UserResponse> = users
+    // Get company_id from query params or use user's primary company
+    let company_id = if let Some(company_id) = query.company_id {
+        company_id
+    } else {
+        // Get user's primary company
+        match company_repo.get_primary_company_for_user(&claims.sub).await {
+            Ok(Some(company_info)) => company_info.id,
+            Ok(None) => {
+                return Ok(HttpResponse::BadRequest()
+                    .json(ApiResponse::<()>::error("No primary company found")));
+            }
+            Err(err) => {
+                log::error!(
+                    "Error fetching primary company for user {}: {}",
+                    claims.sub,
+                    err
+                );
+                return Ok(HttpResponse::InternalServerError()
+                    .json(ApiResponse::<()>::error("Failed to fetch primary company")));
+            }
+        }
+    };
+
+    match company_repo.get_company_employees(company_id).await {
+        Ok(employees) => {
+            let user_responses: Vec<UserResponse> = employees
                 .into_iter()
-                .map(|user| UserResponse {
-                    id: user.id,
-                    email: user.email,
-                    name: user.name,
-                    // TODO: Add role from company_employees table based on selected company
-                    created_at: user.created_at.format("%Y-%m-%dT%H:%M:%SZ").to_string(),
-                    updated_at: user.updated_at.format("%Y-%m-%dT%H:%M:%SZ").to_string(),
+                .map(|employee| UserResponse {
+                    id: employee.id,
+                    email: employee.email,
+                    name: employee.name,
+                    role: employee.role.to_string(),
+                    company_id,
+                    hire_date: employee.hired_at.map(|d| d.format("%Y-%m-%d").to_string()),
+                    is_primary: employee.is_primary,
+                    created_at: employee
+                        .created_at
+                        .map(|dt| dt.format("%Y-%m-%dT%H:%M:%SZ").to_string())
+                        .unwrap_or_else(|| {
+                            chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
+                        }),
+                    updated_at: employee
+                        .updated_at
+                        .map(|dt| dt.format("%Y-%m-%dT%H:%M:%SZ").to_string())
+                        .unwrap_or_else(|| {
+                            chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
+                        }),
                 })
                 .collect();
 
             Ok(HttpResponse::Ok().json(ApiResponse::success(user_responses)))
         }
         Err(err) => {
-            log::error!("Error fetching users: {}", err);
+            log::error!("Error fetching company employees: {}", err);
             Ok(HttpResponse::InternalServerError()
                 .json(ApiResponse::<()>::error("Failed to fetch users")))
         }
@@ -403,6 +451,7 @@ pub async fn get_users(
 pub async fn update_user(
     claims: Claims,
     user_repo: web::Data<UserRepository>,
+    company_repo: web::Data<CompanyRepository>,
     path: web::Path<String>,
     input: web::Json<UpdateUserRequest>,
 ) -> Result<HttpResponse> {
@@ -416,36 +465,74 @@ pub async fn update_user(
     let user_id = path.into_inner();
     let update_request = input.into_inner();
 
-    // Only admins can change user roles or edit other admins
-    if !claims.is_admin() {
-        // TODO: Check if we're trying to modify an admin user based on company-specific role
-        // Since roles are now company-specific, we need to check the role in the context of a specific company
-        // For now, allowing managers to edit users
-        /*
-        if let Ok(Some(existing_user)) = user_repo.find_by_id(&user_id).await {
-            if existing_user.role == UserRole::Admin {
-                return Ok(HttpResponse::Forbidden()
-                    .json(ApiResponse::<()>::error("Cannot modify admin users")));
-            }
-        }
-
-        // Managers can't change roles
-        if let Ok(Some(existing_user)) = user_repo.find_by_id(&user_id).await {
-            if existing_user.role != update_request.role {
-                return Ok(HttpResponse::Forbidden()
-                    .json(ApiResponse::<()>::error("Cannot change user roles")));
-            }
-        }
-        */
-    }
-
+    // Update basic user information
     match user_repo
         .update_user(&user_id, &update_request.name, &update_request.email)
         .await
     {
-        Ok(()) => Ok(HttpResponse::Ok().json(ApiResponse::success_with_message(
-            "User updated successfully",
-        ))),
+        Ok(()) => {
+            // If role is provided, update company-specific role
+            if let (Some(role), Some(company_id)) =
+                (&update_request.role, update_request.company_id)
+            {
+                // Only admins can change roles
+                if !claims.is_admin() {
+                    return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
+                        "Only admins can change user roles",
+                    )));
+                }
+
+                // Parse the role
+                let company_role = match role.parse::<CompanyRole>() {
+                    Ok(role) => role,
+                    Err(_) => {
+                        return Ok(HttpResponse::BadRequest()
+                            .json(ApiResponse::<()>::error("Invalid role specified")));
+                    }
+                };
+
+                // Check if we're trying to modify an admin user
+                if !claims.is_admin() {
+                    match company_repo.get_company_employees(company_id).await {
+                        Ok(employees) => {
+                            if let Some(existing_employee) =
+                                employees.iter().find(|e| e.id == user_id)
+                            {
+                                if existing_employee.role == CompanyRole::Admin {
+                                    return Ok(HttpResponse::Forbidden().json(
+                                        ApiResponse::<()>::error("Cannot modify admin users"),
+                                    ));
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            log::error!("Error checking existing user role: {}", err);
+                        }
+                    }
+                }
+
+                // Update the role in company_employees table
+                match company_repo
+                    .update_employee_role(company_id, &user_id, &company_role)
+                    .await
+                {
+                    Ok(true) => Ok(HttpResponse::Ok().json(ApiResponse::success_with_message(
+                        "User updated successfully",
+                    ))),
+                    Ok(false) => Ok(HttpResponse::NotFound()
+                        .json(ApiResponse::<()>::error("User not found in company"))),
+                    Err(err) => {
+                        log::error!("Error updating user role {}: {}", user_id, err);
+                        Ok(HttpResponse::InternalServerError()
+                            .json(ApiResponse::<()>::error("Failed to update user role")))
+                    }
+                }
+            } else {
+                Ok(HttpResponse::Ok().json(ApiResponse::success_with_message(
+                    "User updated successfully",
+                )))
+            }
+        }
         Err(err) => {
             log::error!("Error updating user {}: {}", user_id, err);
             Ok(HttpResponse::InternalServerError()
@@ -457,7 +544,9 @@ pub async fn update_user(
 pub async fn delete_user(
     claims: Claims,
     user_repo: web::Data<UserRepository>,
+    company_repo: web::Data<CompanyRepository>,
     path: web::Path<String>,
+    query: web::Query<UserQuery>,
 ) -> Result<HttpResponse> {
     // Only admins can delete users
     if !claims.is_admin() {
@@ -468,18 +557,45 @@ pub async fn delete_user(
 
     let user_id = path.into_inner();
 
-    // Prevent deleting admin users (including self)
-    // TODO: Check if user is admin based on company-specific role
-    // Since roles are now company-specific, we need to check the role in the context of a specific company
-    // For now, allowing deletion of users
-    /*
-    if let Ok(Some(user)) = user_repo.find_by_id(&user_id).await {
-        if user.role == UserRole::Admin {
-            return Ok(HttpResponse::BadRequest()
-                .json(ApiResponse::<()>::error("Cannot delete admin users")));
+    // Get company_id from query params or use user's primary company
+    let company_id = if let Some(company_id) = query.company_id {
+        company_id
+    } else {
+        // Get user's primary company
+        match company_repo.get_primary_company_for_user(&claims.sub).await {
+            Ok(Some(company_info)) => company_info.id,
+            Ok(None) => {
+                return Ok(HttpResponse::BadRequest()
+                    .json(ApiResponse::<()>::error("No primary company found")));
+            }
+            Err(err) => {
+                log::error!(
+                    "Error fetching primary company for user {}: {}",
+                    claims.sub,
+                    err
+                );
+                return Ok(HttpResponse::InternalServerError()
+                    .json(ApiResponse::<()>::error("Failed to fetch primary company")));
+            }
+        }
+    };
+
+    // Check if user is admin in the specific company
+    match company_repo.get_company_employees(company_id).await {
+        Ok(employees) => {
+            if let Some(user_to_delete) = employees.iter().find(|e| e.id == user_id) {
+                if user_to_delete.role == CompanyRole::Admin {
+                    return Ok(HttpResponse::BadRequest()
+                        .json(ApiResponse::<()>::error("Cannot delete admin users")));
+                }
+            }
+        }
+        Err(err) => {
+            log::error!("Error checking user role: {}", err);
+            return Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error("Failed to verify user role")));
         }
     }
-    */
 
     match user_repo.delete_user(&user_id).await {
         Ok(()) => Ok(HttpResponse::Ok().json(ApiResponse::success_with_message(
