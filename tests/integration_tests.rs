@@ -37,8 +37,7 @@ async fn test_register_endpoint() {
     let register_data = json!({
         "email": "test@example.com",
         "password": "password123",
-        "name": "Test User",
-        "role": "employee"
+        "name": "Test User"
     });
 
     let req = test::TestRequest::post()
@@ -52,7 +51,6 @@ async fn test_register_endpoint() {
     assert!(body["token"].is_string());
     assert_eq!(body["user"]["email"], "test@example.com");
     assert_eq!(body["user"]["name"], "Test User");
-    assert_eq!(body["user"]["role"], "employee");
 }
 
 #[actix_web::test]
@@ -87,8 +85,7 @@ async fn test_login_endpoint() {
     let register_data = json!({
         "email": "login@example.com",
         "password": "password123",
-        "name": "Login User",
-        "role": "manager"
+        "name": "Login User"
     });
 
     let reg_req = test::TestRequest::post()
@@ -114,7 +111,6 @@ async fn test_login_endpoint() {
     assert!(body["token"].is_string());
     assert_eq!(body["user"]["email"], "login@example.com");
     assert_eq!(body["user"]["name"], "Login User");
-    assert_eq!(body["user"]["role"], "manager");
 }
 
 #[actix_web::test]
@@ -149,8 +145,7 @@ async fn test_me_endpoint() {
     let register_data = json!({
         "email": "me@example.com",
         "password": "password123",
-        "name": "Me User",
-        "role": "admin"
+        "name": "Me User"
     });
 
     let reg_req = test::TestRequest::post()
@@ -172,7 +167,6 @@ async fn test_me_endpoint() {
     let body: serde_json::Value = test::read_body_json(resp).await;
     assert_eq!(body["user"]["email"], "me@example.com");
     assert_eq!(body["user"]["name"], "Me User");
-    assert_eq!(body["user"]["role"], "admin");
 }
 
 #[actix_web::test]

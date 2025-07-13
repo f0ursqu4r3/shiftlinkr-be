@@ -63,16 +63,20 @@ pub async fn create_admin_app_data() -> (
     web::Data<LocationRepository>,
     web::Data<CompanyRepository>,
     web::Data<Config>,
+    web::Data<ActivityLogger>,
     TestContext,
 ) {
     setup_test_env();
     let ctx = TestContext::new().await.unwrap();
 
+    let activity_logger = ActivityLogger::new(ActivityRepository::new(ctx.pool.clone()));
+    let activity_logger_data = web::Data::new(activity_logger.clone());
+
     let app_state = web::Data::new(AppState {
         auth_service: ctx.auth_service.clone(),
         company_repository: CompanyRepository::new(ctx.pool.clone()),
         activity_repository: ActivityRepository::new(ctx.pool.clone()),
-        activity_logger: ActivityLogger::new(ActivityRepository::new(ctx.pool.clone())),
+        activity_logger,
     });
     let location_repo_data = web::Data::new(LocationRepository::new(ctx.pool.clone()));
     let company_repo_data = web::Data::new(CompanyRepository::new(ctx.pool.clone()));
@@ -83,6 +87,7 @@ pub async fn create_admin_app_data() -> (
         location_repo_data,
         company_repo_data,
         config_data,
+        activity_logger_data,
         ctx,
     )
 }

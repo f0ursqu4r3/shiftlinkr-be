@@ -149,7 +149,7 @@ async fn test_jwt_token_verification() {
 
     let claims = claims_result.unwrap();
     assert_eq!(claims.email, "jwt@example.com");
-    assert_eq!(claims.role, "admin");
+    assert_eq!(claims.role, "employee"); // All users get "employee" role in JWT since roles are now company-specific
     assert_eq!(claims.sub, auth_response.user.id);
 
     // Check expiration is in the future

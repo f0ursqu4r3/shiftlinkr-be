@@ -23,29 +23,23 @@ pub async fn register(
             // Log successful registration activity
             let user = &response.user;
 
-            // Get user's primary company for logging (or default to 1)
-            let company_id = if let Ok(Some(company)) = data
-                .company_repository
-                .get_primary_company_for_user(&user.id)
-                .await
-            {
-                company.id
-            } else {
-                1 // Default company
-            };
-
+            // For new registrations, we'll log without user_id since they may not be assigned to a company yet
             let mut metadata = HashMap::new();
             metadata.insert("email".to_string(), serde_json::Value::String(email));
             metadata.insert(
                 "name".to_string(),
                 serde_json::Value::String(user.name.clone()),
             );
+            metadata.insert(
+                "user_id".to_string(),
+                serde_json::Value::String(user.id.clone()),
+            );
 
             if let Err(e) = data
                 .activity_logger
                 .log_auth_activity(
-                    company_id,
-                    Some(user.id.parse().unwrap_or(0)),
+                    1,    // Default company for registration
+                    None, // Don't pass user_id to avoid foreign key constraint
                     "register",
                     format!("User {} registered successfully", user.email),
                     Some(metadata),

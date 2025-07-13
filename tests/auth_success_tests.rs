@@ -44,8 +44,7 @@ async fn test_auth_register_and_login_workflow() {
     let register_data = json!({
         "email": "test@example.com",
         "password": "password123",
-        "name": "Test User",
-        "role": "employee"
+        "name": "Test User"
     });
 
     let req = test::TestRequest::post()
@@ -61,7 +60,6 @@ async fn test_auth_register_and_login_workflow() {
     assert!(register_body["user"]["id"].is_string());
     assert_eq!(register_body["user"]["email"], "test@example.com");
     assert_eq!(register_body["user"]["name"], "Test User");
-    assert_eq!(register_body["user"]["role"], "employee");
 
     // Test 2: Login with the registered user
     let login_data = json!({
@@ -82,7 +80,6 @@ async fn test_auth_register_and_login_workflow() {
     assert!(login_body["user"]["id"].is_string());
     assert_eq!(login_body["user"]["email"], "test@example.com");
     assert_eq!(login_body["user"]["name"], "Test User");
-    assert_eq!(login_body["user"]["role"], "employee");
 
     // Test 3: Use token to access /me endpoint
     let auth_token = login_body["token"].as_str().unwrap();
@@ -97,7 +94,6 @@ async fn test_auth_register_and_login_workflow() {
     let me_body: serde_json::Value = test::read_body_json(resp).await;
     assert_eq!(me_body["user"]["email"], "test@example.com");
     assert_eq!(me_body["user"]["name"], "Test User");
-    assert_eq!(me_body["user"]["role"], "employee");
 }
 
 #[actix_web::test]
@@ -245,8 +241,7 @@ async fn test_auth_invite_workflow() {
     let admin_data = json!({
         "email": "admin@example.com",
         "password": "password123",
-        "name": "Admin User",
-        "role": "admin"
+        "name": "Admin User"
     });
 
     let req = test::TestRequest::post()
@@ -314,7 +309,6 @@ async fn test_auth_invite_workflow() {
     assert!(accept_body["token"].is_string());
     assert_eq!(accept_body["user"]["email"], "invitee@example.com");
     assert_eq!(accept_body["user"]["name"], "Invited User");
-    assert_eq!(accept_body["user"]["role"], "employee");
 
     // Test 4: Check admin's invites
     let req = test::TestRequest::get()

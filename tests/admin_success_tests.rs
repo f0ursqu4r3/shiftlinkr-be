@@ -10,7 +10,7 @@ mod common;
 #[actix_web::test]
 #[serial]
 async fn test_location_create_success() {
-    let (app_state, location_repo_data, company_repo_data, config_data, _ctx) =
+    let (app_state, location_repo_data, company_repo_data, config_data, activity_logger_data, _ctx) =
         common::create_admin_app_data().await;
 
     let app = test::init_service(
@@ -19,6 +19,7 @@ async fn test_location_create_success() {
             .app_data(location_repo_data)
             .app_data(company_repo_data)
             .app_data(config_data)
+            .app_data(activity_logger_data)
             .service(
                 web::scope("/api/v1")
                     .service(
@@ -100,7 +101,7 @@ async fn test_location_create_success() {
 #[actix_web::test]
 #[serial]
 async fn test_location_list_success() {
-    let (app_state, location_repo_data, company_repo_data, config_data, _ctx) =
+    let (app_state, location_repo_data, company_repo_data, config_data, activity_logger_data, _ctx) =
         common::create_admin_app_data().await;
 
     let app = test::init_service(
@@ -109,6 +110,7 @@ async fn test_location_list_success() {
             .app_data(location_repo_data)
             .app_data(company_repo_data)
             .app_data(config_data)
+            .app_data(activity_logger_data)
             .service(
                 web::scope("/api/v1")
                     .service(
@@ -183,7 +185,7 @@ async fn test_location_list_success() {
 #[actix_web::test]
 #[serial]
 async fn test_team_create_success() {
-    let (app_state, location_repo_data, company_repo_data, config_data, _ctx) =
+    let (app_state, location_repo_data, company_repo_data, config_data, activity_logger_data, _ctx) =
         common::create_admin_app_data().await;
 
     let app = test::init_service(
@@ -192,6 +194,7 @@ async fn test_team_create_success() {
             .app_data(location_repo_data)
             .app_data(company_repo_data)
             .app_data(config_data)
+            .app_data(activity_logger_data)
             .service(
                 web::scope("/api/v1")
                     .service(
