@@ -17,6 +17,7 @@ pub struct ShiftQuery {
     pub location_id: Option<i64>,
     pub team_id: Option<i64>,
     pub user_id: Option<i64>,
+    pub company_id: Option<i64>,
     pub start_date: Option<DateTime<Utc>>,
     pub end_date: Option<DateTime<Utc>>,
     pub status: Option<String>,
@@ -111,14 +112,29 @@ pub async fn create_shift(
 pub async fn get_shifts(
     claims: Claims,
     shift_repo: web::Data<ShiftRepository>,
+    company_repo: web::Data<CompanyRepository>,
     query: web::Query<ShiftQuery>,
 ) -> Result<HttpResponse> {
+    // If company_id is provided, check company-specific permissions
+    let has_manager_permissions = if let Some(company_id) = query.company_id {
+        match company_repo
+            .check_user_company_manager_or_admin(&claims.sub, company_id)
+            .await
+        {
+            Ok(is_manager) => is_manager,
+            Err(_) => {
+                return Ok(HttpResponse::Forbidden()
+                    .json(ApiResponse::<()>::error("Failed to verify permissions")));
+            }
+        }
+    } else {
+        // Fallback to global role check for backward compatibility
+        claims.is_admin() || claims.is_manager()
+    };
+
     let shifts = if let Some(user_id) = query.user_id {
         // Users can only see their own shifts unless they are admin/manager
-        if !claims.is_admin()
-            && !claims.is_manager()
-            && user_id != claims.user_id().parse::<i64>().unwrap_or(-1)
-        {
+        if !has_manager_permissions && user_id != claims.user_id().parse::<i64>().unwrap_or(-1) {
             return Ok(HttpResponse::Forbidden()
                 .json(ApiResponse::<()>::error("Insufficient permissions")));
         }
@@ -143,7 +159,7 @@ pub async fn get_shifts(
         }
     } else {
         // For general queries, only admin/manager can see all shifts
-        if !claims.is_admin() && !claims.is_manager() {
+        if !has_manager_permissions {
             return Ok(HttpResponse::Forbidden()
                 .json(ApiResponse::<()>::error("Insufficient permissions")));
         }
