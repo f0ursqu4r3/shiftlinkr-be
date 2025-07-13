@@ -74,7 +74,7 @@ async fn main() -> Result<()> {
         auth_service,
         company_repository: company_repository.clone(),
         activity_repository,
-        activity_logger,
+        activity_logger: activity_logger.clone(),
     });
     let user_repo_data = web::Data::new(user_repository);
     let location_repo_data = web::Data::new(location_repository);
@@ -87,6 +87,7 @@ async fn main() -> Result<()> {
     let shift_claim_repo_data = web::Data::new(shift_claim_repository);
     let company_repo_data = web::Data::new(company_repository);
     let config_data = web::Data::new(config.clone());
+    let activity_logger_data = web::Data::new(activity_logger);
 
     let server_address = config.server_address();
     println!("🌐 Server starting on http://{}", server_address);
@@ -106,6 +107,7 @@ async fn main() -> Result<()> {
             .app_data(shift_claim_repo_data.clone())
             .app_data(company_repo_data.clone())
             .app_data(config_data.clone())
+            .app_data(activity_logger_data.clone())
             .wrap(
                 Cors::default()
                     .allowed_origin("http://localhost:3000")

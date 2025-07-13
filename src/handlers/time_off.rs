@@ -3,10 +3,12 @@ use chrono::NaiveDateTime;
 use serde::Deserialize;
 use std::collections::HashMap;
 
-use crate::database::models::{PtoBalanceType, TimeOffRequestInput, TimeOffStatus, TimeOffType, Action};
+use crate::database::models::{
+    Action, PtoBalanceType, TimeOffRequestInput, TimeOffStatus, TimeOffType,
+};
+use crate::database::repositories::company::CompanyRepository;
 use crate::database::repositories::pto_balance::PtoBalanceRepository;
 use crate::database::repositories::time_off::TimeOffRepository;
-use crate::database::repositories::company::CompanyRepository;
 use crate::handlers::admin::ApiResponse;
 use crate::services::auth::Claims;
 use crate::services::ActivityLogger;
@@ -56,16 +58,26 @@ pub async fn create_time_off_request(
         Ok(request) => {
             // Log time-off request creation activity
             // Get user's primary company for logging
-            if let Ok(Some(company)) = company_repo
-                .get_primary_company_for_user(&claims.sub)
-                .await
+            if let Ok(Some(company)) = company_repo.get_primary_company_for_user(&claims.sub).await
             {
                 let mut metadata = HashMap::new();
-                metadata.insert("request_type".to_string(), serde_json::Value::String(format!("{:?}", request_type)));
-                metadata.insert("start_date".to_string(), serde_json::Value::String(start_date.to_string()));
-                metadata.insert("end_date".to_string(), serde_json::Value::String(end_date.to_string()));
-                metadata.insert("requesting_user".to_string(), serde_json::Value::String(requesting_user_id.clone()));
-                
+                metadata.insert(
+                    "request_type".to_string(),
+                    serde_json::Value::String(format!("{:?}", request_type)),
+                );
+                metadata.insert(
+                    "start_date".to_string(),
+                    serde_json::Value::String(start_date.to_string()),
+                );
+                metadata.insert(
+                    "end_date".to_string(),
+                    serde_json::Value::String(end_date.to_string()),
+                );
+                metadata.insert(
+                    "requesting_user".to_string(),
+                    serde_json::Value::String(requesting_user_id.clone()),
+                );
+
                 if let Err(e) = activity_logger
                     .log_time_off_activity(
                         company.id,
@@ -81,7 +93,7 @@ pub async fn create_time_off_request(
                     log::warn!("Failed to log time-off request creation activity: {}", e);
                 }
             }
-            
+
             Ok(HttpResponse::Created().json(ApiResponse::success(request)))
         }
         Err(err) => {
@@ -209,28 +221,54 @@ pub async fn update_time_off_request(
             match repo.update_request(request_id, request_input).await {
                 Ok(updated_request) => {
                     // Log time-off request update activity
-                    if let Ok(Some(company)) = company_repo
-                        .get_primary_company_for_user(&claims.sub)
-                        .await
+                    if let Ok(Some(company)) =
+                        company_repo.get_primary_company_for_user(&claims.sub).await
                     {
                         let mut metadata = HashMap::new();
-                        metadata.insert("request_type".to_string(), serde_json::Value::String(format!("{:?}", new_request_type)));
-                        metadata.insert("start_date".to_string(), serde_json::Value::String(new_start_date.to_string()));
-                        metadata.insert("end_date".to_string(), serde_json::Value::String(new_end_date.to_string()));
-                        metadata.insert("target_user".to_string(), serde_json::Value::String(updated_request.user_id.clone()));
-                        
+                        metadata.insert(
+                            "request_type".to_string(),
+                            serde_json::Value::String(format!("{:?}", new_request_type)),
+                        );
+                        metadata.insert(
+                            "start_date".to_string(),
+                            serde_json::Value::String(new_start_date.to_string()),
+                        );
+                        metadata.insert(
+                            "end_date".to_string(),
+                            serde_json::Value::String(new_end_date.to_string()),
+                        );
+                        metadata.insert(
+                            "target_user".to_string(),
+                            serde_json::Value::String(updated_request.user_id.clone()),
+                        );
+
                         // Add previous values for comparison
-                        metadata.insert("previous_request_type".to_string(), serde_json::Value::String(format!("{:?}", existing_request.request_type)));
-                        metadata.insert("previous_start_date".to_string(), serde_json::Value::String(existing_request.start_date.to_string()));
-                        metadata.insert("previous_end_date".to_string(), serde_json::Value::String(existing_request.end_date.to_string()));
-                        
+                        metadata.insert(
+                            "previous_request_type".to_string(),
+                            serde_json::Value::String(format!(
+                                "{:?}",
+                                existing_request.request_type
+                            )),
+                        );
+                        metadata.insert(
+                            "previous_start_date".to_string(),
+                            serde_json::Value::String(existing_request.start_date.to_string()),
+                        );
+                        metadata.insert(
+                            "previous_end_date".to_string(),
+                            serde_json::Value::String(existing_request.end_date.to_string()),
+                        );
+
                         if let Err(e) = activity_logger
                             .log_time_off_activity(
                                 company.id,
                                 Some(claims.sub.parse().unwrap_or(0)),
                                 request_id,
                                 Action::UPDATED,
-                                format!("Time-off request updated for user {}", updated_request.user_id),
+                                format!(
+                                    "Time-off request updated for user {}",
+                                    updated_request.user_id
+                                ),
                                 Some(metadata),
                                 &req,
                             )
@@ -239,7 +277,7 @@ pub async fn update_time_off_request(
                             log::warn!("Failed to log time-off request update activity: {}", e);
                         }
                     }
-                    
+
                     Ok(HttpResponse::Ok().json(ApiResponse::success(updated_request)))
                 }
                 Err(err) => {
@@ -417,28 +455,48 @@ pub async fn approve_time_off_request(
                         request_id,
                         hours_needed
                     );
-                    
+
                     // Log time-off request approval activity
-                    if let Ok(Some(company)) = company_repo
-                        .get_primary_company_for_user(&claims.sub)
-                        .await
+                    if let Ok(Some(company)) =
+                        company_repo.get_primary_company_for_user(&claims.sub).await
                     {
                         let mut metadata = HashMap::new();
-                        metadata.insert("request_type".to_string(), serde_json::Value::String(format!("{:?}", time_off_request.request_type)));
-                        metadata.insert("target_user".to_string(), serde_json::Value::String(time_off_request.user_id.clone()));
-                        metadata.insert("hours_deducted".to_string(), serde_json::Value::Number(serde_json::Number::from(hours_needed)));
-                        metadata.insert("balance_type".to_string(), serde_json::Value::String(format!("{:?}", balance_type_for_logging)));
+                        metadata.insert(
+                            "request_type".to_string(),
+                            serde_json::Value::String(format!(
+                                "{:?}",
+                                time_off_request.request_type
+                            )),
+                        );
+                        metadata.insert(
+                            "target_user".to_string(),
+                            serde_json::Value::String(time_off_request.user_id.clone()),
+                        );
+                        metadata.insert(
+                            "hours_deducted".to_string(),
+                            serde_json::Value::Number(serde_json::Number::from(hours_needed)),
+                        );
+                        metadata.insert(
+                            "balance_type".to_string(),
+                            serde_json::Value::String(format!("{:?}", balance_type_for_logging)),
+                        );
                         if let Some(notes) = &approval.notes {
-                            metadata.insert("approval_notes".to_string(), serde_json::Value::String(notes.clone()));
+                            metadata.insert(
+                                "approval_notes".to_string(),
+                                serde_json::Value::String(notes.clone()),
+                            );
                         }
-                        
+
                         if let Err(e) = activity_logger
                             .log_time_off_activity(
                                 company.id,
                                 Some(claims.sub.parse().unwrap_or(0)),
                                 request_id,
                                 Action::APPROVED,
-                                format!("Time-off request approved for user {}", time_off_request.user_id),
+                                format!(
+                                    "Time-off request approved for user {}",
+                                    time_off_request.user_id
+                                ),
                                 Some(metadata),
                                 &req,
                             )
@@ -447,7 +505,7 @@ pub async fn approve_time_off_request(
                             log::warn!("Failed to log time-off request approval activity: {}", e);
                         }
                     }
-                    
+
                     Ok(HttpResponse::Ok().json(ApiResponse::success(approved_request)))
                 }
                 Err(err) => {
@@ -511,24 +569,34 @@ pub async fn deny_time_off_request(
     {
         Ok(denied_request) => {
             // Log time-off request denial activity
-            if let Ok(Some(company)) = company_repo
-                .get_primary_company_for_user(&claims.sub)
-                .await
+            if let Ok(Some(company)) = company_repo.get_primary_company_for_user(&claims.sub).await
             {
                 let mut metadata = HashMap::new();
-                metadata.insert("request_type".to_string(), serde_json::Value::String(format!("{:?}", time_off_request.request_type)));
-                metadata.insert("target_user".to_string(), serde_json::Value::String(time_off_request.user_id.clone()));
+                metadata.insert(
+                    "request_type".to_string(),
+                    serde_json::Value::String(format!("{:?}", time_off_request.request_type)),
+                );
+                metadata.insert(
+                    "target_user".to_string(),
+                    serde_json::Value::String(time_off_request.user_id.clone()),
+                );
                 if let Some(notes) = &denial.notes {
-                    metadata.insert("denial_notes".to_string(), serde_json::Value::String(notes.clone()));
+                    metadata.insert(
+                        "denial_notes".to_string(),
+                        serde_json::Value::String(notes.clone()),
+                    );
                 }
-                
+
                 if let Err(e) = activity_logger
                     .log_time_off_activity(
                         company.id,
                         Some(claims.sub.parse().unwrap_or(0)),
                         request_id,
                         Action::REJECTED,
-                        format!("Time-off request denied for user {}", time_off_request.user_id),
+                        format!(
+                            "Time-off request denied for user {}",
+                            time_off_request.user_id
+                        ),
                         Some(metadata),
                         &req,
                     )
@@ -537,7 +605,7 @@ pub async fn deny_time_off_request(
                     log::warn!("Failed to log time-off request denial activity: {}", e);
                 }
             }
-            
+
             Ok(HttpResponse::Ok().json(ApiResponse::success(denied_request)))
         }
         Err(err) => {
@@ -559,7 +627,17 @@ async fn approve_time_off_with_balance_check(
     approval: web::Json<ApprovalRequest>,
     req: HttpRequest,
 ) -> Result<HttpResponse> {
-    approve_time_off_request(claims, repo, company_repo, activity_logger, pto_repo, path, approval, req).await
+    approve_time_off_request(
+        claims,
+        repo,
+        company_repo,
+        activity_logger,
+        pto_repo,
+        path,
+        approval,
+        req,
+    )
+    .await
 }
 
 /// Public wrapper for the approve endpoint
@@ -573,5 +651,15 @@ pub async fn approve_time_off_request_endpoint(
     approval: web::Json<ApprovalRequest>,
     req: HttpRequest,
 ) -> Result<HttpResponse> {
-    approve_time_off_with_balance_check(claims, repo, company_repo, activity_logger, pto_repo, path, approval, req).await
+    approve_time_off_with_balance_check(
+        claims,
+        repo,
+        company_repo,
+        activity_logger,
+        pto_repo,
+        path,
+        approval,
+        req,
+    )
+    .await
 }
