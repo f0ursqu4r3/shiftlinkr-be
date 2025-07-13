@@ -240,8 +240,7 @@ async fn test_register_duplicate_email() {
     let register_data = json!({
         "email": "duplicate@example.com",
         "password": "password123",
-        "name": "First User",
-        "role": "employee"
+        "name": "First User"
     });
 
     // First registration
@@ -299,8 +298,7 @@ async fn test_login_wrong_password() {
     let register_data = json!({
         "email": "wrongpass@example.com",
         "password": "correct_password",
-        "name": "Wrong Pass User",
-        "role": "employee"
+        "name": "Wrong Pass User"
     });
 
     let reg_req = test::TestRequest::post()
@@ -363,8 +361,7 @@ async fn test_forgot_password_endpoint() {
     let register_data = json!({
         "email": "forgot@example.com",
         "password": "password123",
-        "name": "Forgot User",
-        "role": "employee"
+        "name": "Forgot User"
     });
 
     let reg_req = test::TestRequest::post()
@@ -514,8 +511,7 @@ async fn test_complete_password_reset_flow() {
     let register_data = json!({
         "email": "complete@example.com",
         "password": "oldpassword123",
-        "name": "Complete User",
-        "role": "employee"
+        "name": "Complete User"
     });
 
     let reg_req = test::TestRequest::post()

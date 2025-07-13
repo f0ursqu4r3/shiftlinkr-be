@@ -105,11 +105,11 @@ async fn test_shift_claim_repository(pool: SqlitePool) -> Result<(), sqlx::Error
     // Test 1: Create a shift claim
     let claim_input = ShiftClaimInput {
         shift_id: shift.id,
-        user_id: "test_user_123".to_string(),
+        user_id: user.id.clone(), // Use the actual user ID that was created
     };
     println!(
         "🔍 Attempting to create shift claim for shift_id: {}, user_id: {}",
-        shift.id, "test_user_123"
+        shift.id, user.id
     );
     let claim = match shift_claim_repo.create_claim(&claim_input).await {
         Ok(claim) => {
@@ -123,7 +123,7 @@ async fn test_shift_claim_repository(pool: SqlitePool) -> Result<(), sqlx::Error
     };
 
     assert_eq!(claim.shift_id, shift.id);
-    assert_eq!(claim.user_id, "test_user_123");
+    assert_eq!(claim.user_id, user.id);
     assert!(matches!(claim.status, ShiftClaimStatus::Pending));
     assert!(claim.approved_by.is_none());
     assert!(claim.approval_notes.is_none());
@@ -164,8 +164,8 @@ async fn test_shift_claim_repository(pool: SqlitePool) -> Result<(), sqlx::Error
     println!("✅ Get claims by shift assertions passed");
 
     // Test 4: Get claims by user
-    println!("🔍 Attempting to get claims by user: test_user_123");
-    let user_claims = match shift_claim_repo.get_claims_by_user("test_user_123").await {
+    println!("🔍 Attempting to get claims by user: {}", user.id);
+    let user_claims = match shift_claim_repo.get_claims_by_user(&user.id).await {
         Ok(claims) => {
             println!("✅ Got {} claims for user", claims.len());
             claims
@@ -181,10 +181,7 @@ async fn test_shift_claim_repository(pool: SqlitePool) -> Result<(), sqlx::Error
 
     // Test 5: Check if user has pending claim
     println!("🔍 Checking if user has pending claim");
-    let has_pending = match shift_claim_repo
-        .has_pending_claim(shift.id, "test_user_123")
-        .await
-    {
+    let has_pending = match shift_claim_repo.has_pending_claim(shift.id, &user.id).await {
         Ok(has_pending) => {
             println!("✅ Has pending claim check completed: {}", has_pending);
             has_pending
@@ -297,14 +294,12 @@ async fn test_shift_claim_cancel_and_reject(pool: SqlitePool) -> Result<(), sqlx
     // Test 1: Create a shift claim
     let claim_input = ShiftClaimInput {
         shift_id: shift.id,
-        user_id: "test_user_456".to_string(),
+        user_id: user.id.clone(),
     };
     let claim = shift_claim_repo.create_claim(&claim_input).await?;
 
     // Test 2: Cancel the claim
-    let cancelled_claim = shift_claim_repo
-        .cancel_claim(claim.id, "test_user_456")
-        .await?;
+    let cancelled_claim = shift_claim_repo.cancel_claim(claim.id, &user.id).await?;
     assert!(cancelled_claim.is_some());
     let cancelled_claim = cancelled_claim.unwrap();
     assert!(matches!(
@@ -315,18 +310,18 @@ async fn test_shift_claim_cancel_and_reject(pool: SqlitePool) -> Result<(), sqlx
     // Test 3: Create another claim for rejection test
     let claim_input2 = ShiftClaimInput {
         shift_id: shift.id,
-        user_id: "test_user_456".to_string(),
+        user_id: user.id.clone(),
     };
     let claim2 = shift_claim_repo.create_claim(&claim_input2).await?;
 
     // Test 4: Reject the claim
     let rejected_claim = shift_claim_repo
-        .reject_claim(claim2.id, "manager_456", Some("Not qualified".to_string()))
+        .reject_claim(claim2.id, &manager.id, Some("Not qualified".to_string()))
         .await?;
     assert!(rejected_claim.is_some());
     let rejected_claim = rejected_claim.unwrap();
     assert!(matches!(rejected_claim.status, ShiftClaimStatus::Rejected));
-    assert_eq!(rejected_claim.approved_by, Some("manager_456".to_string()));
+    assert_eq!(rejected_claim.approved_by, Some(manager.id.clone()));
     assert_eq!(
         rejected_claim.approval_notes,
         Some("Not qualified".to_string())
