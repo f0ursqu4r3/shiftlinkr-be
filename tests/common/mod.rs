@@ -169,3 +169,34 @@ where
     make_user_admin_of_default_company(company_repo, &user_id).await?;
     Ok((token, user_id))
 }
+
+/// Helper to create a manager user for testing
+pub async fn create_manager_user_and_token<S>(
+    app: &S,
+    company_repo: &CompanyRepository,
+    email: &str,
+    password: &str,
+    name: &str,
+) -> Result<(String, String)>
+where
+    S: actix_web::dev::Service<
+        actix_web::dev::ServiceRequest,
+        Response = actix_web::dev::ServiceResponse<actix_web::body::BoxBody>,
+        Error = actix_web::Error,
+    >,
+{
+    let (token, user_id) = register_test_user(app, email, password, name).await?;
+
+    let add_employee_request = AddEmployeeToCompanyRequest {
+        user_id: user_id.clone(),
+        role: CompanyRole::Manager,
+        is_primary: Some(true),
+        hire_date: None,
+    };
+
+    company_repo
+        .add_employee_to_company(1, &add_employee_request)
+        .await?;
+
+    Ok((token, user_id))
+}

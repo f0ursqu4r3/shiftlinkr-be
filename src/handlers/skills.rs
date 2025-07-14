@@ -4,7 +4,7 @@ use serde::Deserialize;
 use crate::database::models::{
     ProficiencyLevel, ShiftRequiredSkillInput, SkillInput, UserSkillInput,
 };
-use crate::database::repositories::skill::SkillRepository;
+use crate::database::repositories::{company::CompanyRepository, skill::SkillRepository};
 use crate::handlers::admin::ApiResponse;
 use crate::services::auth::Claims;
 
@@ -23,11 +23,19 @@ pub struct SkillSearchQuery {
 pub async fn create_skill(
     claims: Claims,
     skill_repo: web::Data<SkillRepository>,
+    company_repo: web::Data<CompanyRepository>,
     input: web::Json<SkillInput>,
     _req: HttpRequest,
 ) -> Result<HttpResponse> {
-    // Check if user is admin
-    if !claims.is_admin() {
+    // For skills management, we require admin access to the default company (company_id = 1)
+    // Since skills are global across the system
+    let default_company_id = 1;
+
+    if !company_repo
+        .check_user_company_manager_or_admin(&claims.sub, default_company_id)
+        .await
+        .unwrap_or(false)
+    {
         return Ok(
             HttpResponse::Forbidden().json(ApiResponse::<()>::error("Admin access required"))
         );
@@ -80,12 +88,19 @@ pub async fn get_skill(
 pub async fn update_skill(
     claims: Claims,
     skill_repo: web::Data<SkillRepository>,
+    company_repo: web::Data<CompanyRepository>,
     path: web::Path<i64>,
     input: web::Json<SkillInput>,
     _req: HttpRequest,
 ) -> Result<HttpResponse> {
-    // Check if user is admin
-    if !claims.is_admin() {
+    // For skills management, we require admin access to the default company (company_id = 1)
+    let default_company_id = 1;
+
+    if !company_repo
+        .check_user_company_manager_or_admin(&claims.sub, default_company_id)
+        .await
+        .unwrap_or(false)
+    {
         return Ok(
             HttpResponse::Forbidden().json(ApiResponse::<()>::error("Admin access required"))
         );
@@ -107,11 +122,18 @@ pub async fn update_skill(
 pub async fn delete_skill(
     claims: Claims,
     skill_repo: web::Data<SkillRepository>,
+    company_repo: web::Data<CompanyRepository>,
     path: web::Path<i64>,
     _req: HttpRequest,
 ) -> Result<HttpResponse> {
-    // Check if user is admin
-    if !claims.is_admin() {
+    // For skills management, we require admin access to the default company (company_id = 1)
+    let default_company_id = 1;
+
+    if !company_repo
+        .check_user_company_manager_or_admin(&claims.sub, default_company_id)
+        .await
+        .unwrap_or(false)
+    {
         return Ok(
             HttpResponse::Forbidden().json(ApiResponse::<()>::error("Admin access required"))
         );

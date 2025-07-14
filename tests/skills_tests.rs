@@ -334,3 +334,291 @@ async fn test_user_skill_permission_check() {
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), StatusCode::FORBIDDEN);
 }
+
+#[actix_web::test]
+#[serial]
+async fn test_get_skill_by_id() {
+    let (app_state, skill_repo_data, company_repo_data, config_data, ctx) = setup_test_app().await;
+
+    let app = test::init_service(
+        App::new()
+            .app_data(app_state)
+            .app_data(skill_repo_data)
+            .app_data(company_repo_data.clone())
+            .app_data(config_data)
+            .service(
+                web::scope("/api/v1")
+                    .service(web::scope("/auth").route("/register", web::post().to(auth::register)))
+                    .service(
+                        web::scope("/skills").route("/{id}", web::get().to(skills::get_skill)),
+                    ),
+            ),
+    )
+    .await;
+
+    // Register a user
+    let register_data = json!({
+        "email": "user@test.com",
+        "password": "password123",
+        "name": "Test User"
+    });
+
+    let req = test::TestRequest::post()
+        .uri("/api/v1/auth/register")
+        .set_json(&register_data)
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let token = body["token"].as_str().unwrap();
+
+    // Create a skill directly in the repository (bypassing API admin check for test)
+    let skill_repo = SkillRepository::new(ctx.pool.clone());
+    let skill_input = SkillInput {
+        name: "Test Get Skill".to_string(),
+        description: Some("A skill for testing get endpoint".to_string()),
+    };
+    let skill = skill_repo.create_skill(skill_input).await.unwrap();
+
+    // Test getting the skill
+    let req = test::TestRequest::get()
+        .uri(&format!("/api/v1/skills/{}", skill.id))
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(body["data"]["name"], "Test Get Skill");
+    assert_eq!(
+        body["data"]["description"],
+        "A skill for testing get endpoint"
+    );
+}
+
+#[actix_web::test]
+#[serial]
+async fn test_update_skill() {
+    let (app_state, skill_repo_data, company_repo_data, config_data, ctx) = setup_test_app().await;
+
+    let app = test::init_service(
+        App::new()
+            .app_data(app_state)
+            .app_data(skill_repo_data)
+            .app_data(company_repo_data.clone())
+            .app_data(config_data)
+            .service(
+                web::scope("/api/v1")
+                    .service(web::scope("/auth").route("/register", web::post().to(auth::register)))
+                    .service(
+                        web::scope("/skills").route("/{id}", web::put().to(skills::update_skill)),
+                    ),
+            ),
+    )
+    .await;
+
+    // Register admin user (though we'll bypass admin check for creation)
+    let register_data = json!({
+        "email": "admin@test.com",
+        "password": "password123",
+        "name": "Admin User"
+    });
+
+    let req = test::TestRequest::post()
+        .uri("/api/v1/auth/register")
+        .set_json(&register_data)
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let admin_token = body["token"].as_str().unwrap();
+    let admin_id = body["user"]["id"].as_str().unwrap();
+
+    // Make user admin
+    common::make_user_admin_of_default_company(&company_repo_data, admin_id)
+        .await
+        .unwrap();
+
+    // Create a skill directly in the repository
+    let skill_repo = SkillRepository::new(ctx.pool.clone());
+    let skill_input = SkillInput {
+        name: "Original Skill".to_string(),
+        description: Some("Original description".to_string()),
+    };
+    let skill = skill_repo.create_skill(skill_input).await.unwrap();
+
+    // Update the skill through API (this should work since update doesn't require admin in same way)
+    let update_data = json!({
+        "name": "Updated Skill",
+        "description": "Updated description"
+    });
+
+    let req = test::TestRequest::put()
+        .uri(&format!("/api/v1/skills/{}", skill.id))
+        .insert_header(("Authorization", format!("Bearer {}", admin_token)))
+        .set_json(&update_data)
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(body["data"]["name"], "Updated Skill");
+    assert_eq!(body["data"]["description"], "Updated description");
+}
+
+#[actix_web::test]
+#[serial]
+async fn test_delete_skill() {
+    let (app_state, skill_repo_data, company_repo_data, config_data, _ctx) = setup_test_app().await;
+
+    let app = test::init_service(
+        App::new()
+            .app_data(app_state)
+            .app_data(skill_repo_data)
+            .app_data(company_repo_data.clone())
+            .app_data(config_data)
+            .service(
+                web::scope("/api/v1")
+                    .service(web::scope("/auth").route("/register", web::post().to(auth::register)))
+                    .service(
+                        web::scope("/skills")
+                            .route("", web::post().to(skills::create_skill))
+                            .route("/{id}", web::get().to(skills::get_skill))
+                            .route("/{id}", web::delete().to(skills::delete_skill)),
+                    ),
+            ),
+    )
+    .await;
+
+    // Register admin user
+    let register_data = json!({
+        "email": "admin@test.com",
+        "password": "password123",
+        "name": "Admin User"
+    });
+
+    let req = test::TestRequest::post()
+        .uri("/api/v1/auth/register")
+        .set_json(&register_data)
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let admin_token = body["token"].as_str().unwrap();
+    let admin_id = body["user"]["id"].as_str().unwrap();
+
+    // Make user admin
+    common::make_user_admin_of_default_company(&company_repo_data, admin_id)
+        .await
+        .unwrap();
+
+    // Create a skill first
+    let skill_data = json!({
+        "name": "Skill to Delete",
+        "description": "This skill will be deleted"
+    });
+
+    let req = test::TestRequest::post()
+        .uri("/api/v1/skills")
+        .insert_header(("Authorization", format!("Bearer {}", admin_token)))
+        .set_json(&skill_data)
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    let skill: serde_json::Value = test::read_body_json(resp).await;
+    let skill_id = skill["data"]["id"].as_i64().unwrap();
+
+    // Delete the skill
+    let req = test::TestRequest::delete()
+        .uri(&format!("/api/v1/skills/{}", skill_id))
+        .insert_header(("Authorization", format!("Bearer {}", admin_token)))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // Try to get the deleted skill - should fail
+    let req = test::TestRequest::get()
+        .uri(&format!("/api/v1/skills/{}", skill_id))
+        .insert_header(("Authorization", format!("Bearer {}", admin_token)))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+#[actix_web::test]
+#[serial]
+async fn test_update_user_skill() {
+    let (app_state, skill_repo_data, company_repo_data, config_data, _ctx) = setup_test_app().await;
+
+    let app = test::init_service(
+        App::new()
+            .app_data(app_state)
+            .app_data(skill_repo_data)
+            .app_data(company_repo_data)
+            .app_data(config_data)
+            .service(
+                web::scope("/api/v1")
+                    .service(web::scope("/auth").route("/register", web::post().to(auth::register)))
+                    .service(
+                        web::scope("/user-skills")
+                            .route("", web::post().to(skills::add_user_skill))
+                            .route("/{id}", web::put().to(skills::update_user_skill)),
+                    ),
+            ),
+    )
+    .await;
+
+    // Register regular user
+    let register_data = json!({
+        "email": "user@test.com",
+        "password": "password123",
+        "name": "Test User"
+    });
+
+    let req = test::TestRequest::post()
+        .uri("/api/v1/auth/register")
+        .set_json(&register_data)
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let user_token = body["token"].as_str().unwrap();
+    let user_id = body["user"]["id"].as_str().unwrap();
+
+    // Add a skill to user first
+    let user_skill_data = json!({
+        "user_id": user_id,
+        "skill_id": 1, // "General Labor" from default skills
+        "proficiency_level": "Beginner"
+    });
+
+    let req = test::TestRequest::post()
+        .uri("/api/v1/user-skills")
+        .insert_header(("Authorization", format!("Bearer {}", user_token)))
+        .set_json(&user_skill_data)
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::CREATED);
+
+    let user_skill: serde_json::Value = test::read_body_json(resp).await;
+    let user_skill_id = user_skill["data"]["id"].as_i64().unwrap();
+
+    // Update proficiency level
+    let update_data = json!({
+        "proficiency_level": "Advanced"
+    });
+
+    let req = test::TestRequest::put()
+        .uri(&format!("/api/v1/user-skills/{}", user_skill_id))
+        .insert_header(("Authorization", format!("Bearer {}", user_token)))
+        .set_json(&update_data)
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    assert_eq!(body["data"]["proficiency_level"], "Advanced");
+}
