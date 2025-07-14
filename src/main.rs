@@ -11,6 +11,7 @@ use be::database::{
     },
 };
 use be::handlers::{admin, auth, company, pto_balance, shifts, stats, swaps, time_off};
+use be::middleware::RequestId;
 use be::services::ActivityLogger;
 use be::{AppState, AuthService, Config};
 
@@ -117,10 +118,14 @@ async fn main() -> Result<()> {
                         "Content-Type",
                         "Accept",
                         "X-Requested-With",
+                        "X-Correlation-ID",
                     ])
                     .max_age(3600),
             )
-            .wrap(Logger::default())
+            .wrap(RequestId)
+            .wrap(Logger::new(
+                r#"%a "%r" %s %b "%{Referer}i" "%{User-Agent}i" %T correlation_id=%{x-correlation-id}o"#
+            ))
             .service(hello)
             .service(health)
             .service(

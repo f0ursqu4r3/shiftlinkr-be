@@ -1,6 +1,7 @@
 pub mod config;
 pub mod database;
 pub mod handlers;
+pub mod middleware;
 pub mod services;
 
 pub use config::Config;

@@ -4,8 +4,8 @@ use std::collections::HashMap;
 
 use crate::config::Config;
 use crate::database::models::{
-    AcceptInviteRequest, Action, AuthResponse, CreateInviteRequest, CreateUserRequest,
-    ForgotPasswordRequest, LoginRequest, ResetPasswordRequest,
+    AcceptInviteRequest, Action, CreateInviteRequest, CreateUserRequest, ForgotPasswordRequest,
+    LoginRequest, ResetPasswordRequest,
 };
 use crate::database::repositories::invite::InviteRepository;
 use crate::AppState;
