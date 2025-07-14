@@ -1,5 +1,6 @@
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct User {
@@ -12,7 +13,7 @@ pub struct User {
     pub updated_at: NaiveDateTime,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum UserRole {
     Admin,
@@ -30,7 +31,7 @@ impl<'q> sqlx::Encode<'q, sqlx::Sqlite> for UserRole {
     fn encode_by_ref(
         &self,
         args: &mut Vec<sqlx::sqlite::SqliteArgumentValue<'q>>,
-    ) -> sqlx::encode::IsNull {
+    ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
         let s = match self {
             UserRole::Admin => "admin",
             UserRole::Manager => "manager",
@@ -81,17 +82,26 @@ impl std::str::FromStr for UserRole {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateUserRequest {
+    /// User's email address
+    #[schema(example = "user@example.com")]
     pub email: String,
+    /// User's password
+    #[schema(example = "password123")]
     pub password: String,
+    /// User's full name
+    #[schema(example = "John Doe")]
     pub name: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct UserInfo {
+    /// User's unique identifier
     pub id: String,
+    /// User's email address
     pub email: String,
+    /// User's full name
     pub name: String,
 }
 

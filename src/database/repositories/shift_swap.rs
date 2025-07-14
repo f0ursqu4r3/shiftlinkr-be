@@ -53,7 +53,7 @@ impl ShiftSwapRepository {
         .await?;
 
         Ok(ShiftSwap {
-            id: row.id,
+            id: row.id.expect("Row ID should not be null"),
             requesting_user_id: row.requesting_user_id,
             original_shift_id: row.original_shift_id,
             target_user_id: row.target_user_id,
@@ -251,9 +251,7 @@ impl ShiftSwapRepository {
         .await?;
 
         Ok(ShiftSwap {
-            id: row
-                .id
-                .expect("ID should always be present in RETURNING clause"),
+            id: row.id,
             requesting_user_id: row.requesting_user_id,
             original_shift_id: row.original_shift_id,
             target_user_id: row.target_user_id,
@@ -293,9 +291,7 @@ impl ShiftSwapRepository {
         .await?;
 
         Ok(ShiftSwap {
-            id: row
-                .id
-                .expect("ID should always be present in RETURNING clause"),
+            id: row.id,
             requesting_user_id: row.requesting_user_id,
             original_shift_id: row.original_shift_id,
             target_user_id: row.target_user_id,
@@ -333,9 +329,7 @@ impl ShiftSwapRepository {
         .await?;
 
         Ok(ShiftSwap {
-            id: row
-                .id
-                .expect("ID should always be present in RETURNING clause"),
+            id: row.id,
             requesting_user_id: row.requesting_user_id,
             original_shift_id: row.original_shift_id,
             target_user_id: row.target_user_id,
@@ -373,9 +367,7 @@ impl ShiftSwapRepository {
         .await?;
 
         Ok(ShiftSwap {
-            id: row
-                .id
-                .expect("ID should always be present in RETURNING clause"),
+            id: row.id,
             requesting_user_id: row.requesting_user_id,
             original_shift_id: row.original_shift_id,
             target_user_id: row.target_user_id,

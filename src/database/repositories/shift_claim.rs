@@ -33,7 +33,7 @@ impl ShiftClaimRepository {
         .await?;
 
         let claim = ShiftClaim {
-            id: row.id,
+            id: row.id.expect("Row ID should not be null"),
             shift_id: row.shift_id,
             user_id: row.user_id,
             status: row.status.parse().unwrap_or(ShiftClaimStatus::Pending),
@@ -222,7 +222,7 @@ impl ShiftClaimRepository {
 
         if let Some(row) = row {
             let claim = ShiftClaim {
-                id: row.id.unwrap_or(0),
+                id: row.id,
                 shift_id: row.shift_id,
                 user_id: row.user_id,
                 status: row.status.parse().unwrap_or(ShiftClaimStatus::Pending),
@@ -263,7 +263,7 @@ impl ShiftClaimRepository {
 
         if let Some(row) = row {
             let claim = ShiftClaim {
-                id: row.id.unwrap_or(0),
+                id: row.id,
                 shift_id: row.shift_id,
                 user_id: row.user_id,
                 status: row.status.parse().unwrap_or(ShiftClaimStatus::Pending),
@@ -302,7 +302,7 @@ impl ShiftClaimRepository {
 
         if let Some(row) = row {
             let claim = ShiftClaim {
-                id: row.id.unwrap_or(0),
+                id: row.id,
                 shift_id: row.shift_id,
                 user_id: row.user_id,
                 status: row.status.parse().unwrap_or(ShiftClaimStatus::Pending),

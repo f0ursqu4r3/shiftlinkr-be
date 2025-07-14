@@ -102,8 +102,7 @@ impl LocationRepository {
     // Team management methods
     pub async fn create_team(&self, input: TeamInput) -> Result<Team> {
         let now = Utc::now().naive_utc();
-        let team = sqlx::query_as!(
-            Team,
+        let team = sqlx::query!(
             r#"
             INSERT INTO teams (name, description, location_id, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?)
@@ -118,7 +117,14 @@ impl LocationRepository {
         .fetch_one(&self.pool)
         .await?;
 
-        Ok(team)
+        Ok(Team {
+            id: team.id.expect("Row ID should not be null"),
+            name: team.name,
+            description: team.description,
+            location_id: team.location_id,
+            created_at: team.created_at,
+            updated_at: team.updated_at,
+        })
     }
 
     pub async fn get_team_by_id(&self, id: i64) -> Result<Option<Team>> {
@@ -187,8 +193,7 @@ impl LocationRepository {
     // Team member management
     pub async fn add_team_member(&self, team_id: i64, user_id: i64) -> Result<TeamMember> {
         let now = Utc::now().naive_utc();
-        let team_member = sqlx::query_as!(
-            TeamMember,
+        let team_member = sqlx::query!(
             r#"
             INSERT INTO team_members (team_id, user_id, created_at)
             VALUES (?, ?, ?)
@@ -196,12 +201,17 @@ impl LocationRepository {
             "#,
             team_id,
             user_id,
-            now
+            now,
         )
         .fetch_one(&self.pool)
         .await?;
 
-        Ok(team_member)
+        Ok(TeamMember {
+            id: team_member.id.expect("Row ID should not be null"),
+            team_id: team_member.team_id,
+            user_id: team_member.user_id,
+            created_at: team_member.created_at,
+        })
     }
 
     pub async fn get_team_members(&self, team_id: i64) -> Result<Vec<TeamMember>> {
@@ -228,8 +238,7 @@ impl LocationRepository {
     }
 
     pub async fn get_user_teams(&self, user_id: i64) -> Result<Vec<Team>> {
-        let teams = sqlx::query_as!(
-            Team,
+        let teams = sqlx::query!(
             r#"
             SELECT t.id, t.name, t.description, t.location_id, t.created_at, t.updated_at
             FROM teams t
@@ -242,6 +251,16 @@ impl LocationRepository {
         .fetch_all(&self.pool)
         .await?;
 
-        Ok(teams)
+        Ok(teams
+            .into_iter()
+            .map(|row| Team {
+                id: row.id.expect("Row ID should not be null"),
+                name: row.name,
+                description: row.description,
+                location_id: row.location_id,
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+            })
+            .collect())
     }
 }

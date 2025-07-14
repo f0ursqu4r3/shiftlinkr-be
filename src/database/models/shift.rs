@@ -72,7 +72,7 @@ impl<'q> sqlx::Encode<'q, sqlx::Sqlite> for ShiftStatus {
     fn encode_by_ref(
         &self,
         args: &mut Vec<sqlx::sqlite::SqliteArgumentValue<'q>>,
-    ) -> sqlx::encode::IsNull {
+    ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
         let s = self.to_string();
         <String as sqlx::Encode<'q, sqlx::Sqlite>>::encode_by_ref(&s, args)
     }
@@ -153,7 +153,7 @@ impl<'q> sqlx::Encode<'q, sqlx::Sqlite> for ShiftClaimStatus {
     fn encode_by_ref(
         &self,
         args: &mut Vec<sqlx::sqlite::SqliteArgumentValue<'q>>,
-    ) -> sqlx::encode::IsNull {
+    ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
         let s = self.to_string();
         <String as sqlx::Encode<'q, sqlx::Sqlite>>::encode_by_ref(&s, args)
     }

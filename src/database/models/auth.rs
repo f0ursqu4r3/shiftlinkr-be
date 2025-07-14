@@ -1,17 +1,24 @@
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use super::user::UserInfo;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct LoginRequest {
+    /// User's email address
+    #[schema(example = "user@example.com")]
     pub email: String,
+    /// User's password
+    #[schema(example = "password123")]
     pub password: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct AuthResponse {
+    /// JWT authentication token
     pub token: String,
+    /// User information
     pub user: UserInfo,
 }
 
@@ -25,8 +32,10 @@ pub struct PasswordResetToken {
     pub created_at: NaiveDateTime,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct ForgotPasswordRequest {
+    /// Email address to send password reset to
+    #[schema(example = "user@example.com")]
     pub email: String,
 }
 
@@ -35,9 +44,12 @@ pub struct ForgotPasswordResponse {
     pub message: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct ResetPasswordRequest {
+    /// Password reset token from email
     pub token: String,
+    /// New password
+    #[schema(example = "newPassword123")]
     pub new_password: String,
 }
 

@@ -33,7 +33,7 @@ impl<'q> sqlx::Encode<'q, sqlx::Sqlite> for PtoBalanceType {
     fn encode_by_ref(
         &self,
         args: &mut Vec<sqlx::sqlite::SqliteArgumentValue<'q>>,
-    ) -> sqlx::encode::IsNull {
+    ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
         let s = match self {
             PtoBalanceType::Pto => "pto",
             PtoBalanceType::Sick => "sick",
@@ -96,7 +96,7 @@ impl<'q> sqlx::Encode<'q, sqlx::Sqlite> for PtoChangeType {
     fn encode_by_ref(
         &self,
         args: &mut Vec<sqlx::sqlite::SqliteArgumentValue<'q>>,
-    ) -> sqlx::encode::IsNull {
+    ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
         let s = match self {
             PtoChangeType::Accrual => "accrual",
             PtoChangeType::Usage => "usage",

@@ -67,7 +67,7 @@ impl CompanyRepository {
             .map(|row| {
                 let role = CompanyRole::from_str(&row.role).unwrap_or_default();
                 CompanyInfo {
-                    id: row.id,
+                    id: row.id.expect("Row ID should not be null"),
                     name: row.name,
                     description: row.description,
                     website: row.website,
@@ -186,12 +186,11 @@ impl CompanyRepository {
         company_id: i64,
         user_id: &str,
     ) -> Result<bool> {
-        let result =
-            sqlx::query("DELETE FROM user_company WHERE company_id = ?1 AND user_id = ?2")
-                .bind(company_id)
-                .bind(user_id)
-                .execute(&self.pool)
-                .await?;
+        let result = sqlx::query("DELETE FROM user_company WHERE company_id = ?1 AND user_id = ?2")
+            .bind(company_id)
+            .bind(user_id)
+            .execute(&self.pool)
+            .await?;
 
         Ok(result.rows_affected() > 0)
     }

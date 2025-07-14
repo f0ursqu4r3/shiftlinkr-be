@@ -252,7 +252,7 @@ impl PtoBalanceRepository {
         .await?;
 
         Ok(PtoBalanceHistory {
-            id: history_row.id,
+            id: history_row.id.expect("Row ID should not be null"),
             user_id: history_row.user_id,
             balance_type: balance_type_str
                 .parse()
@@ -421,7 +421,7 @@ impl PtoBalanceRepository {
         .await?;
 
         Ok(Some(PtoBalanceHistory {
-            id: history_row.id,
+            id: history_row.id.expect("Row ID should not be null"),
             user_id: history_row.user_id,
             balance_type: PtoBalanceType::from_str(&history_row.balance_type)
                 .map_err(|e| anyhow::anyhow!(e))?,
@@ -541,7 +541,7 @@ impl PtoBalanceRepository {
         .await?;
 
         Ok(PtoBalanceHistory {
-            id: history_row.id,
+            id: history_row.id.expect("Row ID should not be null"),
             user_id: history_row.user_id,
             balance_type: balance_type_str
                 .parse()
