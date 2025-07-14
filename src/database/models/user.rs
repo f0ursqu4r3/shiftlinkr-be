@@ -1,6 +1,5 @@
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct User {
@@ -13,7 +12,7 @@ pub struct User {
     pub updated_at: NaiveDateTime,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum UserRole {
     Admin,
@@ -82,20 +81,17 @@ impl std::str::FromStr for UserRole {
     }
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
 pub struct CreateUserRequest {
     /// User's email address
-    #[schema(example = "user@example.com")]
     pub email: String,
     /// User's password
-    #[schema(example = "password123")]
     pub password: String,
     /// User's full name
-    #[schema(example = "John Doe")]
     pub name: String,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize)]
 pub struct UserInfo {
     /// User's unique identifier
     pub id: String,

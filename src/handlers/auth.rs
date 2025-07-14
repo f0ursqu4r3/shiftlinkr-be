@@ -4,22 +4,12 @@ use std::collections::HashMap;
 
 use crate::config::Config;
 use crate::database::models::{
-    AcceptInviteRequest, Action, AuthResponse, CreateInviteRequest, CreateUserRequest, 
+    AcceptInviteRequest, Action, AuthResponse, CreateInviteRequest, CreateUserRequest,
     ForgotPasswordRequest, LoginRequest, ResetPasswordRequest,
 };
 use crate::database::repositories::invite::InviteRepository;
 use crate::AppState;
 
-#[utoipa::path(
-    post,
-    path = "/api/v1/auth/register",
-    request_body = CreateUserRequest,
-    responses(
-        (status = 200, description = "User registered successfully", body = AuthResponse),
-        (status = 400, description = "Bad request - user already exists or invalid data")
-    ),
-    tag = "Authentication"
-)]
 pub async fn register(
     data: web::Data<AppState>,
     request: web::Json<CreateUserRequest>,
@@ -96,16 +86,6 @@ pub async fn register(
     }
 }
 
-#[utoipa::path(
-    post,
-    path = "/api/v1/auth/login",
-    request_body = LoginRequest,
-    responses(
-        (status = 200, description = "Login successful", body = AuthResponse),
-        (status = 400, description = "Invalid credentials")
-    ),
-    tag = "Authentication"
-)]
 pub async fn login(
     data: web::Data<AppState>,
     request: web::Json<LoginRequest>,
@@ -183,18 +163,6 @@ pub async fn login(
     }
 }
 
-#[utoipa::path(
-    get,
-    path = "/api/v1/auth/me",
-    responses(
-        (status = 200, description = "User information retrieved successfully"),
-        (status = 401, description = "Unauthorized - invalid or missing token")
-    ),
-    security(
-        ("Bearer" = [])
-    ),
-    tag = "Authentication"
-)]
 pub async fn me(data: web::Data<AppState>, req: HttpRequest) -> Result<HttpResponse> {
     // Extract token from Authorization header
     let token = match extract_token_from_header(&req) {
@@ -257,15 +225,6 @@ fn extract_token_from_header(req: &HttpRequest) -> Option<String> {
     }
 }
 
-#[utoipa::path(
-    post,
-    path = "/api/v1/auth/forgot-password",
-    request_body = ForgotPasswordRequest,
-    responses(
-        (status = 200, description = "Password reset email sent (if email exists)")
-    ),
-    tag = "Authentication"
-)]
 pub async fn forgot_password(
     data: web::Data<AppState>,
     config: web::Data<Config>,
@@ -293,16 +252,6 @@ pub async fn forgot_password(
     }
 }
 
-#[utoipa::path(
-    post,
-    path = "/api/v1/auth/reset-password",
-    request_body = ResetPasswordRequest,
-    responses(
-        (status = 200, description = "Password reset successfully"),
-        (status = 400, description = "Invalid or expired reset token")
-    ),
-    tag = "Authentication"
-)]
 pub async fn reset_password(
     data: web::Data<AppState>,
     request: web::Json<ResetPasswordRequest>,

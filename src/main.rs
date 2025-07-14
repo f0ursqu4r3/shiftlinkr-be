@@ -11,11 +11,8 @@ use be::database::{
     },
 };
 use be::handlers::{admin, auth, company, pto_balance, shifts, stats, swaps, time_off};
-use be::services::openapi::ApiDoc;
 use be::services::ActivityLogger;
 use be::{AppState, AuthService, Config};
-use utoipa::OpenApi;
-use utoipa_swagger_ui::SwaggerUi;
 
 #[get("/")]
 async fn hello() -> impl Responder {
@@ -28,13 +25,6 @@ async fn health() -> impl Responder {
         "status": "ok",
         "timestamp": chrono::Utc::now()
     }))
-}
-
-#[get("/api-docs/openapi.json")]
-async fn openapi_spec() -> impl Responder {
-    HttpResponse::Ok()
-        .content_type("application/json")
-        .json(ApiDoc::openapi())
 }
 
 #[actix_web::main]
@@ -131,13 +121,8 @@ async fn main() -> Result<()> {
                     .max_age(3600),
             )
             .wrap(Logger::default())
-            .service(web::scope("/docs").service(
-                SwaggerUi::new("/{_:.*}").url("/api-docs/openapi.json", ApiDoc::openapi()),
-            ))
-            .service(openapi_spec)
             .service(hello)
             .service(health)
-            .service(openapi_spec)
             .service(
                 web::scope("/api/v1")
                     .service(
