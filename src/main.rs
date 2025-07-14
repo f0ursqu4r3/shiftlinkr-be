@@ -6,11 +6,14 @@ use be::database::{
     init_database,
     repositories::{
         ActivityRepository, CompanyRepository, InviteRepository, LocationRepository,
-        PasswordResetTokenRepository, PtoBalanceRepository, ShiftClaimRepository, ShiftRepository,
-        ShiftSwapRepository, StatsRepository, TimeOffRepository, UserRepository,
+        PasswordResetTokenRepository, PtoBalanceRepository, ScheduleRepository,
+        ShiftClaimRepository, ShiftRepository, ShiftSwapRepository, SkillRepository,
+        StatsRepository, TimeOffRepository, UserRepository,
     },
 };
-use be::handlers::{admin, auth, company, pto_balance, shifts, stats, swaps, time_off};
+use be::handlers::{
+    admin, auth, company, pto_balance, schedules, shifts, skills, stats, swaps, time_off,
+};
 use be::middleware::RequestId;
 use be::services::ActivityLogger;
 use be::{AppState, AuthService, Config};
@@ -61,6 +64,8 @@ async fn main() -> Result<()> {
     let pto_balance_repository = PtoBalanceRepository::new(pool.clone());
     let shift_claim_repository = ShiftClaimRepository::new(pool.clone());
     let company_repository = CompanyRepository::new(pool.clone());
+    let skill_repository = SkillRepository::new(pool.clone());
+    let schedule_repository = ScheduleRepository::new(pool.clone());
     let auth_service = AuthService::new(
         user_repository.clone(),
         password_reset_repository,
@@ -87,6 +92,8 @@ async fn main() -> Result<()> {
     let pto_balance_repo_data = web::Data::new(pto_balance_repository);
     let shift_claim_repo_data = web::Data::new(shift_claim_repository);
     let company_repo_data = web::Data::new(company_repository);
+    let skill_repo_data = web::Data::new(skill_repository);
+    let schedule_repo_data = web::Data::new(schedule_repository);
     let config_data = web::Data::new(config.clone());
     let activity_logger_data = web::Data::new(activity_logger);
 
@@ -107,6 +114,8 @@ async fn main() -> Result<()> {
             .app_data(pto_balance_repo_data.clone())
             .app_data(shift_claim_repo_data.clone())
             .app_data(company_repo_data.clone())
+            .app_data(skill_repo_data.clone())
+            .app_data(schedule_repo_data.clone())
             .app_data(config_data.clone())
             .app_data(activity_logger_data.clone())
             .wrap(
@@ -239,6 +248,45 @@ async fn main() -> Result<()> {
                                 "/{user_id}/accrual",
                                 web::post().to(pto_balance::process_pto_accrual),
                             ),
+                    )
+                    .service(
+                        web::scope("/skills")
+                            .route("", web::post().to(skills::create_skill))
+                            .route("", web::get().to(skills::get_all_skills))
+                            .route("/{id}", web::get().to(skills::get_skill))
+                            .route("/{id}", web::put().to(skills::update_skill))
+                            .route("/{id}", web::delete().to(skills::delete_skill))
+                            .route("/{id}/users", web::get().to(skills::get_users_with_skill))
+                    )
+                    .service(
+                        web::scope("/user-skills")
+                            .route("", web::post().to(skills::add_user_skill))
+                            .route("/{user_id}", web::get().to(skills::get_user_skills))
+                            .route("/{id}", web::put().to(skills::update_user_skill))
+                            .route("/{user_id}/{skill_id}", web::delete().to(skills::remove_user_skill))
+                    )
+                    .service(
+                        web::scope("/shift-skills")
+                            .route("", web::post().to(skills::add_shift_required_skill))
+                            .route("/{shift_id}", web::get().to(skills::get_shift_required_skills))
+                            .route("/{shift_id}/{skill_id}", web::delete().to(skills::remove_shift_required_skill))
+                    )
+                    .service(
+                        web::scope("/schedules")
+                            .route("", web::post().to(schedules::create_user_schedule))
+                            .route("/{user_id}", web::get().to(schedules::get_user_schedule))
+                            .route("/{user_id}", web::put().to(schedules::update_user_schedule))
+                            .route("/{user_id}", web::delete().to(schedules::delete_user_schedule))
+                    )
+                    .service(
+                        web::scope("/assignments")
+                            .route("", web::post().to(schedules::create_shift_assignment))
+                            .route("/{id}", web::get().to(schedules::get_shift_assignment))
+                            .route("/shift/{shift_id}", web::get().to(schedules::get_shift_assignments_by_shift))
+                            .route("/user/{user_id}", web::get().to(schedules::get_shift_assignments_by_user))
+                            .route("/user/{user_id}/pending", web::get().to(schedules::get_pending_assignments_for_user))
+                            .route("/{id}/respond", web::post().to(schedules::respond_to_assignment))
+                            .route("/{id}/cancel", web::post().to(schedules::cancel_assignment))
                     )
                     .service(
                         web::scope("/companies")

@@ -476,7 +476,7 @@ impl ShiftClaimRepository {
     ) -> Result<Option<ShiftClaimInfo>, sqlx::Error> {
         let row = sqlx::query!(
             r#"
-            SELECT s.id, s.team_id, s.assigned_user_id, s.start_time, s.status as shift_status
+            SELECT s.id, s.team_id, s.start_time, s.status as shift_status
             FROM shifts s
             WHERE s.id = ?
             "#,
@@ -489,7 +489,7 @@ impl ShiftClaimRepository {
             Ok(Some(ShiftClaimInfo {
                 id: row.id,
                 team_id: row.team_id,
-                assigned_user_id: row.assigned_user_id,
+                assigned_user_id: None, // Assignments are now tracked in shift_assignments table
                 start_time: row.start_time,
                 shift_status: row.shift_status,
             }))

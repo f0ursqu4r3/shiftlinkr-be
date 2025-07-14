@@ -71,12 +71,12 @@ impl StatsRepository {
             .await? as i64;
 
         let assigned_shifts =
-            sqlx::query_scalar!("SELECT COUNT(*) FROM shifts WHERE assigned_user_id IS NOT NULL")
+            sqlx::query_scalar!("SELECT COUNT(DISTINCT shift_id) FROM shift_assignments WHERE status IN ('scheduled', 'confirmed', 'completed')")
                 .fetch_one(&self.pool)
                 .await? as i64;
 
         let unassigned_shifts =
-            sqlx::query_scalar!("SELECT COUNT(*) FROM shifts WHERE assigned_user_id IS NULL")
+            sqlx::query_scalar!("SELECT COUNT(*) FROM shifts WHERE id NOT IN (SELECT DISTINCT shift_id FROM shift_assignments WHERE status IN ('scheduled', 'confirmed', 'completed'))")
                 .fetch_one(&self.pool)
                 .await? as i64;
 

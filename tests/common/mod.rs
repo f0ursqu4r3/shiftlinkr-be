@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use actix_web::web;
+use actix_web::{http::StatusCode, test, web};
 use anyhow::Result;
 use be::config::Config;
 use be::database::init_database;
@@ -11,6 +11,7 @@ use be::database::repositories::password_reset::PasswordResetTokenRepository;
 use be::database::repositories::user::UserRepository;
 use be::services::auth::AuthService;
 use be::{ActivityLogger, ActivityRepository, AppState};
+use serde_json::json;
 use sqlx::SqlitePool;
 use std::env;
 use tempfile::TempDir;
@@ -109,4 +110,62 @@ pub async fn make_user_admin_of_default_company(
         .await?;
 
     Ok(())
+}
+
+/// Helper function to register a user and get auth token
+pub async fn register_test_user<S>(
+    app: &S,
+    email: &str,
+    password: &str,
+    name: &str,
+) -> Result<(String, String)>
+where
+    S: actix_web::dev::Service<
+        actix_web::dev::ServiceRequest,
+        Response = actix_web::dev::ServiceResponse<actix_web::body::BoxBody>,
+        Error = actix_web::Error,
+    >,
+{
+    let register_data = json!({
+        "email": email,
+        "password": password,
+        "name": name
+    });
+
+    let req = test::TestRequest::post()
+        .uri("/api/v1/auth/register")
+        .set_json(&register_data)
+        .to_srv_request();
+
+    let resp = test::call_service(app, req).await;
+    if resp.status() != StatusCode::OK {
+        let body: serde_json::Value = test::read_body_json(resp).await;
+        return Err(anyhow::anyhow!("Registration failed: {:?}", body));
+    }
+
+    let body: serde_json::Value = test::read_body_json(resp).await;
+    let token = body["token"].as_str().unwrap().to_string();
+    let user_id = body["user"]["id"].as_str().unwrap().to_string();
+
+    Ok((token, user_id))
+}
+
+/// Helper function to create an admin user for testing
+pub async fn create_admin_user_and_token<S>(
+    app: &S,
+    company_repo: &CompanyRepository,
+    email: &str,
+    password: &str,
+    name: &str,
+) -> Result<(String, String)>
+where
+    S: actix_web::dev::Service<
+        actix_web::dev::ServiceRequest,
+        Response = actix_web::dev::ServiceResponse<actix_web::body::BoxBody>,
+        Error = actix_web::Error,
+    >,
+{
+    let (token, user_id) = register_test_user(app, email, password, name).await?;
+    make_user_admin_of_default_company(company_repo, &user_id).await?;
+    Ok((token, user_id))
 }
