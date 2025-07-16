@@ -7,13 +7,10 @@ CREATE TABLE IF NOT EXISTS shift_proposal_assignments (
     shift_id INTEGER NOT NULL,
     user_id TEXT NOT NULL,
     assigned_by TEXT NOT NULL,
-    assignment_status TEXT NOT NULL DEFAULT 'pending',
-    -- "pending", "accepted", "declined", "cancelled", "expired"
+    assignment_status TEXT NOT NULL DEFAULT 'pending', -- "pending", "accepted", "declined", "cancelled", "expired"
     acceptance_deadline DATETIME,
-    response TEXT,
-    -- User's response when accepting/declining
-    response_notes TEXT,
-    -- Additional notes from the user
+    response TEXT, -- User's response when accepting/declining
+    response_notes TEXT, -- Additional notes from the user
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (shift_id) REFERENCES shifts(id) ON DELETE CASCADE,
