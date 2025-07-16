@@ -38,10 +38,11 @@ pub struct ShiftRow {
     pub description: Option<String>,
     pub location_id: i64,
     pub team_id: Option<i64>,
-    pub assigned_user_id: Option<i64>,
     pub start_time: NaiveDateTime,
     pub end_time: NaiveDateTime,
-    pub hourly_rate: Option<f64>,
+    pub min_duration_minutes: Option<i64>,
+    pub max_duration_minutes: Option<i64>,
+    pub max_people: Option<i64>,
     pub status: String,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
@@ -95,11 +96,15 @@ impl From<ShiftRow> for super::models::Shift {
             description: row.description,
             location_id: row.location_id,
             team_id: row.team_id,
-            assigned_user_id: row.assigned_user_id,
             start_time: row.start_time,
             end_time: row.end_time,
-            hourly_rate: row.hourly_rate,
-            status: row.status.parse().unwrap_or(super::models::ShiftStatus::Open),
+            min_duration_minutes: row.min_duration_minutes,
+            max_duration_minutes: row.max_duration_minutes,
+            max_people: row.max_people,
+            status: row
+                .status
+                .parse()
+                .unwrap_or(super::models::ShiftStatus::Open),
             created_at: row.created_at,
             updated_at: row.updated_at,
         }

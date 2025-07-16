@@ -18,19 +18,20 @@ impl ShiftRepository {
         let now = Utc::now().naive_utc();
         let row = sqlx::query_as::<_, ShiftRow>(
             r#"
-            INSERT INTO shifts (title, description, location_id, team_id, assigned_user_id, start_time, end_time, hourly_rate, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            RETURNING id, title, description, location_id, team_id, assigned_user_id, start_time, end_time, hourly_rate, status, created_at, updated_at
+            INSERT INTO shifts (title, description, location_id, team_id, start_time, end_time, min_duration_minutes, max_duration_minutes, max_people, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING id, title, description, location_id, team_id, start_time, end_time, min_duration_minutes, max_duration_minutes, max_people, status, created_at, updated_at
             "#
         )
         .bind(input.title)
         .bind(input.description)
         .bind(input.location_id)
         .bind(input.team_id)
-        .bind(input.assigned_user_id)
         .bind(input.start_time)
         .bind(input.end_time)
-        .bind(input.hourly_rate)
+        .bind(input.min_duration_minutes)
+        .bind(input.max_duration_minutes)
+        .bind(input.max_people)
         .bind(ShiftStatus::Open.to_string())
         .bind(now)
         .bind(now)
@@ -42,7 +43,7 @@ impl ShiftRepository {
 
     pub async fn get_shift_by_id(&self, id: i64) -> Result<Option<Shift>> {
         let row = sqlx::query_as::<_, ShiftRow>(
-            "SELECT id, title, description, location_id, team_id, assigned_user_id, start_time, end_time, hourly_rate, status, created_at, updated_at FROM shifts WHERE id = ?"
+            "SELECT id, title, description, location_id, team_id, start_time, end_time, min_duration_minutes, max_duration_minutes, max_people, status, created_at, updated_at FROM shifts WHERE id = ?"
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -53,7 +54,7 @@ impl ShiftRepository {
 
     pub async fn get_shifts_by_location(&self, location_id: i64) -> Result<Vec<Shift>> {
         let rows = sqlx::query_as::<_, ShiftRow>(
-            "SELECT id, title, description, location_id, team_id, assigned_user_id, start_time, end_time, hourly_rate, status, created_at, updated_at FROM shifts WHERE location_id = ? ORDER BY start_time"
+            "SELECT id, title, description, location_id, team_id, start_time, end_time, min_duration_minutes, max_duration_minutes, max_people, status, created_at, updated_at FROM shifts WHERE location_id = ? ORDER BY start_time"
         )
         .bind(location_id)
         .fetch_all(&self.pool)
@@ -64,7 +65,7 @@ impl ShiftRepository {
 
     pub async fn get_shifts_by_team(&self, team_id: i64) -> Result<Vec<Shift>> {
         let rows = sqlx::query_as::<_, ShiftRow>(
-            "SELECT id, title, description, location_id, team_id, assigned_user_id, start_time, end_time, hourly_rate, status, created_at, updated_at FROM shifts WHERE team_id = ? ORDER BY start_time"
+            "SELECT id, title, description, location_id, team_id, start_time, end_time, min_duration_minutes, max_duration_minutes, max_people, status, created_at, updated_at FROM shifts WHERE team_id = ? ORDER BY start_time"
         )
         .bind(team_id)
         .fetch_all(&self.pool)
@@ -75,7 +76,7 @@ impl ShiftRepository {
 
     pub async fn get_shifts_by_user(&self, user_id: i64) -> Result<Vec<Shift>> {
         let rows = sqlx::query_as::<_, ShiftRow>(
-            "SELECT id, title, description, location_id, team_id, assigned_user_id, start_time, end_time, hourly_rate, status, created_at, updated_at FROM shifts WHERE assigned_user_id = ? ORDER BY start_time"
+            "SELECT id, title, description, location_id, team_id, start_time, end_time, min_duration_minutes, max_duration_minutes, max_people, status, created_at, updated_at FROM shifts WHERE assigned_user_id = ? ORDER BY start_time"
         )
         .bind(user_id)
         .fetch_all(&self.pool)
@@ -92,7 +93,7 @@ impl ShiftRepository {
     ) -> Result<Vec<Shift>> {
         let rows = if let Some(location_id) = location_id {
             sqlx::query_as::<_, ShiftRow>(
-                "SELECT id, title, description, location_id, team_id, assigned_user_id, start_time, end_time, hourly_rate, status, created_at, updated_at FROM shifts WHERE start_time >= ? AND end_time <= ? AND location_id = ? ORDER BY start_time"
+                "SELECT id, title, description, location_id, team_id, start_time, end_time, min_duration_minutes, max_duration_minutes, max_people, status, created_at, updated_at FROM shifts WHERE start_time >= ? AND end_time <= ? AND location_id = ? ORDER BY start_time"
             )
             .bind(start_date)
             .bind(end_date)
@@ -101,7 +102,7 @@ impl ShiftRepository {
             .await?
         } else {
             sqlx::query_as::<_, ShiftRow>(
-                "SELECT id, title, description, location_id, team_id, assigned_user_id, start_time, end_time, hourly_rate, status, created_at, updated_at FROM shifts WHERE start_time >= ? AND end_time <= ? ORDER BY start_time"
+                "SELECT id, title, description, location_id, team_id, start_time, end_time, min_duration_minutes, max_duration_minutes, max_people, status, created_at, updated_at FROM shifts WHERE start_time >= ? AND end_time <= ? ORDER BY start_time"
             )
             .bind(start_date)
             .bind(end_date)
@@ -114,7 +115,7 @@ impl ShiftRepository {
 
     pub async fn get_open_shifts_by_location(&self, location_id: i64) -> Result<Vec<Shift>> {
         let rows = sqlx::query_as::<_, ShiftRow>(
-            "SELECT id, title, description, location_id, team_id, assigned_user_id, start_time, end_time, hourly_rate, status, created_at, updated_at FROM shifts WHERE location_id = ? AND status = ? ORDER BY start_time"
+            "SELECT id, title, description, location_id, team_id, start_time, end_time, min_duration_minutes, max_duration_minutes, max_people, status, created_at, updated_at FROM shifts WHERE location_id = ? AND status = ? ORDER BY start_time"
         )
         .bind(location_id)
         .bind(ShiftStatus::Open.to_string())
@@ -126,7 +127,7 @@ impl ShiftRepository {
 
     pub async fn get_open_shifts(&self) -> Result<Vec<Shift>> {
         let rows = sqlx::query_as::<_, ShiftRow>(
-            "SELECT id, title, description, location_id, team_id, assigned_user_id, start_time, end_time, hourly_rate, status, created_at, updated_at FROM shifts WHERE status = ? ORDER BY start_time"
+            "SELECT id, title, description, location_id, team_id, start_time, end_time, min_duration_minutes, max_duration_minutes, max_people, status, created_at, updated_at FROM shifts WHERE status = ? ORDER BY start_time"
         )
         .bind(ShiftStatus::Open.to_string())
         .fetch_all(&self.pool)
@@ -140,19 +141,21 @@ impl ShiftRepository {
         let row = sqlx::query_as::<_, ShiftRow>(
             r#"
             UPDATE shifts 
-            SET title = ?, description = ?, location_id = ?, team_id = ?, assigned_user_id = ?, start_time = ?, end_time = ?, hourly_rate = ?, updated_at = ?
+            SET title = ?, description = ?, location_id = ?, team_id = ?, start_time = ?, end_time = ?, min_duration_minutes = ?, max_duration_minutes = ?, max_people = ?, status = ?, created_at = ?, updated_at = ?
             WHERE id = ?
-            RETURNING id, title, description, location_id, team_id, assigned_user_id, start_time, end_time, hourly_rate, status, created_at, updated_at
+            RETURNING id, title, description, location_id, team_id, start_time, end_time, min_duration_minutes, max_duration_minutes, max_people, status, created_at, updated_at
             "#
         )
         .bind(input.title)
         .bind(input.description)
         .bind(input.location_id)
         .bind(input.team_id)
-        .bind(input.assigned_user_id)
         .bind(input.start_time)
         .bind(input.end_time)
-        .bind(input.hourly_rate)
+        .bind(input.min_duration_minutes)
+        .bind(input.max_duration_minutes)
+        .bind(input.max_people)
+        .bind(input.status.to_string())
         .bind(now)
         .bind(id)
         .fetch_optional(&self.pool)
@@ -168,7 +171,7 @@ impl ShiftRepository {
             UPDATE shifts 
             SET assigned_user_id = ?, status = ?, updated_at = ?
             WHERE id = ?
-            RETURNING id, title, description, location_id, team_id, assigned_user_id, start_time, end_time, hourly_rate, status, created_at, updated_at
+            RETURNING id, title, description, location_id, team_id, start_time, end_time, min_duration_minutes, max_duration_minutes, max_people, status, created_at, updated_at
             "#
         )
         .bind(user_id)
@@ -188,7 +191,7 @@ impl ShiftRepository {
             UPDATE shifts 
             SET assigned_user_id = NULL, status = ?, updated_at = ?
             WHERE id = ?
-            RETURNING id, title, description, location_id, team_id, assigned_user_id, start_time, end_time, hourly_rate, status, created_at, updated_at
+            RETURNING id, title, description, location_id, team_id, start_time, end_time, min_duration_minutes, max_duration_minutes, max_people, status, created_at, updated_at
             "#
         )
         .bind(ShiftStatus::Open.to_string())
@@ -207,7 +210,7 @@ impl ShiftRepository {
             UPDATE shifts 
             SET status = ?, updated_at = ?
             WHERE id = ?
-            RETURNING id, title, description, location_id, team_id, assigned_user_id, start_time, end_time, hourly_rate, status, created_at, updated_at
+            RETURNING id, title, description, location_id, team_id, start_time, end_time, min_duration_minutes, max_duration_minutes, max_people, status, created_at, updated_at
             "#
         )
         .bind(status.to_string())
@@ -220,12 +223,9 @@ impl ShiftRepository {
     }
 
     pub async fn delete_shift(&self, id: i64) -> Result<bool> {
-        let result = sqlx::query!(
-            "DELETE FROM shifts WHERE id = ?",
-            id
-        )
-        .execute(&self.pool)
-        .await?;
+        let result = sqlx::query!("DELETE FROM shifts WHERE id = ?", id)
+            .execute(&self.pool)
+            .await?;
 
         Ok(result.rows_affected() > 0)
     }
