@@ -147,7 +147,7 @@ impl ScheduleRepository {
         let now = Utc::now().naive_utc();
         let assignment = sqlx::query_as::<_, ShiftAssignment>(
             r#"
-            INSERT INTO shift_assignments (
+            INSERT INTO shift_proposal_assignments (
                 shift_id, user_id, assigned_by, assignment_status, 
                 acceptance_deadline, response, response_notes, created_at, updated_at
             )
@@ -176,7 +176,7 @@ impl ScheduleRepository {
             r#"
             SELECT id, shift_id, user_id, assigned_by, assignment_status,
                    acceptance_deadline, response, response_notes, created_at, updated_at
-            FROM shift_assignments WHERE id = ?
+            FROM shift_proposal_assignments WHERE id = ?
             "#,
         )
         .bind(id)
@@ -194,7 +194,7 @@ impl ScheduleRepository {
             r#"
             SELECT id, shift_id, user_id, assigned_by, assignment_status,
                    acceptance_deadline, response, response_notes, created_at, updated_at
-            FROM shift_assignments WHERE shift_id = ? ORDER BY created_at
+            FROM shift_proposal_assignments WHERE shift_id = ? ORDER BY created_at
             "#,
         )
         .bind(shift_id)
@@ -212,7 +212,7 @@ impl ScheduleRepository {
             r#"
             SELECT id, shift_id, user_id, assigned_by, assignment_status,
                    acceptance_deadline, response, response_notes, created_at, updated_at
-            FROM shift_assignments WHERE user_id = ? ORDER BY created_at DESC
+            FROM shift_proposal_assignments WHERE user_id = ? ORDER BY created_at DESC
             "#,
         )
         .bind(user_id)
@@ -230,7 +230,7 @@ impl ScheduleRepository {
             r#"
             SELECT id, shift_id, user_id, assigned_by, assignment_status,
                    acceptance_deadline, response, response_notes, created_at, updated_at
-            FROM shift_assignments 
+            FROM shift_proposal_assignments 
             WHERE user_id = ? AND assignment_status = 'pending'
             ORDER BY acceptance_deadline ASC, created_at
             "#,
@@ -256,7 +256,7 @@ impl ScheduleRepository {
 
         let assignment = sqlx::query_as::<_, ShiftAssignment>(
             r#"
-            UPDATE shift_assignments SET
+            UPDATE shift_proposal_assignments SET
                 assignment_status = ?, response = ?, response_notes = ?, updated_at = ?
             WHERE id = ?
             RETURNING id, shift_id, user_id, assigned_by, assignment_status,
@@ -278,7 +278,7 @@ impl ScheduleRepository {
         let now = Utc::now().naive_utc();
         let assignment = sqlx::query_as::<_, ShiftAssignment>(
             r#"
-            UPDATE shift_assignments SET
+            UPDATE shift_proposal_assignments SET
                 assignment_status = 'cancelled', updated_at = ?
             WHERE id = ?
             RETURNING id, shift_id, user_id, assigned_by, assignment_status,
@@ -297,7 +297,7 @@ impl ScheduleRepository {
         let now = Utc::now().naive_utc();
         let assignments = sqlx::query_as::<_, ShiftAssignment>(
             r#"
-            UPDATE shift_assignments SET
+            UPDATE shift_proposal_assignments SET
                 assignment_status = 'expired', updated_at = ?
             WHERE assignment_status = 'pending' 
               AND acceptance_deadline IS NOT NULL 
