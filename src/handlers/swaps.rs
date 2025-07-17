@@ -2,15 +2,16 @@ use actix_web::{web, HttpRequest, HttpResponse, Result};
 use serde::Deserialize;
 use std::collections::HashMap;
 
-use crate::database::models::{ShiftSwapInput, ShiftSwapStatus};
 use crate::database::models::activity::Action;
-use crate::database::repositories::shift_swap::ShiftSwapRepository;
+use crate::database::models::{ShiftSwapInput, ShiftSwapStatus};
 use crate::database::repositories::company::CompanyRepository;
+use crate::database::repositories::shift_swap::ShiftSwapRepository;
 use crate::handlers::admin::ApiResponse;
-use crate::services::auth::Claims;
 use crate::services::activity_logger::ActivityLogger;
+use crate::services::auth::Claims;
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SwapQuery {
     pub requesting_user_id: Option<String>,
     pub target_user_id: Option<String>,
@@ -19,6 +20,7 @@ pub struct SwapQuery {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SwapResponseRequest {
     pub target_shift_id: Option<i64>,
     pub notes: Option<String>,
@@ -60,24 +62,34 @@ pub async fn create_swap_request(
     match repo.create_swap_request(request_input).await {
         Ok(swap_request) => {
             // Log shift swap request creation activity
-            if let Ok(Some(company)) = company_repo
-                .get_primary_company_for_user(&claims.sub)
-                .await
+            if let Ok(Some(company)) = company_repo.get_primary_company_for_user(&claims.sub).await
             {
                 let mut metadata = HashMap::new();
-                metadata.insert("original_shift_id".to_string(), serde_json::Value::Number(serde_json::Number::from(original_shift_id)));
-                metadata.insert("requesting_user_id".to_string(), serde_json::Value::String(requesting_user_id.clone()));
+                metadata.insert(
+                    "original_shift_id".to_string(),
+                    serde_json::Value::Number(serde_json::Number::from(original_shift_id)),
+                );
+                metadata.insert(
+                    "requesting_user_id".to_string(),
+                    serde_json::Value::String(requesting_user_id.clone()),
+                );
                 if let Some(target_id) = &target_user_id {
-                    metadata.insert("target_user_id".to_string(), serde_json::Value::String(target_id.clone()));
+                    metadata.insert(
+                        "target_user_id".to_string(),
+                        serde_json::Value::String(target_id.clone()),
+                    );
                 }
-                
+
                 if let Err(e) = activity_logger
                     .log_shift_swap_activity(
                         company.id,
                         Some(claims.sub.parse().unwrap_or(0)),
                         swap_request.id,
                         Action::CREATED,
-                        format!("Shift swap request created by user {} for shift {}", requesting_user_id, original_shift_id),
+                        format!(
+                            "Shift swap request created by user {} for shift {}",
+                            requesting_user_id, original_shift_id
+                        ),
                         Some(metadata),
                         &req,
                     )
@@ -86,7 +98,7 @@ pub async fn create_swap_request(
                     log::warn!("Failed to log shift swap creation activity: {}", e);
                 }
             }
-            
+
             Ok(HttpResponse::Created().json(ApiResponse::success(swap_request)))
         }
         Err(err) => {
@@ -224,28 +236,47 @@ pub async fn respond_to_swap(
             {
                 Ok(updated_swap) => {
                     // Log swap response activity
-                    if let Ok(Some(company)) = company_repo
-                        .get_primary_company_for_user(&claims.sub)
-                        .await
+                    if let Ok(Some(company)) =
+                        company_repo.get_primary_company_for_user(&claims.sub).await
                     {
                         let mut metadata = HashMap::new();
-                        metadata.insert("original_shift_id".to_string(), serde_json::Value::Number(serde_json::Number::from(original_shift_id)));
-                        metadata.insert("requesting_user_id".to_string(), serde_json::Value::String(requesting_user_id.clone()));
-                        metadata.insert("response_accepted".to_string(), serde_json::Value::Bool(true));
+                        metadata.insert(
+                            "original_shift_id".to_string(),
+                            serde_json::Value::Number(serde_json::Number::from(original_shift_id)),
+                        );
+                        metadata.insert(
+                            "requesting_user_id".to_string(),
+                            serde_json::Value::String(requesting_user_id.clone()),
+                        );
+                        metadata.insert(
+                            "response_accepted".to_string(),
+                            serde_json::Value::Bool(true),
+                        );
                         if let Some(target_shift_id) = response.target_shift_id {
-                            metadata.insert("target_shift_id".to_string(), serde_json::Value::Number(serde_json::Number::from(target_shift_id)));
+                            metadata.insert(
+                                "target_shift_id".to_string(),
+                                serde_json::Value::Number(serde_json::Number::from(
+                                    target_shift_id,
+                                )),
+                            );
                         }
                         if let Some(notes) = &response.notes {
-                            metadata.insert("response_notes".to_string(), serde_json::Value::String(notes.clone()));
+                            metadata.insert(
+                                "response_notes".to_string(),
+                                serde_json::Value::String(notes.clone()),
+                            );
                         }
-                        
+
                         if let Err(e) = activity_logger
                             .log_shift_swap_activity(
                                 company.id,
                                 Some(claims.sub.parse().unwrap_or(0)),
                                 swap_id,
                                 Action::UPDATED,
-                                format!("User {} responded to swap request from {}", claims.sub, requesting_user_id),
+                                format!(
+                                    "User {} responded to swap request from {}",
+                                    claims.sub, requesting_user_id
+                                ),
                                 Some(metadata),
                                 &req,
                             )
@@ -254,7 +285,7 @@ pub async fn respond_to_swap(
                             log::warn!("Failed to log swap response activity: {}", e);
                         }
                     }
-                    
+
                     Ok(HttpResponse::Ok().json(ApiResponse::success(updated_swap)))
                 }
                 Err(err) => {
@@ -301,8 +332,9 @@ pub async fn approve_swap_request(
     let swap_request = match repo.get_swap_by_id(swap_id).await {
         Ok(Some(swap)) => swap,
         Ok(None) => {
-            return Ok(HttpResponse::NotFound()
-                .json(ApiResponse::<()>::error("Swap request not found")));
+            return Ok(
+                HttpResponse::NotFound().json(ApiResponse::<()>::error("Swap request not found"))
+            );
         }
         Err(err) => {
             log::error!("Error fetching swap request for approval: {}", err);
@@ -321,27 +353,42 @@ pub async fn approve_swap_request(
     {
         Ok(approved_swap) => {
             // Log swap approval activity
-            if let Ok(Some(company)) = company_repo
-                .get_primary_company_for_user(&claims.sub)
-                .await
+            if let Ok(Some(company)) = company_repo.get_primary_company_for_user(&claims.sub).await
             {
                 let mut metadata = HashMap::new();
-                metadata.insert("original_shift_id".to_string(), serde_json::Value::Number(serde_json::Number::from(swap_request.original_shift_id)));
-                metadata.insert("requesting_user_id".to_string(), serde_json::Value::String(swap_request.requesting_user_id.clone()));
+                metadata.insert(
+                    "original_shift_id".to_string(),
+                    serde_json::Value::Number(serde_json::Number::from(
+                        swap_request.original_shift_id,
+                    )),
+                );
+                metadata.insert(
+                    "requesting_user_id".to_string(),
+                    serde_json::Value::String(swap_request.requesting_user_id.clone()),
+                );
                 if let Some(target_user_id) = &swap_request.target_user_id {
-                    metadata.insert("target_user_id".to_string(), serde_json::Value::String(target_user_id.clone()));
+                    metadata.insert(
+                        "target_user_id".to_string(),
+                        serde_json::Value::String(target_user_id.clone()),
+                    );
                 }
                 if let Some(notes) = &approval.notes {
-                    metadata.insert("approval_notes".to_string(), serde_json::Value::String(notes.clone()));
+                    metadata.insert(
+                        "approval_notes".to_string(),
+                        serde_json::Value::String(notes.clone()),
+                    );
                 }
-                
+
                 if let Err(e) = activity_logger
                     .log_shift_swap_activity(
                         company.id,
                         Some(claims.sub.parse().unwrap_or(0)),
                         swap_id,
                         Action::APPROVED,
-                        format!("Shift swap request approved for user {}", swap_request.requesting_user_id),
+                        format!(
+                            "Shift swap request approved for user {}",
+                            swap_request.requesting_user_id
+                        ),
                         Some(metadata),
                         &req,
                     )
@@ -350,7 +397,7 @@ pub async fn approve_swap_request(
                     log::warn!("Failed to log swap approval activity: {}", e);
                 }
             }
-            
+
             Ok(HttpResponse::Ok().json(ApiResponse::success(approved_swap)))
         }
         Err(err) => {
@@ -384,8 +431,9 @@ pub async fn deny_swap_request(
     let swap_request = match repo.get_swap_by_id(swap_id).await {
         Ok(Some(swap)) => swap,
         Ok(None) => {
-            return Ok(HttpResponse::NotFound()
-                .json(ApiResponse::<()>::error("Swap request not found")));
+            return Ok(
+                HttpResponse::NotFound().json(ApiResponse::<()>::error("Swap request not found"))
+            );
         }
         Err(err) => {
             log::error!("Error fetching swap request for denial: {}", err);
@@ -404,27 +452,42 @@ pub async fn deny_swap_request(
     {
         Ok(denied_swap) => {
             // Log swap denial activity
-            if let Ok(Some(company)) = company_repo
-                .get_primary_company_for_user(&claims.sub)
-                .await
+            if let Ok(Some(company)) = company_repo.get_primary_company_for_user(&claims.sub).await
             {
                 let mut metadata = HashMap::new();
-                metadata.insert("original_shift_id".to_string(), serde_json::Value::Number(serde_json::Number::from(swap_request.original_shift_id)));
-                metadata.insert("requesting_user_id".to_string(), serde_json::Value::String(swap_request.requesting_user_id.clone()));
+                metadata.insert(
+                    "original_shift_id".to_string(),
+                    serde_json::Value::Number(serde_json::Number::from(
+                        swap_request.original_shift_id,
+                    )),
+                );
+                metadata.insert(
+                    "requesting_user_id".to_string(),
+                    serde_json::Value::String(swap_request.requesting_user_id.clone()),
+                );
                 if let Some(target_user_id) = &swap_request.target_user_id {
-                    metadata.insert("target_user_id".to_string(), serde_json::Value::String(target_user_id.clone()));
+                    metadata.insert(
+                        "target_user_id".to_string(),
+                        serde_json::Value::String(target_user_id.clone()),
+                    );
                 }
                 if let Some(notes) = &denial.notes {
-                    metadata.insert("denial_notes".to_string(), serde_json::Value::String(notes.clone()));
+                    metadata.insert(
+                        "denial_notes".to_string(),
+                        serde_json::Value::String(notes.clone()),
+                    );
                 }
-                
+
                 if let Err(e) = activity_logger
                     .log_shift_swap_activity(
                         company.id,
                         Some(claims.sub.parse().unwrap_or(0)),
                         swap_id,
                         Action::REJECTED,
-                        format!("Shift swap request denied for user {}", swap_request.requesting_user_id),
+                        format!(
+                            "Shift swap request denied for user {}",
+                            swap_request.requesting_user_id
+                        ),
                         Some(metadata),
                         &req,
                     )
@@ -433,7 +496,7 @@ pub async fn deny_swap_request(
                     log::warn!("Failed to log swap denial activity: {}", e);
                 }
             }
-            
+
             Ok(HttpResponse::Ok().json(ApiResponse::success(denied_swap)))
         }
         Err(err) => {

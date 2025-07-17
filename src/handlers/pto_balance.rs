@@ -7,6 +7,7 @@ use crate::handlers::admin::ApiResponse;
 use crate::services::auth::Claims;
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BalanceQuery {
     pub user_id: Option<String>,
     pub limit: Option<i32>,

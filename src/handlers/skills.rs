@@ -9,11 +9,13 @@ use crate::handlers::admin::ApiResponse;
 use crate::services::auth::Claims;
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateUserSkillRequest {
     pub proficiency_level: ProficiencyLevel,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SkillSearchQuery {
     pub skill_id: Option<i64>,
     pub min_level: Option<ProficiencyLevel>,

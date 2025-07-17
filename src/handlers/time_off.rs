@@ -14,6 +14,7 @@ use crate::services::auth::Claims;
 use crate::services::ActivityLogger;
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TimeOffQuery {
     pub user_id: Option<String>,
     pub status: Option<String>,

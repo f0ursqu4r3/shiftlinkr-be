@@ -7,6 +7,7 @@ use crate::handlers::admin::ApiResponse;
 use crate::services::auth::Claims;
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AssignmentResponseRequest {
     pub response: AssignmentResponse,
     pub response_notes: Option<String>,

@@ -17,6 +17,7 @@ pub struct ApiResponse<T> {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateUserRequest {
     pub name: String,
     pub email: String,
@@ -25,6 +26,7 @@ pub struct UpdateUserRequest {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UserResponse {
     pub id: String,
     pub email: String,
@@ -500,11 +502,13 @@ pub async fn remove_team_member(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TeamQuery {
     pub location_id: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UserQuery {
     pub company_id: Option<i64>,
 }

@@ -14,6 +14,7 @@ use crate::services::activity_logger::ActivityLogger;
 use crate::services::auth::Claims;
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftQuery {
     pub location_id: Option<i64>,
     pub team_id: Option<i64>,
@@ -25,12 +26,14 @@ pub struct ShiftQuery {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AssignShiftRequest {
     pub user_id: i64,
     pub acceptance_deadline: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DirectAssignShiftRequest {
     pub user_id: i64,
 }

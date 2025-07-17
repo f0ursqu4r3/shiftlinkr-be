@@ -7,6 +7,7 @@ use crate::handlers::admin::ApiResponse;
 use crate::services::auth::Claims;
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StatsQuery {
     pub start_date: Option<NaiveDateTime>,
     pub end_date: Option<NaiveDateTime>,
