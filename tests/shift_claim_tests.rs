@@ -1,4 +1,6 @@
-use be::database::models::{LocationInput, ShiftClaimInput, ShiftClaimStatus, ShiftInput, User};
+use be::database::models::{
+    LocationInput, ShiftClaimInput, ShiftClaimStatus, ShiftInput, ShiftStatus, User,
+};
 use be::database::repositories::location::LocationRepository;
 use be::database::repositories::shift::ShiftRepository;
 use be::database::repositories::shift_claim::ShiftClaimRepository;
@@ -83,10 +85,14 @@ async fn test_shift_claim_repository(pool: SqlitePool) -> Result<(), sqlx::Error
         description: Some("Test shift description".to_string()),
         location_id: location.id,
         team_id: None,
-        assigned_user_id: None,
+        min_duration_minutes: Some(60),
+        max_duration_minutes: Some(480),
+        max_people: Some(5),
+        status: ShiftStatus::Open,
+        created_at: Utc::now().naive_utc(),
+        updated_at: Utc::now().naive_utc(),
         start_time: Utc::now().naive_utc(),
         end_time: (Utc::now() + chrono::Duration::hours(8)).naive_utc(),
-        hourly_rate: Some(15.0),
     };
     let shift = match shift_repo.create_shift(shift_input).await {
         Ok(shift) => {
@@ -284,10 +290,14 @@ async fn test_shift_claim_cancel_and_reject(pool: SqlitePool) -> Result<(), sqlx
         description: Some("Test shift 2 description".to_string()),
         location_id: location.id,
         team_id: None,
-        assigned_user_id: None,
+        min_duration_minutes: Some(60),
+        max_duration_minutes: Some(480),
+        max_people: Some(5),
+        status: ShiftStatus::Open,
+        created_at: Utc::now().naive_utc(),
+        updated_at: Utc::now().naive_utc(),
         start_time: Utc::now().naive_utc(),
         end_time: (Utc::now() + chrono::Duration::hours(8)).naive_utc(),
-        hourly_rate: Some(20.0),
     };
     let shift = shift_repo.create_shift(shift_input).await.unwrap();
 
