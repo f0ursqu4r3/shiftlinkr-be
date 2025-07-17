@@ -2,6 +2,7 @@ use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct TimeOffRequest {
     pub id: i64,
     pub user_id: String,
@@ -17,6 +18,7 @@ pub struct TimeOffRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TimeOffRequestInput {
     pub user_id: String,
     pub start_date: NaiveDateTime,

@@ -2,6 +2,7 @@ use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct Shift {
     pub id: i64,
     pub title: String,
@@ -19,6 +20,7 @@ pub struct Shift {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftInput {
     pub title: String,
     pub description: Option<String>,
@@ -98,6 +100,7 @@ impl Default for ShiftStatus {
 
 // Shift Claim models
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftClaim {
     pub id: i64,
     pub shift_id: i64,
@@ -110,6 +113,7 @@ pub struct ShiftClaim {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftClaimInput {
     pub shift_id: i64,
     pub user_id: String,

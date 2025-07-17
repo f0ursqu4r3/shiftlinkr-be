@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use super::user::UserInfo;
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LoginRequest {
     /// User's email address
     pub email: String,
@@ -12,6 +13,7 @@ pub struct LoginRequest {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AuthResponse {
     /// JWT authentication token
     pub token: String,
@@ -20,6 +22,7 @@ pub struct AuthResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct PasswordResetToken {
     pub id: String,
     pub user_id: String,
@@ -41,6 +44,7 @@ pub struct ForgotPasswordResponse {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ResetPasswordRequest {
     /// Password reset token from email
     pub token: String,

@@ -2,6 +2,7 @@ use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct PtoBalanceHistory {
     pub id: i64,
     pub user_id: String,
@@ -142,6 +143,7 @@ impl std::str::FromStr for PtoChangeType {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PtoBalance {
     pub user_id: String,
     pub pto_balance_hours: i32,
@@ -153,6 +155,7 @@ pub struct PtoBalance {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PtoBalanceUpdate {
     pub pto_balance_hours: Option<i32>,
     pub sick_balance_hours: Option<i32>,
@@ -162,6 +165,7 @@ pub struct PtoBalanceUpdate {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PtoBalanceAdjustment {
     pub balance_type: PtoBalanceType,
     pub hours_changed: i32,

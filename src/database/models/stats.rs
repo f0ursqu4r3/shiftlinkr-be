@@ -1,6 +1,7 @@
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DashboardStats {
     pub total_shifts: i64,
     pub upcoming_shifts: i64,
@@ -12,6 +13,7 @@ pub struct DashboardStats {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftStats {
     pub total_shifts: i64,
     pub assigned_shifts: i64,
@@ -21,6 +23,7 @@ pub struct ShiftStats {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TimeOffStats {
     pub total_requests: i64,
     pub approved_requests: i64,

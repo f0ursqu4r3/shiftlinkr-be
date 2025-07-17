@@ -2,6 +2,7 @@ use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct Team {
     pub id: i64,
     pub name: String,
@@ -12,6 +13,7 @@ pub struct Team {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TeamInput {
     pub name: String,
     pub description: Option<String>,
@@ -19,6 +21,7 @@ pub struct TeamInput {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct TeamMember {
     pub id: i64,
     pub team_id: i64,

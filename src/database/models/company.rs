@@ -2,6 +2,7 @@ use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct Company {
     pub id: i64,
     pub name: String,
@@ -17,6 +18,7 @@ pub struct Company {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct CompanyEmployee {
     pub id: i64,
     pub user_id: String,
@@ -103,6 +105,7 @@ impl std::str::FromStr for CompanyRole {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateCompanyRequest {
     pub name: String,
     pub description: Option<String>,
@@ -115,6 +118,7 @@ pub struct CreateCompanyRequest {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CompanyInfo {
     pub id: i64,
     pub name: String,
@@ -130,6 +134,7 @@ pub struct CompanyInfo {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AddEmployeeToCompanyRequest {
     pub user_id: String,
     pub role: CompanyRole,
@@ -138,6 +143,7 @@ pub struct AddEmployeeToCompanyRequest {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CompanyEmployeeInfo {
     pub id: String,
     pub email: String,

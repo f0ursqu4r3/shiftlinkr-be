@@ -2,6 +2,7 @@ use chrono::{NaiveDateTime, NaiveTime};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct UserShiftSchedule {
     pub id: i64,
     pub user_id: String,
@@ -27,6 +28,7 @@ pub struct UserShiftSchedule {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UserShiftScheduleInput {
     pub user_id: String,
     pub monday_start: Option<NaiveTime>,
@@ -49,6 +51,7 @@ pub struct UserShiftScheduleInput {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftAssignment {
     pub id: i64,
     pub shift_id: i64,
@@ -63,6 +66,7 @@ pub struct ShiftAssignment {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftAssignmentInput {
     pub shift_id: i64,
     pub user_id: String,

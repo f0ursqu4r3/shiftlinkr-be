@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use super::user::{UserInfo, UserRole};
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct InviteToken {
     pub id: String,
     pub email: String,
@@ -17,6 +18,7 @@ pub struct InviteToken {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateInviteRequest {
     pub email: String,
     pub role: UserRole,
@@ -24,17 +26,20 @@ pub struct CreateInviteRequest {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateInviteResponse {
     pub invite_link: String,
     pub expires_at: NaiveDateTime,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetInviteRequest {
     pub token: String,
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetInviteResponse {
     pub email: String,
     pub role: UserRole,
@@ -44,6 +49,7 @@ pub struct GetInviteResponse {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AcceptInviteRequest {
     pub token: String,
     pub name: String,

@@ -2,6 +2,7 @@ use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct Skill {
     pub id: i64,
     pub name: String,
@@ -11,12 +12,14 @@ pub struct Skill {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SkillInput {
     pub name: String,
     pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct UserSkill {
     pub id: i64,
     pub user_id: String,
@@ -27,6 +30,7 @@ pub struct UserSkill {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UserSkillInput {
     pub user_id: String,
     pub skill_id: i64,
@@ -34,6 +38,7 @@ pub struct UserSkillInput {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftRequiredSkill {
     pub id: i64,
     pub shift_id: i64,
@@ -43,6 +48,7 @@ pub struct ShiftRequiredSkill {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftRequiredSkillInput {
     pub shift_id: i64,
     pub skill_id: i64,

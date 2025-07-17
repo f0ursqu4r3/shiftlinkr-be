@@ -3,6 +3,7 @@ use sqlx::types::chrono::{DateTime, Utc};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct CompanyActivity {
     pub id: i64,
     pub company_id: i64,
@@ -19,6 +20,7 @@ pub struct CompanyActivity {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateActivityRequest {
     pub company_id: i64,
     pub user_id: Option<i64>,
@@ -33,6 +35,7 @@ pub struct CreateActivityRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ActivityFilter {
     pub company_id: i64,
     pub activity_type: Option<String>,
