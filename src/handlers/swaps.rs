@@ -137,25 +137,10 @@ pub async fn get_swap_requests(
     };
 
     match repo
-        .get_swap_requests(requesting_user_id, status_filter, None)
+        .get_swap_requests_with_details(requesting_user_id, status_filter, None)
         .await
     {
-        Ok(requests) => {
-            // For employees, filter to only include swaps they're involved in
-            let filtered_requests = if !claims.is_admin() && !claims.is_manager() {
-                requests
-                    .into_iter()
-                    .filter(|swap| {
-                        swap.requesting_user_id == claims.sub
-                            || swap.target_user_id.as_ref() == Some(&claims.sub)
-                    })
-                    .collect()
-            } else {
-                requests
-            };
-
-            Ok(HttpResponse::Ok().json(ApiResponse::success(filtered_requests)))
-        }
+        Ok(requests) => Ok(HttpResponse::Ok().json(ApiResponse::success(requests))),
         Err(err) => {
             log::error!("Error fetching swap requests: {}", err);
             Ok(HttpResponse::InternalServerError()
