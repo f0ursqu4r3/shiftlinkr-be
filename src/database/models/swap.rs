@@ -56,25 +56,25 @@ impl std::str::FromStr for ShiftSwapType {
     }
 }
 
-impl sqlx::Type<sqlx::Sqlite> for ShiftSwapType {
-    fn type_info() -> sqlx::sqlite::SqliteTypeInfo {
-        <String as sqlx::Type<sqlx::Sqlite>>::type_info()
+impl sqlx::Type<sqlx::Postgres> for ShiftSwapType {
+    fn type_info() -> sqlx::postgres::PgTypeInfo {
+        <String as sqlx::Type<sqlx::Postgres>>::type_info()
     }
 }
 
-impl<'q> sqlx::Encode<'q, sqlx::Sqlite> for ShiftSwapType {
+impl<'q> sqlx::Encode<'q, sqlx::Postgres> for ShiftSwapType {
     fn encode_by_ref(
         &self,
-        args: &mut Vec<sqlx::sqlite::SqliteArgumentValue<'q>>,
+        buf: &mut sqlx::postgres::PgArgumentBuffer,
     ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
         let s = self.to_string();
-        <String as sqlx::Encode<'q, sqlx::Sqlite>>::encode_by_ref(&s, args)
+        <String as sqlx::Encode<'q, sqlx::Postgres>>::encode_by_ref(&s, buf)
     }
 }
 
-impl<'r> sqlx::Decode<'r, sqlx::Sqlite> for ShiftSwapType {
-    fn decode(value: sqlx::sqlite::SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
-        let s = <String as sqlx::Decode<sqlx::Sqlite>>::decode(value)?;
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for ShiftSwapType {
+    fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let s = <String as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
         s.parse::<ShiftSwapType>().map_err(|e| e.into())
     }
 }
@@ -118,25 +118,25 @@ impl std::str::FromStr for ShiftSwapStatus {
     }
 }
 
-impl sqlx::Type<sqlx::Sqlite> for ShiftSwapStatus {
-    fn type_info() -> sqlx::sqlite::SqliteTypeInfo {
-        <String as sqlx::Type<sqlx::Sqlite>>::type_info()
+impl sqlx::Type<sqlx::Postgres> for ShiftSwapStatus {
+    fn type_info() -> sqlx::postgres::PgTypeInfo {
+        <String as sqlx::Type<sqlx::Postgres>>::type_info()
     }
 }
 
-impl<'q> sqlx::Encode<'q, sqlx::Sqlite> for ShiftSwapStatus {
+impl<'q> sqlx::Encode<'q, sqlx::Postgres> for ShiftSwapStatus {
     fn encode_by_ref(
         &self,
-        args: &mut Vec<sqlx::sqlite::SqliteArgumentValue<'q>>,
+        buf: &mut sqlx::postgres::PgArgumentBuffer,
     ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
         let s = self.to_string();
-        <String as sqlx::Encode<'q, sqlx::Sqlite>>::encode_by_ref(&s, args)
+        <String as sqlx::Encode<'q, sqlx::Postgres>>::encode_by_ref(&s, buf)
     }
 }
 
-impl<'r> sqlx::Decode<'r, sqlx::Sqlite> for ShiftSwapStatus {
-    fn decode(value: sqlx::sqlite::SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
-        let s = <String as sqlx::Decode<sqlx::Sqlite>>::decode(value)?;
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for ShiftSwapStatus {
+    fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let s = <String as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
         s.parse::<ShiftSwapStatus>().map_err(|e| e.into())
     }
 }
@@ -261,25 +261,25 @@ impl std::str::FromStr for ShiftSwapResponseStatus {
     }
 }
 
-impl sqlx::Type<sqlx::Sqlite> for ShiftSwapResponseStatus {
-    fn type_info() -> sqlx::sqlite::SqliteTypeInfo {
-        <String as sqlx::Type<sqlx::Sqlite>>::type_info()
+impl sqlx::Type<sqlx::Postgres> for ShiftSwapResponseStatus {
+    fn type_info() -> sqlx::postgres::PgTypeInfo {
+        <String as sqlx::Type<sqlx::Postgres>>::type_info()
     }
 }
 
-impl<'q> sqlx::Encode<'q, sqlx::Sqlite> for ShiftSwapResponseStatus {
+impl<'q> sqlx::Encode<'q, sqlx::Postgres> for ShiftSwapResponseStatus {
     fn encode_by_ref(
         &self,
-        args: &mut Vec<sqlx::sqlite::SqliteArgumentValue<'q>>,
+        buf: &mut sqlx::postgres::PgArgumentBuffer,
     ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
         let s = self.to_string();
-        <String as sqlx::Encode<'q, sqlx::Sqlite>>::encode_by_ref(&s, args)
+        <String as sqlx::Encode<'q, sqlx::Postgres>>::encode_by_ref(&s, buf)
     }
 }
 
-impl<'r> sqlx::Decode<'r, sqlx::Sqlite> for ShiftSwapResponseStatus {
-    fn decode(value: sqlx::sqlite::SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
-        let s = <String as sqlx::Decode<sqlx::Sqlite>>::decode(value)?;
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for ShiftSwapResponseStatus {
+    fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let s = <String as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
         s.parse::<ShiftSwapResponseStatus>().map_err(|e| e.into())
     }
 }

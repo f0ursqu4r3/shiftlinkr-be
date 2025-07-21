@@ -1,5 +1,5 @@
 use anyhow::Result;
-use sqlx::SqlitePool;
+use sqlx::PgPool;
 use std::str::FromStr;
 
 use crate::database::models::{
@@ -9,11 +9,11 @@ use crate::database::models::{
 
 #[derive(Clone)]
 pub struct CompanyRepository {
-    pool: SqlitePool,
+    pool: PgPool,
 }
 
 impl CompanyRepository {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
@@ -21,7 +21,7 @@ impl CompanyRepository {
         let company = sqlx::query_as::<_, Company>(
             r#"
             INSERT INTO companies (name, description, website, phone, email, address, logo_url, timezone)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING *
             "#,
         )
@@ -40,7 +40,7 @@ impl CompanyRepository {
     }
 
     pub async fn get_company_by_id(&self, company_id: i64) -> Result<Option<Company>> {
-        let company = sqlx::query_as::<_, Company>("SELECT * FROM companies WHERE id = ?1")
+        let company = sqlx::query_as::<_, Company>("SELECT * FROM companies WHERE id = $1")
             .bind(company_id)
             .fetch_optional(&self.pool)
             .await?;
@@ -54,7 +54,7 @@ impl CompanyRepository {
             SELECT c.id, c.name, c.description, c.website, c.phone, c.email, c.address, c.logo_url, c.timezone, uc.role, uc.is_primary
             FROM companies c
             JOIN user_company uc ON c.id = uc.company_id
-            WHERE uc.user_id = ?1
+            WHERE uc.user_id = $1
             ORDER BY uc.is_primary DESC, c.name ASC
             "#,
             user_id
@@ -91,7 +91,7 @@ impl CompanyRepository {
             SELECT c.id, c.name, c.description, c.website, c.phone, c.email, c.address, c.logo_url, c.timezone, uc.role, uc.is_primary
             FROM companies c
             JOIN user_company uc ON c.id = uc.company_id
-            WHERE uc.user_id = ?1 AND uc.is_primary = true
+            WHERE uc.user_id = $1 AND uc.is_primary = true
             "#,
             user_id
         )
@@ -123,7 +123,7 @@ impl CompanyRepository {
     ) -> Result<CompanyEmployee> {
         // If this should be the primary company, unset other primary companies for this user
         if request.is_primary.unwrap_or(false) {
-            sqlx::query("UPDATE user_company SET is_primary = false WHERE user_id = ?1")
+            sqlx::query("UPDATE user_company SET is_primary = false WHERE user_id = $1")
                 .bind(&request.user_id)
                 .execute(&self.pool)
                 .await?;
@@ -132,7 +132,7 @@ impl CompanyRepository {
         let company_employee = sqlx::query_as::<_, CompanyEmployee>(
             r#"
             INSERT INTO user_company (user_id, company_id, role, is_primary, hire_date)
-            VALUES (?1, ?2, ?3, ?4, ?5)
+            VALUES ($1, $2, $3, $4, $5)
             RETURNING *
             "#,
         )
@@ -153,7 +153,7 @@ impl CompanyRepository {
             SELECT u.id as "id!", u.email, u.name, uc.role, uc.is_primary, uc.hire_date as hired_at, u.created_at, u.updated_at
             FROM users u
             JOIN user_company uc ON u.id = uc.user_id
-            WHERE uc.company_id = ?1
+            WHERE uc.company_id = $1
             ORDER BY uc.role DESC, u.name ASC
             "#,
             company_id
@@ -186,7 +186,7 @@ impl CompanyRepository {
         company_id: i64,
         user_id: &str,
     ) -> Result<bool> {
-        let result = sqlx::query("DELETE FROM user_company WHERE company_id = ?1 AND user_id = ?2")
+        let result = sqlx::query("DELETE FROM user_company WHERE company_id = $1 AND user_id = $2")
             .bind(company_id)
             .bind(user_id)
             .execute(&self.pool)
@@ -202,7 +202,7 @@ impl CompanyRepository {
         role: &CompanyRole,
     ) -> Result<bool> {
         let result = sqlx::query(
-            "UPDATE user_company SET role = ?1, updated_at = CURRENT_TIMESTAMP WHERE company_id = ?2 AND user_id = ?3",
+            "UPDATE user_company SET role = $1, updated_at = CURRENT_TIMESTAMP WHERE company_id = $2 AND user_id = $3",
         )
         .bind(role)
         .bind(company_id)
@@ -219,7 +219,7 @@ impl CompanyRepository {
         company_id: i64,
     ) -> Result<Option<CompanyRole>> {
         let role = sqlx::query_scalar::<_, CompanyRole>(
-            "SELECT role FROM user_company WHERE user_id = ?1 AND company_id = ?2",
+            "SELECT role FROM user_company WHERE user_id = $1 AND company_id = $2",
         )
         .bind(user_id)
         .bind(company_id)

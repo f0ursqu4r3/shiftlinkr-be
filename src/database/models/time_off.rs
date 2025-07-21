@@ -69,25 +69,25 @@ impl std::str::FromStr for TimeOffType {
     }
 }
 
-impl sqlx::Type<sqlx::Sqlite> for TimeOffType {
-    fn type_info() -> sqlx::sqlite::SqliteTypeInfo {
-        <String as sqlx::Type<sqlx::Sqlite>>::type_info()
+impl sqlx::Type<sqlx::Postgres> for TimeOffType {
+    fn type_info() -> sqlx::postgres::PgTypeInfo {
+        <String as sqlx::Type<sqlx::Postgres>>::type_info()
     }
 }
 
-impl<'q> sqlx::Encode<'q, sqlx::Sqlite> for TimeOffType {
+impl<'q> sqlx::Encode<'q, sqlx::Postgres> for TimeOffType {
     fn encode_by_ref(
         &self,
-        args: &mut Vec<sqlx::sqlite::SqliteArgumentValue<'q>>,
+        buf: &mut sqlx::postgres::PgArgumentBuffer,
     ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
         let s = self.to_string();
-        <String as sqlx::Encode<'q, sqlx::Sqlite>>::encode_by_ref(&s, args)
+        <String as sqlx::Encode<'q, sqlx::Postgres>>::encode_by_ref(&s, buf)
     }
 }
 
-impl<'r> sqlx::Decode<'r, sqlx::Sqlite> for TimeOffType {
-    fn decode(value: sqlx::sqlite::SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
-        let s = <String as sqlx::Decode<sqlx::Sqlite>>::decode(value)?;
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for TimeOffType {
+    fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let s = <String as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
         s.parse::<TimeOffType>().map_err(|e| e.into())
     }
 }
@@ -125,25 +125,25 @@ impl std::str::FromStr for TimeOffStatus {
     }
 }
 
-impl sqlx::Type<sqlx::Sqlite> for TimeOffStatus {
-    fn type_info() -> sqlx::sqlite::SqliteTypeInfo {
-        <String as sqlx::Type<sqlx::Sqlite>>::type_info()
+impl sqlx::Type<sqlx::Postgres> for TimeOffStatus {
+    fn type_info() -> sqlx::postgres::PgTypeInfo {
+        <String as sqlx::Type<sqlx::Postgres>>::type_info()
     }
 }
 
-impl<'q> sqlx::Encode<'q, sqlx::Sqlite> for TimeOffStatus {
+impl<'q> sqlx::Encode<'q, sqlx::Postgres> for TimeOffStatus {
     fn encode_by_ref(
         &self,
-        args: &mut Vec<sqlx::sqlite::SqliteArgumentValue<'q>>,
+        buf: &mut sqlx::postgres::PgArgumentBuffer,
     ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
         let s = self.to_string();
-        <String as sqlx::Encode<'q, sqlx::Sqlite>>::encode_by_ref(&s, args)
+        <String as sqlx::Encode<'q, sqlx::Postgres>>::encode_by_ref(&s, buf)
     }
 }
 
-impl<'r> sqlx::Decode<'r, sqlx::Sqlite> for TimeOffStatus {
-    fn decode(value: sqlx::sqlite::SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
-        let s = <String as sqlx::Decode<sqlx::Sqlite>>::decode(value)?;
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for TimeOffStatus {
+    fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let s = <String as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
         s.parse::<TimeOffStatus>().map_err(|e| e.into())
     }
 }

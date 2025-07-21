@@ -24,29 +24,29 @@ pub enum PtoBalanceType {
     Personal,
 }
 
-impl sqlx::Type<sqlx::Sqlite> for PtoBalanceType {
-    fn type_info() -> sqlx::sqlite::SqliteTypeInfo {
-        <String as sqlx::Type<sqlx::Sqlite>>::type_info()
+impl sqlx::Type<sqlx::Postgres> for PtoBalanceType {
+    fn type_info() -> sqlx::postgres::PgTypeInfo {
+        <String as sqlx::Type<sqlx::Postgres>>::type_info()
     }
 }
 
-impl<'q> sqlx::Encode<'q, sqlx::Sqlite> for PtoBalanceType {
+impl<'q> sqlx::Encode<'q, sqlx::Postgres> for PtoBalanceType {
     fn encode_by_ref(
         &self,
-        args: &mut Vec<sqlx::sqlite::SqliteArgumentValue<'q>>,
+        buf: &mut sqlx::postgres::PgArgumentBuffer,
     ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
         let s = match self {
             PtoBalanceType::Pto => "pto",
             PtoBalanceType::Sick => "sick",
             PtoBalanceType::Personal => "personal",
         };
-        <&str as sqlx::Encode<'q, sqlx::Sqlite>>::encode_by_ref(&s, args)
+        <&str as sqlx::Encode<'q, sqlx::Postgres>>::encode_by_ref(&s, buf)
     }
 }
 
-impl<'r> sqlx::Decode<'r, sqlx::Sqlite> for PtoBalanceType {
-    fn decode(value: sqlx::sqlite::SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
-        let s = <String as sqlx::Decode<sqlx::Sqlite>>::decode(value)?;
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for PtoBalanceType {
+    fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let s = <String as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
         match s.as_str() {
             "pto" => Ok(PtoBalanceType::Pto),
             "sick" => Ok(PtoBalanceType::Sick),
@@ -87,29 +87,29 @@ pub enum PtoChangeType {
     Adjustment,
 }
 
-impl sqlx::Type<sqlx::Sqlite> for PtoChangeType {
-    fn type_info() -> sqlx::sqlite::SqliteTypeInfo {
-        <String as sqlx::Type<sqlx::Sqlite>>::type_info()
+impl sqlx::Type<sqlx::Postgres> for PtoChangeType {
+    fn type_info() -> sqlx::postgres::PgTypeInfo {
+        <String as sqlx::Type<sqlx::Postgres>>::type_info()
     }
 }
 
-impl<'q> sqlx::Encode<'q, sqlx::Sqlite> for PtoChangeType {
+impl<'q> sqlx::Encode<'q, sqlx::Postgres> for PtoChangeType {
     fn encode_by_ref(
         &self,
-        args: &mut Vec<sqlx::sqlite::SqliteArgumentValue<'q>>,
+        buf: &mut sqlx::postgres::PgArgumentBuffer,
     ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
         let s = match self {
             PtoChangeType::Accrual => "accrual",
             PtoChangeType::Usage => "usage",
             PtoChangeType::Adjustment => "adjustment",
         };
-        <&str as sqlx::Encode<'q, sqlx::Sqlite>>::encode_by_ref(&s, args)
+        <&str as sqlx::Encode<'q, sqlx::Postgres>>::encode_by_ref(&s, buf)
     }
 }
 
-impl<'r> sqlx::Decode<'r, sqlx::Sqlite> for PtoChangeType {
-    fn decode(value: sqlx::sqlite::SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
-        let s = <String as sqlx::Decode<sqlx::Sqlite>>::decode(value)?;
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for PtoChangeType {
+    fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let s = <String as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
         match s.as_str() {
             "accrual" => Ok(PtoChangeType::Accrual),
             "usage" => Ok(PtoChangeType::Usage),

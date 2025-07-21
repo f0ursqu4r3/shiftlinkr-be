@@ -1,0 +1,82 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT c.id, c.name, c.description, c.website, c.phone, c.email, c.address, c.logo_url, c.timezone, uc.role, uc.is_primary\n            FROM companies c\n            JOIN user_company uc ON c.id = uc.company_id\n            WHERE uc.user_id = $1\n            ORDER BY uc.is_primary DESC, c.name ASC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "website",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "phone",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "email",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "address",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "logo_url",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 8,
+        "name": "timezone",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "role",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 10,
+        "name": "is_primary",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ba4ebb8569d54cae7ca9fcfab445c7eda20b16c1a1e67be2030dfdc810a05a16"
+}

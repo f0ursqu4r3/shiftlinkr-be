@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM invite_tokens WHERE expires_at < $1 AND used_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a089022900a9afdfd3c6ca1ca333fc8a52e0f6f70af29385eb2a8db3cbd96164"
+}

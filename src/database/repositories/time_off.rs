@@ -1,16 +1,16 @@
 use anyhow::Result;
 use chrono::{NaiveDateTime, Utc};
-use sqlx::SqlitePool;
+use sqlx::PgPool;
 
 use crate::database::models::{TimeOffRequest, TimeOffRequestInput, TimeOffStatus};
 
 #[derive(Clone)]
 pub struct TimeOffRepository {
-    pool: SqlitePool,
+    pool: PgPool,
 }
 
 impl TimeOffRepository {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
     /// Create a new time-off request
@@ -25,7 +25,7 @@ impl TimeOffRepository {
                 user_id, start_date, end_date, reason, request_type, 
                 status, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING 
                 id, user_id, start_date, end_date, reason,
                 request_type, status, approved_by, approval_notes, created_at, updated_at
@@ -68,25 +68,25 @@ impl TimeOffRepository {
         let mut query = String::from(
             "SELECT id, user_id, start_date, end_date, reason, request_type, status, approved_by, approval_notes, created_at, updated_at FROM time_off_requests WHERE 1=1"
         );
-        let mut params: Vec<Box<dyn sqlx::Encode<sqlx::Sqlite> + Send>> = Vec::new();
+        let mut params: Vec<Box<dyn sqlx::Encode<sqlx::Postgres> + Send>> = Vec::new();
 
         if let Some(uid) = user_id {
-            query.push_str(" AND user_id = ?");
+            query.push_str(" AND user_id = $1");
             params.push(Box::new(uid.to_string()));
         }
 
         if let Some(s) = status {
-            query.push_str(" AND status = ?");
+            query.push_str(" AND status = $2");
             params.push(Box::new(s.to_string()));
         }
 
         if let Some(sd) = start_date {
-            query.push_str(" AND start_date >= ?");
+            query.push_str(" AND start_date >= $3");
             params.push(Box::new(sd));
         }
 
         if let Some(ed) = end_date {
-            query.push_str(" AND end_date <= ?");
+            query.push_str(" AND end_date <= $4");
             params.push(Box::new(ed));
         }
 
@@ -122,7 +122,7 @@ impl TimeOffRepository {
     /// Get a specific time-off request by ID
     pub async fn get_request_by_id(&self, id: i64) -> Result<Option<TimeOffRequest>> {
         let row = sqlx::query!(
-            "SELECT id, user_id, start_date, end_date, reason, request_type, status, approved_by, approval_notes, created_at, updated_at FROM time_off_requests WHERE id = ?",
+            "SELECT id, user_id, start_date, end_date, reason, request_type, status, approved_by, approval_notes, created_at, updated_at FROM time_off_requests WHERE id = $1",
             id
         )
         .fetch_optional(&self.pool)
@@ -159,8 +159,8 @@ impl TimeOffRepository {
             r#"
             UPDATE time_off_requests 
             SET 
-                start_date = ?, end_date = ?, reason = ?, request_type = ?, updated_at = ?
-            WHERE id = ?
+                start_date = $1, end_date = $2, reason = $3, request_type = $4, updated_at = $5
+            WHERE id = $6
             RETURNING 
                 id, user_id, start_date, end_date, reason,
                 request_type, status, approved_by, approval_notes, created_at, updated_at
@@ -204,8 +204,8 @@ impl TimeOffRepository {
             r#"
             UPDATE time_off_requests 
             SET 
-                status = ?, approved_by = ?, approval_notes = ?, updated_at = ?
-            WHERE id = ?
+                status = $1, approved_by = $2, approval_notes = $3, updated_at = $4
+            WHERE id = $5
             RETURNING 
                 id, user_id, start_date, end_date, reason,
                 request_type, status, approved_by, approval_notes, created_at, updated_at
@@ -248,8 +248,8 @@ impl TimeOffRepository {
             r#"
             UPDATE time_off_requests 
             SET 
-                status = ?, approved_by = ?, approval_notes = ?, updated_at = ?
-            WHERE id = ?
+                status = $1, approved_by = $2, approval_notes = $3, updated_at = $4
+            WHERE id = $5
             RETURNING 
                 id, user_id, start_date, end_date, reason,
                 request_type, status, approved_by, approval_notes, created_at, updated_at
@@ -287,8 +287,8 @@ impl TimeOffRepository {
             r#"
             UPDATE time_off_requests 
             SET 
-                status = ?, updated_at = ?
-            WHERE id = ?
+                status = $1, updated_at = $2
+            WHERE id = $3
             RETURNING 
                 id, user_id, start_date, end_date, reason,
                 request_type, status, approved_by, approval_notes, created_at, updated_at
@@ -317,7 +317,7 @@ impl TimeOffRepository {
 
     /// Delete a time-off request
     pub async fn delete_request(&self, id: i64) -> Result<()> {
-        sqlx::query!("DELETE FROM time_off_requests WHERE id = ?", id)
+        sqlx::query!("DELETE FROM time_off_requests WHERE id = $1", id)
             .execute(&self.pool)
             .await?;
 

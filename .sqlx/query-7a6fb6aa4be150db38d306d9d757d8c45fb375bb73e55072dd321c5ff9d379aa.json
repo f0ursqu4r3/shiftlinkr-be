@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT COUNT(*)\n            FROM shift_claims\n            WHERE shift_id = $1 AND user_id = $2 AND (status = 'pending' OR status = 'approved')\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7a6fb6aa4be150db38d306d9d757d8c45fb375bb73e55072dd321c5ff9d379aa"
+}

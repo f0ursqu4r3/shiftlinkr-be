@@ -1,15 +1,15 @@
 use anyhow::Result;
-use sqlx::SqlitePool;
+use sqlx::PgPool;
 
 use crate::database::models::{CreateUserCompanyRequest, UpdateUserCompanyRequest, UserCompany};
 
 #[derive(Clone)]
 pub struct UserCompanyRepository {
-    pool: SqlitePool,
+    pool: PgPool,
 }
 
 impl UserCompanyRepository {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
@@ -20,7 +20,7 @@ impl UserCompanyRepository {
                 user_id, company_id, pto_balance_hours, sick_balance_hours, 
                 personal_balance_hours, pto_accrual_rate, hire_date
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING *
             "#,
         )
@@ -43,7 +43,7 @@ impl UserCompanyRepository {
         company_id: i64,
     ) -> Result<Option<UserCompany>> {
         let balance = sqlx::query_as::<_, UserCompany>(
-            "SELECT * FROM user_company WHERE user_id = ?1 AND company_id = ?2",
+            "SELECT * FROM user_company WHERE user_id = $1 AND company_id = $2",
         )
         .bind(user_id)
         .bind(company_id)
@@ -58,7 +58,7 @@ impl UserCompanyRepository {
             r#"
             SELECT ucb.* 
             FROM user_company ucb
-            WHERE ucb.user_id = ?1
+            WHERE ucb.user_id = $1
             ORDER BY ucb.company_id
             "#,
         )
@@ -144,7 +144,7 @@ impl UserCompanyRepository {
     }
 
     pub async fn delete_balance(&self, user_id: &str, company_id: i64) -> Result<()> {
-        sqlx::query("DELETE FROM user_company WHERE user_id = ?1 AND company_id = ?2")
+        sqlx::query("DELETE FROM user_company WHERE user_id = $1 AND company_id = $2")
             .bind(user_id)
             .bind(company_id)
             .execute(&self.pool)
@@ -158,7 +158,7 @@ impl UserCompanyRepository {
             r#"
             SELECT ucb.*
             FROM user_company ucb
-            WHERE ucb.company_id = ?1
+            WHERE ucb.company_id = $1
             ORDER BY ucb.user_id
             "#,
         )

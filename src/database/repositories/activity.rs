@@ -1,13 +1,13 @@
 use crate::database::models::CreateActivityRequest;
-use sqlx::{Result, SqlitePool};
+use sqlx::{PgPool, Result};
 
 #[derive(Clone)]
 pub struct ActivityRepository {
-    pool: SqlitePool,
+    pool: PgPool,
 }
 
 impl ActivityRepository {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
@@ -21,7 +21,7 @@ impl ActivityRepository {
             r#"
             INSERT INTO company_activities 
             (company_id, user_id, activity_type, entity_type, entity_id, action, description, metadata, ip_address, user_agent)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             "#,
             request.company_id,
             request.user_id,

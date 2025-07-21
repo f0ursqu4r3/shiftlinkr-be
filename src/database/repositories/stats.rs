@@ -1,5 +1,5 @@
 use chrono::{NaiveDateTime, Utc};
-use sqlx::SqlitePool;
+use sqlx::PgPool;
 
 use crate::database::{
     models::{DashboardStats, ShiftStats, TimeOffStats},
@@ -7,11 +7,11 @@ use crate::database::{
 };
 
 pub struct StatsRepository {
-    pool: SqlitePool,
+    pool: PgPool,
 }
 
 impl StatsRepository {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
@@ -29,7 +29,7 @@ impl StatsRepository {
 
         let now = Utc::now().naive_utc();
         let upcoming_shifts =
-            sqlx::query_scalar!("SELECT COUNT(*) FROM shifts WHERE start_time > ?", now)
+            sqlx::query_scalar!("SELECT COUNT(*) FROM shifts WHERE start_time > $1", now)
                 .fetch_one(&self.pool)
                 .await? as i64;
 

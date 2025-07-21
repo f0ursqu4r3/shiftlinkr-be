@@ -1,6 +1,6 @@
 use anyhow::Result;
 use chrono::{Datelike, Utc};
-use sqlx::SqlitePool;
+use sqlx::PgPool;
 use std::str::FromStr;
 
 use crate::database::models::{
@@ -10,11 +10,11 @@ use crate::database::models::{
 
 #[derive(Clone)]
 pub struct PtoBalanceRepository {
-    pool: SqlitePool,
+    pool: PgPool,
 }
 
 impl PtoBalanceRepository {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
@@ -35,7 +35,7 @@ impl PtoBalanceRepository {
                 hire_date,
                 last_accrual_date
             FROM user_company 
-            WHERE user_id = ? AND company_id = ?
+            WHERE user_id = $1 AND company_id = $2
             "#,
             user_id,
             company_id
@@ -63,7 +63,7 @@ impl PtoBalanceRepository {
     pub async fn get_balance(&self, user_id: &str) -> Result<Option<PtoBalance>> {
         // Get the first company this user belongs to
         let company_id = sqlx::query_scalar!(
-            "SELECT company_id FROM user_company WHERE user_id = ? LIMIT 1",
+            "SELECT company_id FROM user_company WHERE user_id = $1 LIMIT 1",
             user_id
         )
         .fetch_optional(&self.pool)
@@ -93,7 +93,7 @@ impl PtoBalanceRepository {
 
         // Execute updates for each field that's provided
         if let Some(hours) = update.pto_balance_hours {
-            sqlx::query("UPDATE user_company SET pto_balance_hours = ?, updated_at = ? WHERE user_id = ? AND company_id = ?")
+            sqlx::query("UPDATE user_company SET pto_balance_hours = $1, updated_at = $2 WHERE user_id = $3 AND company_id = $4")
                 .bind(hours)
                 .bind(now)
                 .bind(user_id)
@@ -103,7 +103,7 @@ impl PtoBalanceRepository {
         }
 
         if let Some(hours) = update.sick_balance_hours {
-            sqlx::query("UPDATE user_company SET sick_balance_hours = ?, updated_at = ? WHERE user_id = ? AND company_id = ?")
+            sqlx::query("UPDATE user_company SET sick_balance_hours = $1, updated_at = $2 WHERE user_id = $3 AND company_id = $4")
                 .bind(hours)
                 .bind(now)
                 .bind(user_id)
@@ -113,7 +113,7 @@ impl PtoBalanceRepository {
         }
 
         if let Some(hours) = update.personal_balance_hours {
-            sqlx::query("UPDATE user_company SET personal_balance_hours = ?, updated_at = ? WHERE user_id = ? AND company_id = ?")
+            sqlx::query("UPDATE user_company SET personal_balance_hours = $1, updated_at = $2 WHERE user_id = $3 AND company_id = $4")
                 .bind(hours)
                 .bind(now)
                 .bind(user_id)
@@ -123,7 +123,7 @@ impl PtoBalanceRepository {
         }
 
         if let Some(rate) = update.pto_accrual_rate {
-            sqlx::query("UPDATE user_company SET pto_accrual_rate = ?, updated_at = ? WHERE user_id = ? AND company_id = ?")
+            sqlx::query("UPDATE user_company SET pto_accrual_rate = $1, updated_at = $2 WHERE user_id = $3 AND company_id = $4")
                 .bind(rate)
                 .bind(now)
                 .bind(user_id)
@@ -133,7 +133,7 @@ impl PtoBalanceRepository {
         }
 
         if let Some(hire_date) = update.hire_date {
-            sqlx::query("UPDATE user_company SET hire_date = ?, updated_at = ? WHERE user_id = ? AND company_id = ?")
+            sqlx::query("UPDATE user_company SET hire_date = $1, updated_at = $2 WHERE user_id = $3 AND company_id = $4")
                 .bind(hire_date.date())
                 .bind(now)
                 .bind(user_id)
@@ -157,7 +157,7 @@ impl PtoBalanceRepository {
     ) -> Result<PtoBalance> {
         // Get the first company this user belongs to
         let company_id = sqlx::query_scalar!(
-            "SELECT company_id FROM user_company WHERE user_id = ? LIMIT 1",
+            "SELECT company_id FROM user_company WHERE user_id = $1 LIMIT 1",
             user_id
         )
         .fetch_optional(&self.pool)
@@ -213,7 +213,7 @@ impl PtoBalanceRepository {
 
         // Update balance in user_company table
         let query = format!(
-            "UPDATE user_company SET {} = ?, updated_at = ? WHERE user_id = ? AND company_id = ?",
+            "UPDATE user_company SET {} = $1, updated_at = $2 WHERE user_id = $3 AND company_id = $4",
             field_name
         );
         sqlx::query(&query)
@@ -234,7 +234,7 @@ impl PtoBalanceRepository {
                 user_id, balance_type, change_type, hours_changed, 
                 previous_balance, new_balance, description, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING 
                 id, user_id, balance_type, change_type, hours_changed,
                 previous_balance, new_balance, description, related_time_off_id, created_at
@@ -278,7 +278,7 @@ impl PtoBalanceRepository {
     ) -> Result<PtoBalanceHistory> {
         // Get the first company this user belongs to
         let company_id = sqlx::query_scalar!(
-            "SELECT company_id FROM user_company WHERE user_id = ? LIMIT 1",
+            "SELECT company_id FROM user_company WHERE user_id = $1 LIMIT 1",
             user_id
         )
         .fetch_optional(&self.pool)
@@ -305,10 +305,10 @@ impl PtoBalanceRepository {
             SELECT 
                 id, user_id, balance_type, change_type, hours_changed,
                 previous_balance, new_balance, description, related_time_off_id, created_at
-            FROM pto_balance_history 
-            WHERE user_id = ?
+            FROM pto_balance_history
+            WHERE user_id = $1
             ORDER BY created_at DESC
-            LIMIT ?
+            LIMIT $2
             "#,
             user_id,
             limit
@@ -382,7 +382,7 @@ impl PtoBalanceRepository {
         let accrual_date = now.date();
 
         sqlx::query!(
-            "UPDATE user_company SET pto_balance_hours = ?, last_accrual_date = ?, updated_at = ? WHERE user_id = ? AND company_id = ?",
+            "UPDATE user_company SET pto_balance_hours = $1, last_accrual_date = $2, updated_at = $3 WHERE user_id = $4 AND company_id = $5",
             new_balance,
             accrual_date,
             now,
@@ -403,7 +403,7 @@ impl PtoBalanceRepository {
                 user_id, balance_type, change_type, hours_changed, 
                 previous_balance, new_balance, description, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING 
                 id, user_id, balance_type, change_type, hours_changed,
                 previous_balance, new_balance, description, related_time_off_id, created_at
@@ -443,7 +443,7 @@ impl PtoBalanceRepository {
     pub async fn process_accrual(&self, user_id: &str) -> Result<Option<PtoBalanceHistory>> {
         // Get the first company this user belongs to
         let company_id = sqlx::query_scalar!(
-            "SELECT company_id FROM user_company WHERE user_id = ? LIMIT 1",
+            "SELECT company_id FROM user_company WHERE user_id = $1 LIMIT 1",
             user_id
         )
         .fetch_optional(&self.pool)
@@ -500,7 +500,7 @@ impl PtoBalanceRepository {
 
         // Update balance in user_company table
         let query = format!(
-            "UPDATE user_company SET {} = ?, updated_at = ? WHERE user_id = ? AND company_id = ?",
+            "UPDATE user_company SET {} = $1, updated_at = $2 WHERE user_id = $3 AND company_id = $4",
             field_name
         );
         sqlx::query(&query)
@@ -522,7 +522,7 @@ impl PtoBalanceRepository {
                 user_id, balance_type, change_type, hours_changed, 
                 previous_balance, new_balance, description, related_time_off_id, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             RETURNING 
                 id, user_id, balance_type, change_type, hours_changed,
                 previous_balance, new_balance, description, related_time_off_id, created_at
@@ -569,7 +569,7 @@ impl PtoBalanceRepository {
     ) -> Result<PtoBalanceHistory> {
         // Get the first company this user belongs to
         let company_id = sqlx::query_scalar!(
-            "SELECT company_id FROM user_company WHERE user_id = ? LIMIT 1",
+            "SELECT company_id FROM user_company WHERE user_id = $1 LIMIT 1",
             user_id
         )
         .fetch_optional(&self.pool)

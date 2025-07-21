@@ -1,5 +1,5 @@
-use std::env;
 use anyhow::Result;
+use std::env;
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -15,24 +15,23 @@ impl Config {
     pub fn from_env() -> Result<Self> {
         // Load .env file if it exists
         dotenvy::dotenv().ok();
-        
+
         Ok(Config {
             database_url: env::var("DATABASE_URL")
-                .unwrap_or_else(|_| "sqlite:./shiftlinkr.db".to_string()),
-            jwt_secret: env::var("JWT_SECRET")
-                .unwrap_or_else(|_| "your-super-secret-jwt-key-change-this-in-production-12345".to_string()),
+                .unwrap_or_else(|_| "postgres://@localhost:5432/shiftlinkr".to_string()),
+            jwt_secret: env::var("JWT_SECRET").unwrap_or_else(|_| {
+                "your-super-secret-jwt-key-change-this-in-production-12345".to_string()
+            }),
             jwt_expiration_days: env::var("JWT_EXPIRATION_DAYS")
                 .unwrap_or_else(|_| "30".to_string())
                 .parse()
                 .unwrap_or(30),
-            host: env::var("HOST")
-                .unwrap_or_else(|_| "127.0.0.1".to_string()),
+            host: env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string()),
             port: env::var("PORT")
                 .unwrap_or_else(|_| "8080".to_string())
                 .parse()
                 .unwrap_or(8080),
-            environment: env::var("ENVIRONMENT")
-                .unwrap_or_else(|_| "development".to_string()),
+            environment: env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string()),
         })
     }
 
@@ -41,21 +40,20 @@ impl Config {
     pub fn from_env_only() -> Result<Self> {
         Ok(Config {
             database_url: env::var("DATABASE_URL")
-                .unwrap_or_else(|_| "sqlite:./shiftlinkr.db".to_string()),
-            jwt_secret: env::var("JWT_SECRET")
-                .unwrap_or_else(|_| "your-super-secret-jwt-key-change-this-in-production-12345".to_string()),
+                .unwrap_or_else(|_| "postgres://@localhost:5432/shiftlinkr".to_string()),
+            jwt_secret: env::var("JWT_SECRET").unwrap_or_else(|_| {
+                "your-super-secret-jwt-key-change-this-in-production-12345".to_string()
+            }),
             jwt_expiration_days: env::var("JWT_EXPIRATION_DAYS")
                 .unwrap_or_else(|_| "30".to_string())
                 .parse()
                 .unwrap_or(30),
-            host: env::var("HOST")
-                .unwrap_or_else(|_| "127.0.0.1".to_string()),
+            host: env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string()),
             port: env::var("PORT")
                 .unwrap_or_else(|_| "8080".to_string())
                 .parse()
                 .unwrap_or(8080),
-            environment: env::var("ENVIRONMENT")
-                .unwrap_or_else(|_| "development".to_string()),
+            environment: env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string()),
         })
     }
 

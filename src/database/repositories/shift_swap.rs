@@ -1,5 +1,5 @@
 use chrono::Utc;
-use sqlx::{Row, SqlitePool};
+use sqlx::{PgPool, Row};
 
 use crate::database::{
     models::{
@@ -10,11 +10,11 @@ use crate::database::{
 };
 
 pub struct ShiftSwapRepository {
-    pool: SqlitePool,
+    pool: PgPool,
 }
 
 impl ShiftSwapRepository {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
@@ -37,7 +37,7 @@ impl ShiftSwapRepository {
                 requesting_user_id, original_shift_id, target_user_id, target_shift_id, 
                 notes, swap_type, status, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             RETURNING 
                 id, requesting_user_id, original_shift_id, target_user_id, target_shift_id,
                 notes, swap_type, status, approved_by, approval_notes, created_at, updated_at
@@ -144,7 +144,7 @@ impl ShiftSwapRepository {
                 id, requesting_user_id, original_shift_id, target_user_id, target_shift_id,
                 notes, swap_type, status, approved_by, approval_notes, created_at, updated_at
             FROM shift_swaps 
-            WHERE id = ?
+            WHERE id = $1
             "#,
             id
         )
@@ -192,8 +192,8 @@ impl ShiftSwapRepository {
                 r#"
                 UPDATE shift_swaps 
                 SET 
-                    target_user_id = ?, status = ?, notes = ?, updated_at = ?
-                WHERE id = ?
+                    target_user_id = $1, status = $2, notes = $3, updated_at = $4
+                WHERE id = $5
                 "#,
                 responding_user_id,
                 status_str,
@@ -207,8 +207,8 @@ impl ShiftSwapRepository {
             sqlx::query!(
                 r#"
                 UPDATE shift_swaps 
-                SET updated_at = ?
-                WHERE id = ?
+                SET updated_at = $1
+                WHERE id = $2
                 "#,
                 now,
                 id
@@ -238,8 +238,8 @@ impl ShiftSwapRepository {
             r#"
             UPDATE shift_swaps 
             SET 
-                status = ?, approved_by = ?, approval_notes = ?, updated_at = ?
-            WHERE id = ?
+                status = $1, approved_by = $2, approval_notes = $3, updated_at = $4
+            WHERE id = $5
             RETURNING 
                 id, requesting_user_id, original_shift_id, target_user_id, target_shift_id,
                 notes, swap_type, status, approved_by, approval_notes, created_at, updated_at
@@ -278,8 +278,8 @@ impl ShiftSwapRepository {
             r#"
             UPDATE shift_swaps 
             SET 
-                status = ?, approved_by = ?, approval_notes = ?, updated_at = ?
-            WHERE id = ?
+                status = $1, approved_by = $2, approval_notes = $3, updated_at = $4
+            WHERE id = $5
             RETURNING 
                 id, requesting_user_id, original_shift_id, target_user_id, target_shift_id,
                 notes, swap_type, status, approved_by, approval_notes, created_at, updated_at
@@ -318,8 +318,8 @@ impl ShiftSwapRepository {
             r#"
             UPDATE shift_swaps 
             SET 
-                status = ?, updated_at = ?
-            WHERE id = ?
+                status = $1, updated_at = $2
+            WHERE id = $3
             RETURNING 
                 id, requesting_user_id, original_shift_id, target_user_id, target_shift_id,
                 notes, swap_type, status, approved_by, approval_notes, created_at, updated_at
@@ -356,8 +356,8 @@ impl ShiftSwapRepository {
             r#"
             UPDATE shift_swaps 
             SET 
-                status = ?, updated_at = ?
-            WHERE id = ?
+                status = $1, updated_at = $2
+            WHERE id = $3
             RETURNING 
                 id, requesting_user_id, original_shift_id, target_user_id, target_shift_id,
                 notes, swap_type, status, approved_by, approval_notes, created_at, updated_at
@@ -486,7 +486,7 @@ impl ShiftSwapRepository {
             JOIN users u ON ss.requesting_user_id = u.id
             JOIN shifts s ON ss.original_shift_id = s.id
             JOIN teams t ON s.team_id = t.id
-            WHERE ss.id = ?
+            WHERE ss.id = $1
             "#,
             id
         )
@@ -536,7 +536,7 @@ impl ShiftSwapRepository {
                 u.name as responding_user_name
             FROM shift_swap_responses ssr
             JOIN users u ON ssr.responding_user_id = u.id
-            WHERE ssr.swap_id = ?
+            WHERE ssr.swap_id = $1
             ORDER BY ssr.created_at ASC
             "#,
             swap_id
@@ -577,7 +577,7 @@ impl ShiftSwapRepository {
             INSERT INTO shift_swap_responses (
                 swap_id, responding_user_id, status, notes, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING id, swap_id, responding_user_id, status, notes, created_at, updated_at
             "#,
             swap_id,
@@ -591,7 +591,7 @@ impl ShiftSwapRepository {
         .await?;
 
         // Get user details
-        let user_row = sqlx::query!("SELECT name FROM users WHERE id = ?", responding_user_id)
+        let user_row = sqlx::query!("SELECT name FROM users WHERE id = $1", responding_user_id)
             .fetch_one(&self.pool)
             .await?;
 
@@ -618,8 +618,8 @@ impl ShiftSwapRepository {
         let row = sqlx::query!(
             r#"
             UPDATE shift_swap_responses 
-            SET status = ?, updated_at = ?
-            WHERE id = ?
+            SET status = $1, updated_at = $2
+            WHERE id = $3
             RETURNING id, swap_id, responding_user_id, status, notes, created_at, updated_at
             "#,
             status_str,
@@ -631,7 +631,7 @@ impl ShiftSwapRepository {
 
         // Get user details
         let user_row = sqlx::query!(
-            "SELECT name FROM users WHERE id = ?",
+            "SELECT name FROM users WHERE id = $1",
             row.responding_user_id
         )
         .fetch_one(&self.pool)

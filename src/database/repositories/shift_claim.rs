@@ -1,14 +1,14 @@
 use crate::database::models::{ShiftClaim, ShiftClaimInput, ShiftClaimStatus};
 use chrono::Utc;
-use sqlx::SqlitePool;
+use sqlx::PgPool;
 
 #[derive(Clone)]
 pub struct ShiftClaimRepository {
-    pool: SqlitePool,
+    pool: PgPool,
 }
 
 impl ShiftClaimRepository {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
@@ -20,7 +20,7 @@ impl ShiftClaimRepository {
         let row = sqlx::query!(
             r#"
             INSERT INTO shift_claims (shift_id, user_id, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)
+            VALUES ($1, $2, $3, $4, $5)
             RETURNING id, shift_id, user_id, status, approved_by, approval_notes, created_at, updated_at
             "#,
             input.shift_id,
@@ -52,7 +52,7 @@ impl ShiftClaimRepository {
             r#"
             SELECT id, shift_id, user_id, status, approved_by, approval_notes, created_at, updated_at
             FROM shift_claims
-            WHERE id = ?
+            WHERE id = $1
             "#,
             id
         )
@@ -81,7 +81,7 @@ impl ShiftClaimRepository {
             r#"
             SELECT id, shift_id, user_id, status, approved_by, approval_notes, created_at, updated_at
             FROM shift_claims
-            WHERE shift_id = ?
+            WHERE shift_id = $1
             ORDER BY created_at DESC
             "#,
             shift_id
@@ -112,7 +112,7 @@ impl ShiftClaimRepository {
             r#"
             SELECT id, shift_id, user_id, status, approved_by, approval_notes, created_at, updated_at
             FROM shift_claims
-            WHERE user_id = ?
+            WHERE user_id = $1
             ORDER BY created_at DESC
             "#,
             user_id
@@ -208,8 +208,8 @@ impl ShiftClaimRepository {
         let row = sqlx::query!(
             r#"
             UPDATE shift_claims
-            SET status = 'approved', approved_by = ?, approval_notes = ?, updated_at = ?
-            WHERE id = ? AND status = 'pending'
+            SET status = 'approved', approved_by = $1, approval_notes = $2, updated_at = $3
+            WHERE id = $4 AND status = 'pending'
             RETURNING id, shift_id, user_id, status, approved_by, approval_notes, created_at, updated_at
             "#,
             approved_by,
@@ -249,8 +249,8 @@ impl ShiftClaimRepository {
         let row = sqlx::query!(
             r#"
             UPDATE shift_claims
-            SET status = 'rejected', approved_by = ?, approval_notes = ?, updated_at = ?
-            WHERE id = ? AND status = 'pending'
+            SET status = 'rejected', approved_by = $1, approval_notes = $2, updated_at = $3
+            WHERE id = $4 AND status = 'pending'
             RETURNING id, shift_id, user_id, status, approved_by, approval_notes, created_at, updated_at
             "#,
             approved_by,
@@ -289,8 +289,8 @@ impl ShiftClaimRepository {
         let row = sqlx::query!(
             r#"
             UPDATE shift_claims
-            SET status = 'cancelled', updated_at = ?
-            WHERE id = ? AND user_id = ? AND status = 'pending'
+            SET status = 'cancelled', updated_at = $1
+            WHERE id = $2 AND user_id = $3 AND status = 'pending'
             RETURNING id, shift_id, user_id, status, approved_by, approval_notes, created_at, updated_at
             "#,
             now,
@@ -324,8 +324,8 @@ impl ShiftClaimRepository {
         let result = sqlx::query!(
             r#"
             UPDATE shift_claims
-            SET status = 'cancelled', updated_at = ?
-            WHERE shift_id = ? AND status = 'pending'
+            SET status = 'cancelled', updated_at = $1
+            WHERE shift_id = $2 AND status = 'pending'
             "#,
             now,
             shift_id
@@ -346,7 +346,7 @@ impl ShiftClaimRepository {
             r#"
             SELECT COUNT(*)
             FROM shift_claims
-            WHERE shift_id = ? AND user_id = ? AND status != 'cancelled'
+            WHERE shift_id = $1 AND user_id = $2 AND status != 'cancelled'
             "#,
             shift_id,
             user_id
@@ -367,7 +367,7 @@ impl ShiftClaimRepository {
             r#"
             SELECT COUNT(*)
             FROM shift_claims
-            WHERE shift_id = ? AND user_id = ? AND status = 'pending'
+            WHERE shift_id = $1 AND user_id = $2 AND status = 'pending'
             "#,
             shift_id,
             user_id
@@ -388,7 +388,7 @@ impl ShiftClaimRepository {
             r#"
             SELECT COUNT(*)
             FROM shift_claims
-            WHERE shift_id = ? AND user_id = ? AND (status = 'pending' OR status = 'approved')
+            WHERE shift_id = $1 AND user_id = $2 AND (status = 'pending' OR status = 'approved')
             "#,
             shift_id,
             user_id
@@ -408,7 +408,7 @@ impl ShiftClaimRepository {
             r#"
             SELECT id, shift_id, user_id, status, approved_by, approval_notes, created_at, updated_at
             FROM shift_claims
-            WHERE shift_id = ? AND status = 'approved'
+            WHERE shift_id = $1 AND status = 'approved'
             "#,
             shift_id
         )
@@ -437,7 +437,7 @@ impl ShiftClaimRepository {
             r#"
             SELECT COUNT(*)
             FROM shift_claims
-            WHERE shift_id = ? AND status = 'approved'
+            WHERE shift_id = $1 AND status = 'approved'
             "#,
             shift_id
         )
@@ -458,7 +458,7 @@ impl ShiftClaimRepository {
             SELECT COUNT(*)
             FROM shifts s
             INNER JOIN team_members tm ON s.team_id = tm.team_id
-            WHERE s.id = ? AND tm.user_id = ?
+            WHERE s.id = $1 AND tm.user_id = $2
             "#,
             shift_id,
             user_id
@@ -478,7 +478,7 @@ impl ShiftClaimRepository {
             r#"
             SELECT s.id, s.team_id, s.start_time, s.status as shift_status
             FROM shifts s
-            WHERE s.id = ?
+            WHERE s.id = $1
             "#,
             shift_id
         )

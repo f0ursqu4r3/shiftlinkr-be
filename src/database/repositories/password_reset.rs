@@ -1,17 +1,17 @@
 use anyhow::Result;
 use chrono::{Duration, Utc};
-use sqlx::SqlitePool;
+use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::database::models::PasswordResetToken;
 
 #[derive(Clone)]
 pub struct PasswordResetTokenRepository {
-    pool: SqlitePool,
+    pool: PgPool,
 }
 
 impl PasswordResetTokenRepository {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
@@ -34,7 +34,7 @@ impl PasswordResetTokenRepository {
         sqlx::query(
             r#"
             INSERT INTO password_reset_tokens (id, user_id, token, expires_at, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            VALUES ($1, $2, $3, $4, $5)
             "#,
         )
         .bind(&reset_token.id)
@@ -51,12 +51,12 @@ impl PasswordResetTokenRepository {
     /// Find a valid (unused and not expired) token
     pub async fn find_valid_token(&self, token: &str) -> Result<Option<PasswordResetToken>> {
         let now = Utc::now().naive_utc();
-        
+
         let result = sqlx::query_as::<_, PasswordResetToken>(
             r#"
             SELECT id, user_id, token, expires_at, used_at, created_at
             FROM password_reset_tokens
-            WHERE token = ? AND used_at IS NULL AND expires_at > ?
+            WHERE token = $1 AND used_at IS NULL AND expires_at > $2
             "#,
         )
         .bind(token)
@@ -70,12 +70,12 @@ impl PasswordResetTokenRepository {
     /// Mark a token as used
     pub async fn mark_token_used(&self, token: &str) -> Result<()> {
         let now = Utc::now().naive_utc();
-        
+
         sqlx::query(
             r#"
             UPDATE password_reset_tokens
-            SET used_at = ?
-            WHERE token = ?
+            SET used_at = $1
+            WHERE token = $2
             "#,
         )
         .bind(now)
@@ -89,11 +89,11 @@ impl PasswordResetTokenRepository {
     /// Clean up expired tokens (optional cleanup method)
     pub async fn cleanup_expired_tokens(&self) -> Result<u64> {
         let now = Utc::now().naive_utc();
-        
+
         let result = sqlx::query(
             r#"
             DELETE FROM password_reset_tokens
-            WHERE expires_at < ?
+            WHERE expires_at < $1
             "#,
         )
         .bind(now)
@@ -106,12 +106,12 @@ impl PasswordResetTokenRepository {
     /// Invalidate all tokens for a user (when password is reset)
     pub async fn invalidate_user_tokens(&self, user_id: &str) -> Result<()> {
         let now = Utc::now().naive_utc();
-        
+
         sqlx::query(
             r#"
             UPDATE password_reset_tokens
-            SET used_at = ?
-            WHERE user_id = ? AND used_at IS NULL
+            SET used_at = $1
+            WHERE user_id = $2 AND used_at IS NULL
             "#,
         )
         .bind(now)

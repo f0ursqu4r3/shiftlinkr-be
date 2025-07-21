@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE shift_claims\n            SET status = 'cancelled', updated_at = $1\n            WHERE shift_id = $2 AND status = 'pending'\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a69ef80ccd3dbbbc8e4fc7d8ff37fea34414763041ea25eaed68138ae6dfed0b"
+}

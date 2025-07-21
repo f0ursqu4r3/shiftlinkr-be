@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM invite_tokens WHERE token = $1 AND inviter_id = $2 AND used_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "84f63f8a6a16d44ab85117c068021808eebab9425f8ee8c4b02f5d85707a7b66"
+}

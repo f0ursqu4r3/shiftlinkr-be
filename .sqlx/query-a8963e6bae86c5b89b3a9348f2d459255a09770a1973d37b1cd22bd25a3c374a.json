@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT COUNT(*)\n            FROM shifts s\n            INNER JOIN team_members tm ON s.team_id = tm.team_id\n            WHERE s.id = $1 AND tm.user_id = $2\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "a8963e6bae86c5b89b3a9348f2d459255a09770a1973d37b1cd22bd25a3c374a"
+}

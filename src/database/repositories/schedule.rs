@@ -1,6 +1,6 @@
 use anyhow::Result;
 use chrono::Utc;
-use sqlx::SqlitePool;
+use sqlx::PgPool;
 
 use crate::database::models::{
     AssignmentResponse, AssignmentStatus, ShiftAssignment, ShiftAssignmentInput, UserShiftSchedule,
@@ -8,11 +8,11 @@ use crate::database::models::{
 };
 
 pub struct ScheduleRepository {
-    pool: SqlitePool,
+    pool: PgPool,
 }
 
 impl ScheduleRepository {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 

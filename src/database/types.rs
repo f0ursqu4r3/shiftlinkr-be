@@ -1,6 +1,6 @@
 use chrono::NaiveDateTime;
 
-// Database row types that match the exact SQLite schema
+// Database row types that match the exact PostgreSQL schema
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct LocationRow {
     pub id: i64,

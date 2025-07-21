@@ -1,0 +1,59 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT \n                user_id,\n                pto_balance_hours,\n                sick_balance_hours,\n                personal_balance_hours,\n                pto_accrual_rate,\n                hire_date,\n                last_accrual_date\n            FROM user_company \n            WHERE user_id = $1 AND company_id = $2\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "pto_balance_hours",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "sick_balance_hours",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "personal_balance_hours",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "pto_accrual_rate",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 5,
+        "name": "hire_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 6,
+        "name": "last_accrual_date",
+        "type_info": "Date"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "6150370467da7bf0a62774fe283f107fd9ac7a2b1288eb26897aafee5fab027a"
+}

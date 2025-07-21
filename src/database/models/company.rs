@@ -43,29 +43,29 @@ pub enum CompanyRole {
     Admin,
 }
 
-impl sqlx::Type<sqlx::Sqlite> for CompanyRole {
-    fn type_info() -> sqlx::sqlite::SqliteTypeInfo {
-        <String as sqlx::Type<sqlx::Sqlite>>::type_info()
+impl sqlx::Type<sqlx::Postgres> for CompanyRole {
+    fn type_info() -> sqlx::postgres::PgTypeInfo {
+        <String as sqlx::Type<sqlx::Postgres>>::type_info()
     }
 }
 
-impl<'q> sqlx::Encode<'q, sqlx::Sqlite> for CompanyRole {
+impl<'q> sqlx::Encode<'q, sqlx::Postgres> for CompanyRole {
     fn encode_by_ref(
         &self,
-        args: &mut Vec<sqlx::sqlite::SqliteArgumentValue<'q>>,
+        buf: &mut sqlx::postgres::PgArgumentBuffer,
     ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
         let s = match self {
             CompanyRole::Admin => "admin",
             CompanyRole::Manager => "manager",
             CompanyRole::Employee => "employee",
         };
-        <&str as sqlx::Encode<'q, sqlx::Sqlite>>::encode_by_ref(&s, args)
+        <&str as sqlx::Encode<'q, sqlx::Postgres>>::encode_by_ref(&s, buf)
     }
 }
 
-impl<'r> sqlx::Decode<'r, sqlx::Sqlite> for CompanyRole {
-    fn decode(value: sqlx::sqlite::SqliteValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
-        let s = <String as sqlx::Decode<sqlx::Sqlite>>::decode(value)?;
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for CompanyRole {
+    fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let s = <String as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
         match s.as_str() {
             "admin" => Ok(CompanyRole::Admin),
             "manager" => Ok(CompanyRole::Manager),

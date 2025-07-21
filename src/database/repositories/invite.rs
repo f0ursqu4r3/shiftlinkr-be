@@ -1,15 +1,15 @@
 use chrono::{Duration, Utc};
-use sqlx::SqlitePool;
+use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::database::models::{InviteToken, UserRole};
 
 pub struct InviteRepository {
-    pool: SqlitePool,
+    pool: PgPool,
 }
 
 impl InviteRepository {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
@@ -40,7 +40,7 @@ impl InviteRepository {
         sqlx::query!(
             r#"
             INSERT INTO invite_tokens (id, email, token, inviter_id, role, team_id, expires_at, used_at, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             "#,
             invite_token.id,
             invite_token.email,
@@ -60,7 +60,7 @@ impl InviteRepository {
 
     pub async fn get_invite_token(&self, token: &str) -> Result<Option<InviteToken>, sqlx::Error> {
         let row = sqlx::query!(
-            "SELECT id, email, token, inviter_id, role, team_id, expires_at, used_at, created_at FROM invite_tokens WHERE token = ? AND used_at IS NULL",
+            "SELECT id, email, token, inviter_id, role, team_id, expires_at, used_at, created_at FROM invite_tokens WHERE token = $1 AND used_at IS NULL",
             token
         )
         .fetch_optional(&self.pool)
@@ -93,9 +93,9 @@ impl InviteRepository {
 
     pub async fn mark_invite_token_as_used(&self, token: &str) -> Result<(), sqlx::Error> {
         let used_at = Utc::now().naive_utc();
-        
+
         sqlx::query!(
-            "UPDATE invite_tokens SET used_at = ? WHERE token = ?",
+            "UPDATE invite_tokens SET used_at = $1 WHERE token = $2",
             used_at,
             token
         )
@@ -105,9 +105,12 @@ impl InviteRepository {
         Ok(())
     }
 
-    pub async fn get_invites_by_inviter(&self, inviter_id: &str) -> Result<Vec<InviteToken>, sqlx::Error> {
+    pub async fn get_invites_by_inviter(
+        &self,
+        inviter_id: &str,
+    ) -> Result<Vec<InviteToken>, sqlx::Error> {
         let rows = sqlx::query!(
-            "SELECT id, email, token, inviter_id, role, team_id, expires_at, used_at, created_at FROM invite_tokens WHERE inviter_id = ? ORDER BY created_at DESC",
+            "SELECT id, email, token, inviter_id, role, team_id, expires_at, used_at, created_at FROM invite_tokens WHERE inviter_id = $1 ORDER BY created_at DESC",
             inviter_id
         )
         .fetch_all(&self.pool)
@@ -141,7 +144,7 @@ impl InviteRepository {
     pub async fn cleanup_expired_tokens(&self) -> Result<u64, sqlx::Error> {
         let now = Utc::now().naive_utc();
         let result = sqlx::query!(
-            "DELETE FROM invite_tokens WHERE expires_at < ? AND used_at IS NULL",
+            "DELETE FROM invite_tokens WHERE expires_at < $1 AND used_at IS NULL",
             now
         )
         .execute(&self.pool)
@@ -150,9 +153,13 @@ impl InviteRepository {
         Ok(result.rows_affected())
     }
 
-    pub async fn revoke_invite_token(&self, token: &str, inviter_id: &str) -> Result<bool, sqlx::Error> {
+    pub async fn revoke_invite_token(
+        &self,
+        token: &str,
+        inviter_id: &str,
+    ) -> Result<bool, sqlx::Error> {
         let result = sqlx::query!(
-            "DELETE FROM invite_tokens WHERE token = ? AND inviter_id = ? AND used_at IS NULL",
+            "DELETE FROM invite_tokens WHERE token = $1 AND inviter_id = $2 AND used_at IS NULL",
             token,
             inviter_id
         )
