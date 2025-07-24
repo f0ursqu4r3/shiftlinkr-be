@@ -40,7 +40,7 @@ impl InviteRepository {
                     created_at
                 )
             VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             RETURNING
                 id,
                 email,
@@ -85,7 +85,7 @@ impl InviteRepository {
             FROM
                 invite_tokens
             WHERE
-                token = ?
+                token = $1
                 AND used_at IS NULL
             "#,
         )
@@ -99,7 +99,7 @@ impl InviteRepository {
     pub async fn mark_invite_token_as_used(&self, token: &str) -> Result<(), sqlx::Error> {
         let used_at = Utc::now();
 
-        sqlx::query("UPDATE invite_tokens SET used_at = ? WHERE token = ?")
+        sqlx::query("UPDATE invite_tokens SET used_at = $1 WHERE token = $2")
             .bind(used_at)
             .bind(token)
             .execute(&self.pool)
@@ -126,7 +126,7 @@ impl InviteRepository {
                 used_at,
                 created_at
             FROM invite_tokens
-            WHERE inviter_id = ?
+            WHERE inviter_id = $1
             ORDER BY created_at DESC
             "#,
         )
@@ -158,8 +158,8 @@ impl InviteRepository {
             r#"
             DELETE FROM invite_tokens
             WHERE
-                token = ?
-                AND inviter_id = ?
+                token = $1
+                AND inviter_id = $2
                 AND used_at IS NULL
             "#,
         )

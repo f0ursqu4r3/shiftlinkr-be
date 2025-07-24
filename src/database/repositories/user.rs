@@ -17,8 +17,17 @@ impl UserRepository {
     pub async fn create_user(&self, user: &User) -> Result<()> {
         sqlx::query(
             r#"
-            INSERT INTO users (id, email, password_hash, name, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO
+                users (
+                    id,
+                    email,
+                    password_hash,
+                    name,
+                    created_at,
+                    updated_at
+                )
+            VALUES
+                ($1, $2, $3, $4, $5, $6)
             "#,
         )
         .bind(&user.id)
@@ -38,7 +47,7 @@ impl UserRepository {
             r#"
             SELECT id, email, password_hash, name, created_at, updated_at
             FROM users
-            WHERE email = ?
+            WHERE email = $1
             "#,
         )
         .bind(email)
@@ -53,7 +62,7 @@ impl UserRepository {
             r#"
             SELECT id, email, password_hash, name, created_at, updated_at
             FROM users
-            WHERE id = ?
+            WHERE id = $1
             "#,
         )
         .bind(id)
@@ -83,8 +92,8 @@ impl UserRepository {
         sqlx::query(
             r#"
             UPDATE users
-            SET name = ?, email = ?, updated_at = ?
-            WHERE id = ?
+            SET name = $1, email = $2, updated_at = $3
+            WHERE id = $4
             "#,
         )
         .bind(name)
@@ -98,7 +107,7 @@ impl UserRepository {
     }
 
     pub async fn delete_user(&self, id: Uuid) -> Result<()> {
-        sqlx::query("DELETE FROM users WHERE id = ?")
+        sqlx::query("DELETE FROM users WHERE id = $1")
             .bind(id)
             .execute(&self.pool)
             .await?;
@@ -107,7 +116,7 @@ impl UserRepository {
     }
 
     pub async fn email_exists(&self, email: &str) -> Result<bool> {
-        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE email = ?")
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE email = $1")
             .bind(email)
             .fetch_one(&self.pool)
             .await?;
@@ -121,8 +130,8 @@ impl UserRepository {
         sqlx::query(
             r#"
             UPDATE users
-            SET password_hash = ?, updated_at = ?
-            WHERE id = ?
+            SET password_hash = $1, updated_at = $2
+            WHERE id = $3
             "#,
         )
         .bind(password_hash)

@@ -30,7 +30,7 @@ impl StatsRepository {
 
         let now = Utc::now();
         let upcoming_shifts: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM shifts WHERE start_time > ?")
+            sqlx::query_scalar("SELECT COUNT(*) FROM shifts WHERE start_time > $1")
                 .bind(now)
                 .fetch_one(&self.pool)
                 .await?;

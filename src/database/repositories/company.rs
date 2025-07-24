@@ -32,7 +32,7 @@ impl CompanyRepository {
                     timezone
                 )
             VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?)
+                ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING
                 id,
                 name,
@@ -94,8 +94,8 @@ impl CompanyRepository {
             JOIN
                 user_company uc ON c.id = uc.company_id
             WHERE
-                uc.user_id = ?
-                AND c.id = ?
+                uc.user_id = $1
+                AND c.id = $2
             "#,
         )
         .bind(user_id)
@@ -125,7 +125,7 @@ impl CompanyRepository {
                 companies c
                 JOIN user_company uc ON c.id = uc.company_id
             WHERE
-                uc.user_id = ?
+                uc.user_id = $1
             ORDER BY
                 uc.is_primary DESC,
                 c.name ASC
@@ -158,7 +158,7 @@ impl CompanyRepository {
             JOIN
                 user_company uc ON c.id = uc.company_id
             WHERE
-                uc.user_id = ? AND uc.is_primary = true
+                uc.user_id = $1 AND uc.is_primary = true
             "#,
         )
         .bind(user_id)
@@ -192,7 +192,7 @@ impl CompanyRepository {
                     hire_date
                 )
             VALUES
-                (?, ?, ?, ?, ?)
+                ($1, $2, $3, $4, $5)
             RETURNING
                 id,
                 user_id,
@@ -234,7 +234,7 @@ impl CompanyRepository {
                 users u
                 JOIN user_company uc ON u.id = uc.user_id
             WHERE
-                uc.company_id = ?
+                uc.company_id = $1
             ORDER BY
                 uc.role DESC,
                 u.name ASC
@@ -252,7 +252,7 @@ impl CompanyRepository {
         company_id: Uuid,
         user_id: Uuid,
     ) -> Result<bool> {
-        let result = sqlx::query("DELETE FROM user_company WHERE company_id = ? AND user_id = ?")
+        let result = sqlx::query("DELETE FROM user_company WHERE company_id = $1 AND user_id = $2")
             .bind(company_id)
             .bind(user_id)
             .execute(&self.pool)
@@ -268,7 +268,7 @@ impl CompanyRepository {
         role: &CompanyRole,
     ) -> Result<bool> {
         let result = sqlx::query(
-            "UPDATE user_company SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE company_id = ? AND user_id = ?",
+            "UPDATE user_company SET role = $1, updated_at = CURRENT_TIMESTAMP WHERE company_id = $2 AND user_id = $3",
         )
         .bind(role)
         .bind(company_id)
@@ -285,7 +285,7 @@ impl CompanyRepository {
         company_id: Uuid,
     ) -> Result<Option<CompanyRole>> {
         let role = sqlx::query_scalar::<_, CompanyRole>(
-            "SELECT role FROM user_company WHERE user_id = ? AND company_id = ?",
+            "SELECT role FROM user_company WHERE user_id = $1 AND company_id = $2",
         )
         .bind(user_id)
         .bind(company_id)

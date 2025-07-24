@@ -49,7 +49,7 @@ impl ScheduleRepository {
                     updated_at
                 )
             VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
             RETURNING
                 id,
                 user_id,
@@ -128,7 +128,8 @@ impl ScheduleRepository {
             FROM
                 user_shift_schedules
             WHERE
-                user_id = ?
+                user_id = $1
+            LIMIT 1
             "#,
         )
         .bind(user_id)
@@ -149,26 +150,26 @@ impl ScheduleRepository {
             UPDATE
                 user_shift_schedules
             SET
-                monday_start = ?,
-                monday_end = ?,
-                tuesday_start = ?,
-                tuesday_end = ?,
-                wednesday_start = ?,
-                wednesday_end = ?,
-                thursday_start = ?,
-                thursday_end = ?,
-                friday_start = ?,
-                friday_end = ?,
-                saturday_start = ?,
-                saturday_end = ?,
-                sunday_start = ?,
-                sunday_end = ?,
-                max_hours_per_week = ?,
-                min_hours_per_week = ?,
-                is_available_for_overtime = ?,
-                updated_at = ?
+                monday_start = $1,
+                monday_end = $2,
+                tuesday_start = $3,
+                tuesday_end = $4,
+                wednesday_start = $5,
+                wednesday_end = $6,
+                thursday_start = $7,
+                thursday_end = $8,
+                friday_start = $9,
+                friday_end = $10,
+                saturday_start = $11,
+                saturday_end = $12,
+                sunday_start = $13,
+                sunday_end = $14,
+                max_hours_per_week = $15,
+                min_hours_per_week = $16,
+                is_available_for_overtime = $17,
+                updated_at = $18
             WHERE
-                user_id = ?
+                user_id = $19
             RETURNING
                 id,
                 user_id,
@@ -219,7 +220,7 @@ impl ScheduleRepository {
     }
 
     pub async fn delete_user_schedule(&self, user_id: Uuid) -> Result<bool> {
-        let result = sqlx::query("DELETE FROM user_shift_schedules WHERE user_id = ?")
+        let result = sqlx::query("DELETE FROM user_shift_schedules WHERE user_id = $1")
             .bind(user_id)
             .execute(&self.pool)
             .await?;
@@ -248,7 +249,7 @@ impl ScheduleRepository {
                     updated_at
                 )
             VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             RETURNING
                 id,
                 shift_id,
@@ -294,7 +295,7 @@ impl ScheduleRepository {
             FROM
                 shift_proposal_assignments
             WHERE
-                id = ?
+                id = $1
             "#,
         )
         .bind(shift_id)
@@ -324,7 +325,7 @@ impl ScheduleRepository {
             FROM
                 shift_proposal_assignments
             WHERE
-                shift_id = ?
+                shift_id = $1
             ORDER BY
                 created_at
             "#,
@@ -356,7 +357,7 @@ impl ScheduleRepository {
             FROM
                 shift_proposal_assignments
             WHERE
-                user_id = ?
+                user_id = $1
             ORDER BY
                 created_at DESC
             "#,
@@ -388,7 +389,7 @@ impl ScheduleRepository {
             FROM
                 shift_proposal_assignments
             WHERE
-                user_id = ? AND assignment_status = 'pending'
+                user_id = $1 AND assignment_status = 'pending'
             ORDER BY
                 acceptance_deadline ASC, created_at
             "#,
@@ -417,12 +418,12 @@ impl ScheduleRepository {
             UPDATE
                 shift_proposal_assignments
             SET
-                assignment_status = ?,
-                response = ?,
-                response_notes = ?,
-                updated_at = ?
+                assignment_status = $1,
+                response = $2,
+                response_notes = $3,
+                updated_at = $4
             WHERE
-                id = ?
+                id = $5
             RETURNING
                 id,
                 shift_id,
@@ -455,9 +456,9 @@ impl ScheduleRepository {
                 shift_proposal_assignments
             SET
                 assignment_status = 'cancelled',
-                updated_at = ?
+                updated_at = $1
             WHERE
-                id = ?
+                id = $2
             RETURNING
                 id,
                 shift_id,
@@ -487,11 +488,11 @@ impl ScheduleRepository {
                 shift_proposal_assignments
             SET
                 assignment_status = 'expired',
-                updated_at = ?
+                updated_at = $1
             WHERE
                 assignment_status = 'pending'
                 AND acceptance_deadline IS NOT NULL
-                AND acceptance_deadline < ?
+                AND acceptance_deadline < $2
             RETURNING
                 id,
                 shift_id,

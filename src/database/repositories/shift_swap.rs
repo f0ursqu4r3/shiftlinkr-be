@@ -67,7 +67,7 @@ impl ShiftSwapRepository {
                     updated_at
                 )
             VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             RETURNING
                 id,
                 requesting_user_id,
@@ -125,7 +125,7 @@ impl ShiftSwapRepository {
             FROM
                 shift_swaps
             WHERE
-                company_id = ?
+                company_id = $1
             ORDER BY
                 created_at DESC
             "#,
@@ -181,7 +181,7 @@ impl ShiftSwapRepository {
             FROM
                 shift_swaps
             WHERE
-                id = ?
+                id = $1
             "#,
         )
         .bind(id)
@@ -214,12 +214,12 @@ impl ShiftSwapRepository {
                 UPDATE
                     shift_swaps
                 SET
-                    target_user_id = ?,
-                    status = ?,
-                    notes = ?,
-                    updated_at = ?
+                    target_user_id = $1,
+                    status = $2,
+                    notes = $3,
+                    updated_at = $4
                 WHERE
-                    id = ?
+                    id = $5
                 "#,
             )
             .bind(responding_user_id)
@@ -235,9 +235,9 @@ impl ShiftSwapRepository {
                 UPDATE
                     shift_swaps
                 SET
-                    updated_at = ?
+                    updated_at = $1
                 WHERE
-                    id = ?
+                    id = $2
                 "#,
             )
             .bind(now)
@@ -268,12 +268,12 @@ impl ShiftSwapRepository {
             UPDATE
                 shift_swaps
             SET
-                status = ?,
-                approved_by = ?,
-                approval_notes = ?,
-                updated_at = ?
+                status = $1,
+                approved_by = $2,
+                approval_notes = $3,
+                updated_at = $4
             WHERE
-                id = ?
+                id = $5
             RETURNING
                 id,
                 requesting_user_id,
@@ -310,12 +310,12 @@ impl ShiftSwapRepository {
             UPDATE
                 shift_swaps
             SET
-                status = ?,
-                approved_by = ?,
-                approval_notes = ?,
-                updated_at = ?
+                status = $1,
+                approved_by = $2,
+                approval_notes = $3,
+                updated_at = $4
             WHERE
-                id = ?
+                id = $5
             RETURNING
                 id,
                 requesting_user_id,
@@ -352,10 +352,10 @@ impl ShiftSwapRepository {
             UPDATE
                 shift_swaps
             SET
-                status = ?,
-                updated_at = ?
+                status = $1,
+                updated_at = $2
             WHERE
-                id = ?
+                id = $3
             RETURNING
                 id,
                 requesting_user_id,
@@ -390,10 +390,10 @@ impl ShiftSwapRepository {
             UPDATE
                 shift_swaps
             SET
-                status = ?,
-                updated_at = ?
+                status = $1,
+                updated_at = $2
             WHERE
-                id = ?
+                id = $3
             RETURNING
                 id,
                 requesting_user_id,
@@ -476,10 +476,19 @@ impl ShiftSwapRepository {
 
         query.push_str(" ORDER BY ss.created_at DESC");
 
+        // Replace placeholders with actual SQL parameters
+        // Note: SQLx uses $1, $2, ... for parameters, so we need to replace ? with $n
+        // we should use regex?
+        for (i, _param) in params.iter().enumerate() {
+            query = query.replacen("?", &format!("${}", i + 1), 1);
+        }
+
         let mut prepared = sqlx::query_as::<_, ShiftSwapResponseRow>(&query);
-        for (_, param) in params.into_iter().enumerate() {
+
+        for param in params.into_iter() {
             prepared = prepared.bind(param);
         }
+
         let rows = prepared.fetch_all(&self.pool).await?;
 
         let shift_swap_response = rows
@@ -537,7 +546,7 @@ impl ShiftSwapRepository {
                 JOIN shifts s ON ss.original_shift_id = s.id
                 JOIN teams t ON s.team_id = t.id
             WHERE
-                ss.id = ?
+                ss.id = $1
             "#,
         )
         .bind(id)

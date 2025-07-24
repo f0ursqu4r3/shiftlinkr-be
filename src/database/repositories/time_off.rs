@@ -34,8 +34,8 @@ impl TimeOffRepository {
                     updated_at
                 )
             VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?)
-            RETURNING 
+                ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING
                 id,
                 user_id,
                 start_date,
@@ -117,6 +117,10 @@ impl TimeOffRepository {
 
         query.push_str(" ORDER BY created_at DESC");
 
+        for (i, _param) in params.iter().enumerate() {
+            query = query.replacen("?", &format!("${}", i + 1), 1);
+        }
+
         let mut prepared = sqlx::query_as::<_, TimeOffRequest>(&query);
 
         for param in params {
@@ -147,7 +151,7 @@ impl TimeOffRepository {
             FROM
                 time_off_requests
             WHERE
-                id = ?
+                id = $1
             "#,
         )
         .bind(id)
@@ -169,16 +173,16 @@ impl TimeOffRepository {
         let time_off_request = sqlx::query_as::<_, TimeOffRequest>(
             r#"
             UPDATE
-                time_off_requests 
-            SET 
-                start_date = ?,
-                end_date = ?,
-                reason = ?,
-                request_type = ?,
-                updated_at = ?
+                time_off_requests
+            SET
+                start_date = $1,
+                end_date = $2,
+                reason = $3,
+                request_type = $4,
+                updated_at = $5
             WHERE
-                id = ?
-            RETURNING 
+                id = $6
+            RETURNING
                 id,
                 user_id,
                 start_date,
@@ -218,12 +222,14 @@ impl TimeOffRepository {
             r#"
             UPDATE time_off_requests
             SET
-                status = ?,
-                approved_by = ?,
-                approval_notes = ?,
-                updated_at = ?
+                status = $1,
+                approved_by = $2,
+                approval_notes = $3,
+                updated_at = $4
             WHERE
-                id = ? RETURNING id,
+                id = $5
+            RETURNING
+                id,
                 user_id,
                 start_date,
                 end_date,
@@ -259,14 +265,17 @@ impl TimeOffRepository {
 
         let time_off_request = sqlx::query_as::<_, TimeOffRequest>(
             r#"
-            UPDATE time_off_requests
+            UPDATE
+                time_off_requests
             SET
-                status = ?,
-                approved_by = ?,
-                approval_notes = ?,
-                updated_at = ?
+                status = $1,
+                approved_by = $2,
+                approval_notes = $3,
+                updated_at = $4
             WHERE
-                id = ? RETURNING id,
+                id = $5
+            RETURNING
+                id,
                 user_id,
                 start_date,
                 end_date,
@@ -299,10 +308,12 @@ impl TimeOffRepository {
             r#"
             UPDATE time_off_requests
             SET
-                status = ?,
-                updated_at = ?
+                status = $1,
+                updated_at = $2
             WHERE
-                id = ? RETURNING id,
+                id = $3
+            RETURNING
+                id,
                 user_id,
                 start_date,
                 end_date,
@@ -326,7 +337,7 @@ impl TimeOffRepository {
 
     /// Delete a time-off request
     pub async fn delete_request(&self, id: Uuid) -> Result<()> {
-        sqlx::query("DELETE FROM time_off_requests WHERE id = ?")
+        sqlx::query("DELETE FROM time_off_requests WHERE id = $1")
             .bind(id)
             .execute(&self.pool)
             .await?;

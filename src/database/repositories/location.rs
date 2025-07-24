@@ -29,7 +29,7 @@ impl LocationRepository {
                     updated_at
                 )
             VALUES
-                (?, ?, ?, ?, ?, ?, ?)
+                ($1, $2, $3, $4, $5, $6, $7)
             RETURNING
                 id,
                 name,
@@ -56,7 +56,7 @@ impl LocationRepository {
 
     pub async fn find_by_id(&self, id: Uuid) -> Result<Option<Location>> {
         let location = sqlx::query_as::<_, Location>(
-            "SELECT id, name, address, phone, email, company_id, created_at, updated_at FROM locations WHERE id = ?"
+            "SELECT id, name, address, phone, email, company_id, created_at, updated_at FROM locations WHERE id = $1"
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -67,7 +67,7 @@ impl LocationRepository {
 
     pub async fn find_by_team_id(&self, team_id: Uuid) -> Result<Option<Location>> {
         let location = sqlx::query_as::<_, Location>(
-            "SELECT l.id, l.name, l.address, l.phone, l.email, l.company_id, l.created_at, l.updated_at FROM locations l INNER JOIN teams t ON l.id = t.location_id WHERE t.id = ?"
+            "SELECT l.id, l.name, l.address, l.phone, l.email, l.company_id, l.created_at, l.updated_at FROM locations l INNER JOIN teams t ON l.id = t.location_id WHERE t.id = $1"
         )
         .bind(team_id)
         .fetch_optional(&self.pool)
@@ -88,7 +88,7 @@ impl LocationRepository {
 
     pub async fn get_locations_by_company(&self, company_id: Uuid) -> Result<Vec<Location>> {
         let locations = sqlx::query_as::<_, Location>(
-            "SELECT id, name, address, phone, email, company_id, created_at, updated_at FROM locations WHERE company_id = ? ORDER BY name"
+            "SELECT id, name, address, phone, email, company_id, created_at, updated_at FROM locations WHERE company_id = $1 ORDER BY name"
         )
         .bind(company_id)
         .fetch_all(&self.pool)
@@ -108,14 +108,14 @@ impl LocationRepository {
             UPDATE
                 locations
             SET
-                name = ?,
-                address = ?,
-                phone = ?,
-                email = ?,
-                company_id = ?,
-                updated_at = ?
+                name = $1,
+                address = $2,
+                phone = $3,
+                email = $4,
+                company_id = $5,
+                updated_at = $6
             WHERE
-                id = ?
+                id = $7
             RETURNING
                 id,
                 name,
@@ -141,7 +141,7 @@ impl LocationRepository {
     }
 
     pub async fn delete_location(&self, id: Uuid) -> Result<bool> {
-        let result = sqlx::query("DELETE FROM locations WHERE id = ?")
+        let result = sqlx::query("DELETE FROM locations WHERE id = $1")
             .bind(id)
             .execute(&self.pool)
             .await?;
@@ -163,7 +163,7 @@ impl LocationRepository {
                     updated_at
                 )
             VALUES
-                (?, ?, ?, ?, ?)
+                ($1, $2, $3, $4, $5)
             RETURNING
                 id,
                 name,
@@ -186,7 +186,7 @@ impl LocationRepository {
 
     pub async fn get_team_by_id(&self, id: Uuid) -> Result<Option<Team>> {
         let team = sqlx::query_as::<_, Team>(
-            "SELECT id, name, description, location_id, created_at, updated_at FROM teams WHERE id = ?",
+            "SELECT id, name, description, location_id, created_at, updated_at FROM teams WHERE id = $1",
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -197,7 +197,7 @@ impl LocationRepository {
 
     pub async fn get_teams_by_location(&self, location_id: Uuid) -> Result<Vec<Team>> {
         let teams = sqlx::query_as::<_, Team>(
-            "SELECT id, name, description, location_id, created_at, updated_at FROM teams WHERE location_id = ? ORDER BY name",
+            "SELECT id, name, description, location_id, created_at, updated_at FROM teams WHERE location_id = $1 ORDER BY name",
         )
         .bind(location_id)
         .fetch_all(&self.pool)
@@ -208,7 +208,7 @@ impl LocationRepository {
 
     pub async fn get_all_teams_for_company(&self, company_id: Uuid) -> Result<Vec<Team>> {
         let teams = sqlx::query_as::<_, Team>(
-            "SELECT id, name, description, location_id, created_at, updated_at FROM teams WHERE company_id = ? ORDER BY name"
+            "SELECT id, name, description, location_id, created_at, updated_at FROM teams WHERE company_id = $1 ORDER BY name"
         )
         .bind(company_id)
         .fetch_all(&self.pool)
@@ -224,12 +224,12 @@ impl LocationRepository {
             UPDATE
                 teams 
             SET
-                name = ?,
-                description = ?,
-                location_id = ?,
-                updated_at = ?
+                name = $1,
+                description = $2,
+                location_id = $3,
+                updated_at = $4
             WHERE
-                id = ?
+                id = $5
             RETURNING
                 id,
                 name,
@@ -251,7 +251,7 @@ impl LocationRepository {
     }
 
     pub async fn delete_team(&self, id: Uuid) -> Result<bool> {
-        let result = sqlx::query("DELETE FROM teams WHERE id = ?")
+        let result = sqlx::query("DELETE FROM teams WHERE id = $1")
             .bind(id)
             .execute(&self.pool)
             .await?;
@@ -271,7 +271,7 @@ impl LocationRepository {
                     created_at
                 )
             VALUES
-                (?, ?, ?)
+                ($1, $2, $3)
             RETURNING
                 id,
                 team_id,
@@ -290,7 +290,7 @@ impl LocationRepository {
 
     pub async fn get_team_members(&self, team_id: Uuid) -> Result<Vec<TeamMember>> {
         let team_members = sqlx::query_as::<_, TeamMember>(
-            "SELECT id, team_id, user_id, created_at FROM team_members WHERE team_id = ?",
+            "SELECT id, team_id, user_id, created_at FROM team_members WHERE team_id = $1",
         )
         .bind(team_id)
         .fetch_all(&self.pool)
@@ -300,7 +300,7 @@ impl LocationRepository {
     }
 
     pub async fn remove_team_member(&self, team_id: Uuid, user_id: Uuid) -> Result<bool> {
-        let result = sqlx::query("DELETE FROM team_members WHERE team_id = ? AND user_id = ?")
+        let result = sqlx::query("DELETE FROM team_members WHERE team_id = $1 AND user_id = $2")
             .bind(team_id)
             .bind(user_id)
             .execute(&self.pool)
@@ -323,7 +323,7 @@ impl LocationRepository {
                 teams t
                 INNER JOIN team_members tm ON t.id = tm.team_id
             WHERE
-                tm.user_id = ?
+                tm.user_id = $1
             ORDER BY
                 t.name
             "#,

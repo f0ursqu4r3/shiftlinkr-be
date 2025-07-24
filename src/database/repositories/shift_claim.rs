@@ -29,7 +29,7 @@ impl ShiftClaimRepository {
                     updated_at
                 )
             VALUES
-                (?, ?, ?, ?, ?)
+                ($1, $2, $3, $4, $5)
             RETURNING
                 id,
                 shift_id,
@@ -68,7 +68,7 @@ impl ShiftClaimRepository {
             FROM
                 shift_claims
             WHERE
-                id = ?
+                id = $1
             "#,
         )
         .bind(id)
@@ -97,7 +97,7 @@ impl ShiftClaimRepository {
             FROM
                 shift_claims
             WHERE
-                shift_id = ?
+                shift_id = $1
             ORDER BY
                 created_at DESC
             "#,
@@ -125,7 +125,7 @@ impl ShiftClaimRepository {
             FROM
                 shift_claims
             WHERE
-                user_id = ?
+                user_id = $1
             ORDER BY
                 created_at DESC
             "#,
@@ -156,7 +156,7 @@ impl ShiftClaimRepository {
             FROM
                 shift_claims
             WHERE
-                company_id = ?
+                company_id = $1
             ORDER BY
                 created_at DESC
             "#,
@@ -188,7 +188,7 @@ impl ShiftClaimRepository {
                 shift_claims
             WHERE
                 status = 'pending'
-                AND company_id = ?
+                AND company_id = $1
             ORDER BY
                 created_at ASC
             "#,
@@ -215,11 +215,11 @@ impl ShiftClaimRepository {
                 shift_claims
             SET
                 status = 'approved',
-                approved_by = ?,
-                approval_notes = ?,
-                updated_at = ?
+                approved_by = $1,
+                approval_notes = $2,
+                updated_at = $3
             WHERE
-                id = ?
+                id = $4
                 AND status = 'pending'
             RETURNING
                 id,
@@ -257,11 +257,11 @@ impl ShiftClaimRepository {
                 shift_claims
             SET
                 status = 'rejected',
-                approved_by = ?,
-                approval_notes = ?,
-                updated_at = ?
+                approved_by = $1,
+                approval_notes = $2,
+                updated_at = $3
             WHERE
-                id = ?
+                id = $4
                 AND status = 'pending'
             RETURNING
                 id,
@@ -298,10 +298,10 @@ impl ShiftClaimRepository {
                 shift_claims
             SET
                 status = 'cancelled',
-                updated_at = ?
+                updated_at = $1
             WHERE
-                id = ?
-                AND user_id = ?
+                id = $2
+                AND user_id = $3
                 AND status = 'pending'
             RETURNING
                 id,
@@ -336,9 +336,9 @@ impl ShiftClaimRepository {
                 shift_claims
             SET
                 status = 'cancelled',
-                updated_at = ?
+                updated_at = $1
             WHERE
-                shift_id = ?
+                shift_id = $2
                 AND status = 'pending'
             "#,
         )
@@ -363,8 +363,8 @@ impl ShiftClaimRepository {
             FROM
                 shift_claims
             WHERE
-                shift_id = ?
-                AND user_id = ?
+                shift_id = $1
+                AND user_id = $2
                 AND status != 'cancelled'
             "#,
         )
@@ -389,8 +389,8 @@ impl ShiftClaimRepository {
             FROM
                 shift_claims
             WHERE
-                shift_id = ?
-                AND user_id = ?
+                shift_id = $1
+                AND user_id = $2
                 AND status = 'pending'
             "#,
         )
@@ -415,8 +415,8 @@ impl ShiftClaimRepository {
             FROM
                 shift_claims
             WHERE
-                shift_id = ?
-                AND user_id = ?
+                shift_id = $1
+                AND user_id = $2
                 AND (
                     status = 'pending'
                     OR status = 'approved'
@@ -450,7 +450,7 @@ impl ShiftClaimRepository {
             FROM
                 shift_claims
             WHERE
-                shift_id = ?
+                shift_id = $1
                 AND status = 'approved'
             "#,
         )
@@ -470,7 +470,7 @@ impl ShiftClaimRepository {
             FROM
                 shift_claims
             WHERE
-                shift_id = ?
+                shift_id = $1
                 AND status = 'approved'
             "#,
         )
@@ -495,8 +495,8 @@ impl ShiftClaimRepository {
                 shifts s
                 INNER JOIN team_members tm ON s.team_id = tm.team_id
             WHERE
-                s.id = ?
-                AND tm.user_id = ?
+                s.id = $1
+                AND tm.user_id = $2
             "#,
         )
         .bind(shift_id)

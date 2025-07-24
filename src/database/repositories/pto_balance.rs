@@ -38,8 +38,8 @@ impl PtoBalanceRepository {
             FROM
                 user_company 
             WHERE
-                user_id = ?
-                AND company_id = ?
+                user_id = $1
+                AND company_id = $2
             "#,
         )
         .bind(user_id)
@@ -67,7 +67,7 @@ impl PtoBalanceRepository {
 
         // Execute updates for each field that's provided
         if let Some(hours) = update.pto_balance_hours {
-            sqlx::query("UPDATE user_company SET pto_balance_hours = ?, updated_at = ? WHERE user_id = ? AND company_id = ?")
+            sqlx::query("UPDATE user_company SET pto_balance_hours = $1, updated_at = $2 WHERE user_id = $3 AND company_id = $4")
                 .bind(hours)
                 .bind(now)
                 .bind(user_id)
@@ -77,7 +77,7 @@ impl PtoBalanceRepository {
         }
 
         if let Some(hours) = update.sick_balance_hours {
-            sqlx::query("UPDATE user_company SET sick_balance_hours = ?, updated_at = ? WHERE user_id = ? AND company_id = ?")
+            sqlx::query("UPDATE user_company SET sick_balance_hours = $1, updated_at = $2 WHERE user_id = $3 AND company_id = $4")
                 .bind(hours)
                 .bind(now)
                 .bind(user_id)
@@ -87,7 +87,7 @@ impl PtoBalanceRepository {
         }
 
         if let Some(hours) = update.personal_balance_hours {
-            sqlx::query("UPDATE user_company SET personal_balance_hours = ?, updated_at = ? WHERE user_id = ? AND company_id = ?")
+            sqlx::query("UPDATE user_company SET personal_balance_hours = $1, updated_at = $2 WHERE user_id = $3 AND company_id = $4")
                 .bind(hours)
                 .bind(now)
                 .bind(user_id)
@@ -97,7 +97,7 @@ impl PtoBalanceRepository {
         }
 
         if let Some(rate) = update.pto_accrual_rate {
-            sqlx::query("UPDATE user_company SET pto_accrual_rate = ?, updated_at = ? WHERE user_id = ? AND company_id = ?")
+            sqlx::query("UPDATE user_company SET pto_accrual_rate = $1, updated_at = $2 WHERE user_id = $3 AND company_id = $4")
                 .bind(rate)
                 .bind(now)
                 .bind(user_id)
@@ -107,7 +107,7 @@ impl PtoBalanceRepository {
         }
 
         if let Some(hire_date) = update.hire_date {
-            sqlx::query("UPDATE user_company SET hire_date = ?, updated_at = ? WHERE user_id = ? AND company_id = ?")
+            sqlx::query("UPDATE user_company SET hire_date = $1, updated_at = $2 WHERE user_id = $3 AND company_id = $4")
                 .bind(hire_date)
                 .bind(now)
                 .bind(user_id)
@@ -164,7 +164,7 @@ impl PtoBalanceRepository {
 
         // Update balance in user_company table
         let query = format!(
-            "UPDATE user_company SET {} = ?, updated_at = ? WHERE user_id = ? AND company_id = ?",
+            "UPDATE user_company SET {} = $1, updated_at = $2 WHERE user_id = $3 AND company_id = $4",
             field_name
         );
         sqlx::query(&query)
@@ -193,7 +193,7 @@ impl PtoBalanceRepository {
                     created_at
                 )
             VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?)
+                ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING 
                 id,
                 user_id,
@@ -245,7 +245,7 @@ impl PtoBalanceRepository {
             FROM
                 pto_balance_history
             WHERE
-                user_id = ?
+                user_id = $1
             ORDER BY
                 created_at DESC
             LIMIT
@@ -307,7 +307,7 @@ impl PtoBalanceRepository {
         let new_balance = current_balance.pto_balance_hours + hours_to_accrue;
 
         sqlx::query(
-            "UPDATE user_company SET pto_balance_hours = ?, last_accrual_date = ?, updated_at = ? WHERE user_id = ? AND company_id = ?"
+            "UPDATE user_company SET pto_balance_hours = $1, last_accrual_date = $2, updated_at = $3 WHERE user_id = $4 AND company_id = $5"
         )
         .bind(new_balance)
         .bind(today)
@@ -336,8 +336,8 @@ impl PtoBalanceRepository {
                     created_at
                 )
             VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?)
-            RETURNING 
+                ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING
                 id,
                 user_id,
                 balance_type,
@@ -408,7 +408,7 @@ impl PtoBalanceRepository {
 
         // Update balance in user_company table
         let query = format!(
-            "UPDATE user_company SET {} = ?, updated_at = ? WHERE user_id = ? AND company_id = ?",
+            "UPDATE user_company SET {} = $1, updated_at = $2 WHERE user_id = $3 AND company_id = $4",
             field_name
         );
         sqlx::query(&query)

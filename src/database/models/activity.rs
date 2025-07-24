@@ -23,11 +23,11 @@ pub struct CompanyActivity {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateActivityInput {
-    pub company_id: String,
-    pub user_id: Option<String>,
+    pub company_id: Uuid,
+    pub user_id: Option<Uuid>,
     pub activity_type: String,
     pub entity_type: String,
-    pub entity_id: String,
+    pub entity_id: Uuid,
     pub action: String,
     pub description: String,
     pub metadata: Option<HashMap<String, serde_json::Value>>,

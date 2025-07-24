@@ -1,6 +1,5 @@
 use crate::database::models::{CompanyActivity, CreateActivityInput};
 use sqlx::{PgPool, Result};
-use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct ActivityRepository {
@@ -32,8 +31,8 @@ impl ActivityRepository {
                     metadata,
                     ip_address,
                     user_agent
-            )
-            VALUES (? ? ? ? ? ? ? ? ? ?)
+                )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             RETURNING
                 id,
                 company_id,
@@ -48,15 +47,11 @@ impl ActivityRepository {
                 user_agent
             "#,
         )
-        .bind(Uuid::parse_str(&request.company_id.to_string()).unwrap())
-        .bind(
-            request
-                .user_id
-                .map(|id| Uuid::parse_str(&id.to_string()).unwrap()),
-        )
+        .bind(request.company_id)
+        .bind(request.user_id)
         .bind(request.activity_type)
         .bind(request.entity_type)
-        .bind(Uuid::parse_str(&request.entity_id.to_string()).unwrap())
+        .bind(request.entity_id)
         .bind(request.action)
         .bind(request.description)
         .bind(metadata_json)

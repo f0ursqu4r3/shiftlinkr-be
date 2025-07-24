@@ -48,11 +48,11 @@ impl ActivityLogger {
         let (ip_address, user_agent) = self.extract_client_info(req);
 
         let request = CreateActivityInput {
-            company_id: company_id.to_string(),
-            user_id: user_id.map(|id| id.to_string()),
+            company_id,
+            user_id,
             activity_type: ActivityType::USER_MANAGEMENT.to_string(),
             entity_type: EntityType::USER.to_string(),
-            entity_id: target_user_id.to_string(),
+            entity_id: target_user_id,
             action: action.to_string(),
             description,
             metadata,
@@ -77,11 +77,11 @@ impl ActivityLogger {
         let (ip_address, user_agent) = self.extract_client_info(req);
 
         let request = CreateActivityInput {
-            company_id: company_id.to_string(),
-            user_id: user_id.map(|id| id.to_string()),
+            company_id,
+            user_id,
             activity_type: ActivityType::AUTHENTICATION.to_string(),
             entity_type: EntityType::USER.to_string(),
-            entity_id: user_id.unwrap_or(Uuid::nil()).to_string(), // Use nil UUID for failed logins where user_id is unknown
+            entity_id: user_id.unwrap_or(Uuid::nil()), // Use nil UUID for failed logins where user_id is unknown
             action: action.to_string(),
             description,
             metadata,
@@ -109,11 +109,11 @@ impl ActivityLogger {
         let (ip_address, user_agent) = self.extract_client_info(req);
 
         let request = CreateActivityInput {
-            company_id: company_id.to_string(),
-            user_id: user_id.map(|id| id.to_string()),
+            company_id,
+            user_id,
             activity_type,
             entity_type,
-            entity_id: entity_id.to_string(),
+            entity_id,
             action,
             description,
             metadata,
@@ -139,11 +139,11 @@ impl ActivityLogger {
         let (ip_address, user_agent) = self.extract_client_info(req);
 
         let request = CreateActivityInput {
-            company_id: company_id.to_string(),
-            user_id: user_id.map(|id| id.to_string()),
+            company_id,
+            user_id,
             activity_type: ActivityType::LOCATION_MANAGEMENT.to_string(),
             entity_type: EntityType::LOCATION.to_string(),
-            entity_id: location_id.to_string(),
+            entity_id: location_id,
             action: action.to_string(),
             description,
             metadata,
@@ -169,11 +169,11 @@ impl ActivityLogger {
         let (ip_address, user_agent) = self.extract_client_info(req);
 
         let request = CreateActivityInput {
-            company_id: company_id.to_string(),
-            user_id: user_id.map(|id| id.to_string()),
+            company_id,
+            user_id,
             activity_type: ActivityType::TEAM_MANAGEMENT.to_string(),
             entity_type: EntityType::TEAM.to_string(),
-            entity_id: team_id.to_string(),
+            entity_id: team_id,
             action: action.to_string(),
             description,
             metadata,
@@ -199,11 +199,11 @@ impl ActivityLogger {
         let (ip_address, user_agent) = self.extract_client_info(req);
 
         let request = CreateActivityInput {
-            company_id: company_id.to_string(),
-            user_id: user_id.map(|id| id.to_string()),
+            company_id,
+            user_id,
             activity_type: ActivityType::SHIFT_MANAGEMENT.to_string(),
             entity_type: EntityType::SHIFT.to_string(),
-            entity_id: shift_id.to_string(),
+            entity_id: shift_id,
             action: action.to_string(),
             description,
             metadata,
@@ -229,11 +229,11 @@ impl ActivityLogger {
         let (ip_address, user_agent) = self.extract_client_info(req);
 
         let request = CreateActivityInput {
-            company_id: company_id.to_string(),
-            user_id: user_id.map(|id| id.to_string()),
+            company_id,
+            user_id,
             activity_type: ActivityType::TIME_OFF_MANAGEMENT.to_string(),
             entity_type: EntityType::TIME_OFF.to_string(),
-            entity_id: time_off_id.to_string(),
+            entity_id: time_off_id,
             action: action.to_string(),
             description,
             metadata,
@@ -259,11 +259,11 @@ impl ActivityLogger {
         let (ip_address, user_agent) = self.extract_client_info(req);
 
         let request = CreateActivityInput {
-            company_id: company_id.to_string(),
-            user_id: user_id.map(|id| id.to_string()),
+            company_id,
+            user_id,
             activity_type: ActivityType::SHIFT_MANAGEMENT.to_string(),
             entity_type: EntityType::SHIFT_SWAP.to_string(),
-            entity_id: swap_id.to_string(),
+            entity_id: swap_id,
             action: action.to_string(),
             description,
             metadata,

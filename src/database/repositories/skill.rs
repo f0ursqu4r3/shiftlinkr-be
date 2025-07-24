@@ -30,7 +30,7 @@ impl SkillRepository {
                     updated_at,
                 )
             VALUES
-                (?, ?, ?, ?, ?)
+                ($1, $2, $3, $4, $5)
             RETURNING
                 id,
                 company_id
@@ -63,7 +63,7 @@ impl SkillRepository {
             FROM
                 skills
             WHERE
-                id = ?
+                id = $1
             "#,
         )
         .bind(id)
@@ -86,7 +86,7 @@ impl SkillRepository {
             FROM
                 skills
             WHERE
-                company_id = ?
+                company_id = $1
             ORDER BY
                 name
             "#,
@@ -105,11 +105,11 @@ impl SkillRepository {
             UPDATE
                 skills
             SET
-                name = ?,
-                description = ?,
-                updated_at = ?
+                name = $1,
+                description = $2,
+                updated_at = $3
             WHERE
-                id = ?
+                id = $4
             RETURNING
                 id,
                 company_id,
@@ -130,7 +130,7 @@ impl SkillRepository {
     }
 
     pub async fn delete_skill(&self, id: Uuid) -> Result<bool> {
-        let result = sqlx::query("DELETE FROM skills WHERE id = ?")
+        let result = sqlx::query("DELETE FROM skills WHERE id = $1")
             .bind(id)
             .execute(&self.pool)
             .await?;
@@ -152,7 +152,7 @@ impl SkillRepository {
                     updated_at
                 )
             VALUES
-                (?, ?, ?, ?, ?)
+                ($1, $2, $3, $4, $5)
             RETURNING
                 id,
                 user_id,
@@ -186,7 +186,7 @@ impl SkillRepository {
             FROM
                 user_skills
             WHERE
-                user_id = ?
+                user_id = $1
             "#,
         )
         .bind(user_id)
@@ -207,10 +207,10 @@ impl SkillRepository {
             UPDATE
                 user_skills
             SET
-                proficiency_level = ?,
-                updated_at = ?
+                proficiency_level = $1,
+                updated_at = $2
             WHERE
-                id = ?
+                id = $3
             RETURNING
                 id,
                 user_id,
@@ -235,8 +235,8 @@ impl SkillRepository {
             DELETE FROM
                 user_skills
             WHERE
-                user_id = ?
-                AND skill_id = ?
+                user_id = $1
+                AND skill_id = $2
             "#,
         )
         .bind(user_id)
@@ -263,7 +263,7 @@ impl SkillRepository {
                     created_at
                 )
             VALUES
-                (?, ?, ?, ?)
+                ($1, $2, $3, $4)
             RETURNING
                 id,
                 shift_id,
@@ -297,7 +297,7 @@ impl SkillRepository {
             FROM
                 shift_required_skills
             WHERE
-                shift_id = ?
+                shift_id = $1
             "#,
         )
         .bind(shift_id)
@@ -313,8 +313,8 @@ impl SkillRepository {
             DELETE FROM
                 shift_required_skills
             WHERE
-                shift_id = ?
-                AND skill_id = ?
+                shift_id = $1
+                AND skill_id = $2
             "#,
         )
         .bind(shift_id)
@@ -330,7 +330,7 @@ impl SkillRepository {
         skill_id: Uuid,
         min_level: Option<ProficiencyLevel>,
     ) -> Result<Vec<String>> {
-        let base_query = "SELECT DISTINCT user_id FROM user_skills WHERE skill_id = ?";
+        let base_query = "SELECT DISTINCT user_id FROM user_skills WHERE skill_id = $1";
         let where_clause = if let Some(level) = min_level {
             match level {
                 ProficiencyLevel::Expert => " AND proficiency_level = 'expert'",

@@ -34,7 +34,7 @@ impl ShiftRepository {
                     updated_at
                 )
             VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             RETURNING
                 id,
                 title,
@@ -89,7 +89,7 @@ impl ShiftRepository {
             FROM
                 shifts
             WHERE
-                id = ?
+                id = $1
             "#,
         )
         .bind(id)
@@ -120,7 +120,7 @@ impl ShiftRepository {
                 shifts s
                 JOIN locations l ON s.location_id = l.id
             WHERE
-                l.company_id = ?
+                l.company_id = $1
             ORDER BY
                 s.start_time
             "#,
@@ -152,7 +152,7 @@ impl ShiftRepository {
             FROM
                 shifts
             WHERE
-                location_id = ?
+                location_id = $1
             ORDER BY
                 start_time
             "#,
@@ -184,7 +184,7 @@ impl ShiftRepository {
             FROM
                 shifts
             WHERE
-                team_id = ?
+                team_id = $1
             ORDER BY
                 start_time
             "#,
@@ -222,9 +222,9 @@ impl ShiftRepository {
                 FROM
                     shifts
                 WHERE
-                    start_time >= ?
-                    AND end_time <= ?
-                    AND location_id = ?
+                    start_time >= $1
+                    AND end_time <= $2
+                    AND location_id = $3
                 ORDER BY
                     start_time
                 "#,
@@ -254,8 +254,8 @@ impl ShiftRepository {
                 FROM
                     shifts
                 WHERE
-                    start_time >= ?
-                    AND end_time <= ?
+                    start_time >= $1
+                    AND end_time <= $2
                 ORDER BY
                     start_time
                 "#,
@@ -289,8 +289,8 @@ impl ShiftRepository {
             FROM
                 shifts
             WHERE
-                location_id = ?
-                AND status = ?
+                location_id = $1
+                AND status = $2
             ORDER BY
                 start_time
             "#,
@@ -323,7 +323,7 @@ impl ShiftRepository {
             FROM
                 shifts
             WHERE
-                status = ?
+                status = $1
             ORDER BY
                 start_time
             "#,
@@ -342,19 +342,19 @@ impl ShiftRepository {
             UPDATE
                 shifts
             SET
-                title = ?,
-                description = ?,
-                location_id = ?,
-                team_id = ?,
-                start_time = ?,
-                end_time = ?,
-                min_duration_minutes = ?,
-                max_duration_minutes = ?,
-                max_people = ?,
-                status = ?,
-                updated_at = ?
+                title = $1,
+                description = $2,
+                location_id = $3,
+                team_id = $4,
+                start_time = $5,
+                end_time = $6,
+                min_duration_minutes = $7,
+                max_duration_minutes = $8,
+                max_people = $9,
+                status = $10,
+                updated_at = $11
             WHERE
-                id = ?
+                id = $12
             RETURNING
                 id,
                 title,
@@ -400,10 +400,10 @@ impl ShiftRepository {
             UPDATE
                 shifts
             SET
-                status = ?,
-                updated_at = ?
+                status = $1,
+                updated_at = $2
             WHERE
-                id = ?
+                id = $3
             RETURNING
                 id,
                 title,
@@ -460,7 +460,7 @@ impl ShiftRepository {
                 shifts s
                 INNER JOIN shift_proposal_assignments spa ON s.id = spa.shift_id
             WHERE
-                spa.user_id = ?
+                spa.user_id = $1
                 AND spa.assignment_status = 'accepted'
             ORDER BY
                 s.start_time

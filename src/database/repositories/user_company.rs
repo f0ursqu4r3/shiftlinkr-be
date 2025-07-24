@@ -27,7 +27,7 @@ impl UserCompanyRepository {
                     hire_date
                 )
             VALUES
-                (?, ?, ?, ?, ?, ?, ?)
+                ($1, $2, $3, $4, $5, $6, $7)
             RETURNING
                 id,
                 user_id,
@@ -77,8 +77,8 @@ impl UserCompanyRepository {
             FROM
                 user_company
             WHERE
-                user_id = ?
-                AND company_id = ?
+                user_id = $1
+                AND company_id = $2
             "#,
         )
         .bind(user_id)
@@ -107,7 +107,7 @@ impl UserCompanyRepository {
             FROM
                 user_company
             WHERE
-                user_id = ?
+                user_id = $1
             ORDER BY
                 company_id
             "#,
@@ -130,32 +130,32 @@ impl UserCompanyRepository {
         let mut params: Vec<String> = vec![];
 
         if request.pto_balance_hours.is_some() {
-            query.push_str(&format!(", pto_balance_hours = ?{}", params.len() + 1));
+            query.push_str(&format!(", pto_balance_hours = ${}", params.len() + 1));
             params.push("pto_balance_hours".to_string());
         }
         if request.sick_balance_hours.is_some() {
-            query.push_str(&format!(", sick_balance_hours = ?{}", params.len() + 1));
+            query.push_str(&format!(", sick_balance_hours = ${}", params.len() + 1));
             params.push("sick_balance_hours".to_string());
         }
         if request.personal_balance_hours.is_some() {
-            query.push_str(&format!(", personal_balance_hours = ?{}", params.len() + 1));
+            query.push_str(&format!(", personal_balance_hours = ${}", params.len() + 1));
             params.push("personal_balance_hours".to_string());
         }
         if request.pto_accrual_rate.is_some() {
-            query.push_str(&format!(", pto_accrual_rate = ?{}", params.len() + 1));
+            query.push_str(&format!(", pto_accrual_rate = ${}", params.len() + 1));
             params.push("pto_accrual_rate".to_string());
         }
         if request.hire_date.is_some() {
-            query.push_str(&format!(", hire_date = ?{}", params.len() + 1));
+            query.push_str(&format!(", hire_date = ${}", params.len() + 1));
             params.push("hire_date".to_string());
         }
         if request.last_accrual_date.is_some() {
-            query.push_str(&format!(", last_accrual_date = ?{}", params.len() + 1));
+            query.push_str(&format!(", last_accrual_date = ${}", params.len() + 1));
             params.push("last_accrual_date".to_string());
         }
 
         query.push_str(&format!(
-            " WHERE user_id = ?{} AND company_id = ?{}",
+            " WHERE user_id = ${} AND company_id = ${}",
             params.len() + 1,
             params.len() + 2
         ));
