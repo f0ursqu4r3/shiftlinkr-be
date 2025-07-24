@@ -1,4 +1,4 @@
-use be::database::models::CreateUserRequest;
+use be::database::models::CreateUserInput;
 use chrono::Utc;
 
 mod common;
@@ -9,7 +9,7 @@ async fn test_forgot_password_valid_email() {
     let ctx = common::TestContext::new().await.unwrap();
 
     // First create a user
-    let register_request = CreateUserRequest {
+    let register_request = CreateUserInput {
         email: "forgot@example.com".to_string(),
         password: "password123".to_string(),
         name: "Forgot User".to_string(),
@@ -47,7 +47,7 @@ async fn test_reset_password_valid_token() {
     let ctx = common::TestContext::new().await.unwrap();
 
     // Create a user
-    let register_request = CreateUserRequest {
+    let register_request = CreateUserInput {
         email: "reset@example.com".to_string(),
         password: "oldpassword123".to_string(),
         name: "Reset User".to_string(),
@@ -73,7 +73,7 @@ async fn test_reset_password_valid_token() {
     // Verify old password doesn't work
     let old_login = ctx
         .auth_service
-        .login(be::database::models::LoginRequest {
+        .login(be::database::models::LoginInput {
             email: "reset@example.com".to_string(),
             password: "oldpassword123".to_string(),
         })
@@ -83,7 +83,7 @@ async fn test_reset_password_valid_token() {
     // Verify new password works
     let new_login = ctx
         .auth_service
-        .login(be::database::models::LoginRequest {
+        .login(be::database::models::LoginInput {
             email: "reset@example.com".to_string(),
             password: "newpassword123".to_string(),
         })
@@ -114,7 +114,7 @@ async fn test_reset_password_used_token() {
     let ctx = common::TestContext::new().await.unwrap();
 
     // Create a user
-    let register_request = CreateUserRequest {
+    let register_request = CreateUserInput {
         email: "used@example.com".to_string(),
         password: "password123".to_string(),
         name: "Used Token User".to_string(),
@@ -155,7 +155,7 @@ async fn test_multiple_reset_tokens_invalidated() {
     let ctx = common::TestContext::new().await.unwrap();
 
     // Create a user
-    let register_request = CreateUserRequest {
+    let register_request = CreateUserInput {
         email: "multiple@example.com".to_string(),
         password: "password123".to_string(),
         name: "Multiple Tokens User".to_string(),

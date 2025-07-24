@@ -1,4 +1,4 @@
-use be::database::models::{CreateUserRequest, LoginRequest};
+use be::database::models::{CreateUserInput, LoginInput};
 use chrono::Utc;
 
 mod common;
@@ -8,7 +8,7 @@ async fn test_user_registration() {
     common::setup_test_env();
     let ctx = common::TestContext::new().await.unwrap();
 
-    let request = CreateUserRequest {
+    let request = CreateUserInput {
         email: "register@example.com".to_string(),
         password: "password123".to_string(),
         name: "Register User".to_string(),
@@ -28,7 +28,7 @@ async fn test_duplicate_email_registration() {
     common::setup_test_env();
     let ctx = common::TestContext::new().await.unwrap();
 
-    let request = CreateUserRequest {
+    let request = CreateUserInput {
         email: "duplicate@example.com".to_string(),
         password: "password123".to_string(),
         name: "First User".to_string(),
@@ -39,7 +39,7 @@ async fn test_duplicate_email_registration() {
     assert!(result1.is_ok());
 
     // Second registration with same email should fail
-    let request2 = CreateUserRequest {
+    let request2 = CreateUserInput {
         email: "duplicate@example.com".to_string(),
         password: "different_password".to_string(),
         name: "Second User".to_string(),
@@ -59,7 +59,7 @@ async fn test_user_login() {
     let ctx = common::TestContext::new().await.unwrap();
 
     // First register a user
-    let register_request = CreateUserRequest {
+    let register_request = CreateUserInput {
         email: "login@example.com".to_string(),
         password: "password123".to_string(),
         name: "Login User".to_string(),
@@ -68,7 +68,7 @@ async fn test_user_login() {
     ctx.auth_service.register(register_request).await.unwrap();
 
     // Now try to login
-    let login_request = LoginRequest {
+    let login_request = LoginInput {
         email: "login@example.com".to_string(),
         password: "password123".to_string(),
     };
@@ -88,7 +88,7 @@ async fn test_login_with_wrong_password() {
     let ctx = common::TestContext::new().await.unwrap();
 
     // Register a user
-    let register_request = CreateUserRequest {
+    let register_request = CreateUserInput {
         email: "wrongpass@example.com".to_string(),
         password: "correct_password".to_string(),
         name: "Wrong Pass User".to_string(),
@@ -97,7 +97,7 @@ async fn test_login_with_wrong_password() {
     ctx.auth_service.register(register_request).await.unwrap();
 
     // Try to login with wrong password
-    let login_request = LoginRequest {
+    let login_request = LoginInput {
         email: "wrongpass@example.com".to_string(),
         password: "wrong_password".to_string(),
     };
@@ -115,7 +115,7 @@ async fn test_login_with_nonexistent_email() {
     common::setup_test_env();
     let ctx = common::TestContext::new().await.unwrap();
 
-    let login_request = LoginRequest {
+    let login_request = LoginInput {
         email: "nonexistent@example.com".to_string(),
         password: "password123".to_string(),
     };
@@ -134,7 +134,7 @@ async fn test_jwt_token_verification() {
     let ctx = common::TestContext::new().await.unwrap();
 
     // Register and get token
-    let register_request = CreateUserRequest {
+    let register_request = CreateUserInput {
         email: "jwt@example.com".to_string(),
         password: "password123".to_string(),
         name: "JWT User".to_string(),
@@ -173,7 +173,7 @@ async fn test_get_user_from_token() {
     let ctx = common::TestContext::new().await.unwrap();
 
     // Register a user
-    let register_request = CreateUserRequest {
+    let register_request = CreateUserInput {
         email: "tokenuser@example.com".to_string(),
         password: "password123".to_string(),
         name: "Token User".to_string(),
@@ -207,7 +207,7 @@ async fn test_jwt_token_expiration_configuration() {
     let ctx = common::TestContext::new().await.unwrap();
 
     // Register a user
-    let register_request = CreateUserRequest {
+    let register_request = CreateUserInput {
         email: "expiry@example.com".to_string(),
         password: "password123".to_string(),
         name: "Expiry User".to_string(),

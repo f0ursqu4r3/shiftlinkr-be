@@ -34,11 +34,11 @@ pub struct TimeOffStats {
 
 // Request/Response DTOs for approvals
 #[derive(Debug, serde::Deserialize)]
-pub struct ApprovalRequest {
+pub struct ApprovalInput {
     pub notes: Option<String>,
 }
 
 #[derive(Debug, serde::Deserialize)]
-pub struct DenialRequest {
+pub struct DenialInput {
     pub notes: String, // Required for denials
 }

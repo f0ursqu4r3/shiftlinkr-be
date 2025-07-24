@@ -9,6 +9,7 @@ pub struct Config {
     pub host: String,
     pub port: u16,
     pub environment: String,
+    pub base_url: String,
 }
 
 impl Config {
@@ -32,6 +33,7 @@ impl Config {
                 .parse()
                 .unwrap_or(8080),
             environment: env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string()),
+            base_url: env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string()),
         })
     }
 
@@ -54,6 +56,7 @@ impl Config {
                 .parse()
                 .unwrap_or(8080),
             environment: env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string()),
+            base_url: env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string()),
         })
     }
 

@@ -10,7 +10,7 @@
         "Varchar",
         "Uuid",
         "Varchar",
-        "Int4",
+        "Uuid",
         "Timestamptz",
         "Timestamptz",
         "Timestamptz"

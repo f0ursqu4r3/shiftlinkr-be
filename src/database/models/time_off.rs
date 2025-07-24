@@ -1,28 +1,29 @@
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct TimeOffRequest {
-    pub id: i64,
-    pub user_id: String,
-    pub start_date: NaiveDateTime,
-    pub end_date: NaiveDateTime,
+    pub id: Uuid,                  // UUID primary key
+    pub user_id: Uuid,             // UUID for user references
+    pub start_date: DateTime<Utc>, // TIMESTAMPTZ
+    pub end_date: DateTime<Utc>,   // TIMESTAMPTZ
     pub reason: Option<String>,
     pub request_type: TimeOffType,
     pub status: TimeOffStatus,
-    pub approved_by: Option<String>,
+    pub approved_by: Option<Uuid>, // UUID for user references
     pub approval_notes: Option<String>,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
+    pub created_at: DateTime<Utc>, // TIMESTAMPTZ
+    pub updated_at: DateTime<Utc>, // TIMESTAMPTZ
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TimeOffRequestInput {
-    pub user_id: String,
-    pub start_date: NaiveDateTime,
-    pub end_date: NaiveDateTime,
+    pub user_id: Uuid,             // UUID for user references
+    pub start_date: DateTime<Utc>, // DATE type
+    pub end_date: DateTime<Utc>,   // DATE type
     pub reason: String,
     pub request_type: TimeOffType,
 }

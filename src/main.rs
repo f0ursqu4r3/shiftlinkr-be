@@ -15,7 +15,7 @@ use be::handlers::{
     admin, auth, company, pto_balance, schedules, shifts, skills, stats, swaps, time_off,
 };
 use be::middleware::RequestId;
-use be::services::ActivityLogger;
+use be::services::{ActivityLogger, UserContextService};
 use be::{AppState, AuthService, Config};
 
 #[get("/")]
@@ -68,9 +68,14 @@ async fn main() -> Result<()> {
     let schedule_repository = ScheduleRepository::new(pool.clone());
     let auth_service = AuthService::new(
         user_repository.clone(),
+        company_repository.clone(),
         password_reset_repository,
         config.clone(),
     );
+
+    // Create user context service
+    let user_context_service =
+        UserContextService::new(user_repository.clone(), company_repository.clone());
 
     // Create app state and repository data
     let activity_repository = ActivityRepository::new(pool.clone());
@@ -96,6 +101,7 @@ async fn main() -> Result<()> {
     let schedule_repo_data = web::Data::new(schedule_repository);
     let config_data = web::Data::new(config.clone());
     let activity_logger_data = web::Data::new(activity_logger);
+    let user_context_service_data = web::Data::new(user_context_service);
 
     let server_address = config.server_address();
     println!("🌐 Server starting on http://{}", server_address);
@@ -103,6 +109,7 @@ async fn main() -> Result<()> {
     // Start HTTP server
     HttpServer::new(move || {
         App::new()
+            .app_data(config.clone())
             .app_data(app_state.clone())
             .app_data(user_repo_data.clone())
             .app_data(location_repo_data.clone())
@@ -118,6 +125,7 @@ async fn main() -> Result<()> {
             .app_data(schedule_repo_data.clone())
             .app_data(config_data.clone())
             .app_data(activity_logger_data.clone())
+            .app_data(user_context_service_data.clone())
             .wrap(
                 Cors::default()
                     .allowed_origin("http://localhost:3000")
@@ -245,7 +253,7 @@ async fn main() -> Result<()> {
                                 web::get().to(pto_balance::get_pto_balance_history),
                             )
                             .route(
-                                "/{user_id}/accrual",
+                                "/{user_id}/accrual/{company_id}",
                                 web::post().to(pto_balance::process_pto_accrual),
                             ),
                     )

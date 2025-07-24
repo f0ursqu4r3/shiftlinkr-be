@@ -42,7 +42,7 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Int4"
+        "Uuid"
       ]
     },
     "nullable": [

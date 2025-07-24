@@ -25,25 +25,28 @@ pub struct SkillSearchQuery {
 pub async fn create_skill(
     claims: Claims,
     skill_repo: web::Data<SkillRepository>,
-    company_repo: web::Data<CompanyRepository>,
     input: web::Json<SkillInput>,
     _req: HttpRequest,
 ) -> Result<HttpResponse> {
-    // For skills management, we require admin access to the default company (company_id = 1)
-    // Since skills are global across the system
-    let default_company_id = 1;
-
-    if !company_repo
-        .check_user_company_manager_or_admin(&claims.sub, default_company_id)
-        .await
-        .unwrap_or(false)
-    {
+    if !claims.is_manager_or_admin() {
         return Ok(
             HttpResponse::Forbidden().json(ApiResponse::<()>::error("Admin access required"))
         );
     }
 
-    match skill_repo.create_skill(input.into_inner()).await {
+    let company_id = match claims.company_id {
+        Some(id) => id,
+        None => {
+            return Ok(
+                HttpResponse::BadRequest().json(ApiResponse::<()>::error("Company ID is required"))
+            );
+        }
+    };
+
+    match skill_repo
+        .create_skill(company_id, input.into_inner())
+        .await
+    {
         Ok(skill) => Ok(HttpResponse::Created().json(ApiResponse::success(skill))),
         Err(e) => {
             log::error!("Failed to create skill: {}", e);
@@ -54,11 +57,19 @@ pub async fn create_skill(
 }
 
 pub async fn get_all_skills(
-    _claims: Claims,
+    claims: Claims,
     skill_repo: web::Data<SkillRepository>,
     _req: HttpRequest,
 ) -> Result<HttpResponse> {
-    match skill_repo.get_all_skills().await {
+    let company_id = match claims.company_id {
+        Some(id) => id,
+        None => {
+            return Ok(
+                HttpResponse::BadRequest().json(ApiResponse::<()>::error("Company ID is required"))
+            );
+        }
+    };
+    match skill_repo.get_all_skills(company_id).await {
         Ok(skills) => Ok(HttpResponse::Ok().json(ApiResponse::success(skills))),
         Err(e) => {
             log::error!("Failed to get skills: {}", e);

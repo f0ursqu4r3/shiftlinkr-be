@@ -1,6 +1,6 @@
 use crate::database::models::activity::Action;
 use crate::database::models::{
-    AddEmployeeToCompanyRequest, CompanyInfo, CompanyRole, CreateCompanyRequest,
+    AddEmployeeToCompanyInput, CompanyInfo, CompanyRole, CreateCompanyInput,
 };
 use crate::database::repositories::company::CompanyRepository;
 use crate::services::activity_logger::ActivityLogger;
@@ -10,12 +10,14 @@ use actix_web::{
     HttpRequest, HttpResponse, Result,
 };
 use std::collections::HashMap;
+use uuid::Uuid;
 
 pub async fn get_user_companies(
     claims: Claims,
     company_repo: Data<CompanyRepository>,
 ) -> Result<HttpResponse> {
-    match company_repo.get_companies_for_user(&claims.sub).await {
+    let user_id = claims.sub;
+    match company_repo.get_companies_for_user(user_id).await {
         Ok(companies) => Ok(HttpResponse::Ok().json(companies)),
         Err(_) => Ok(HttpResponse::InternalServerError().finish()),
     }
@@ -25,7 +27,8 @@ pub async fn get_user_primary_company(
     claims: Claims,
     company_repo: Data<CompanyRepository>,
 ) -> Result<HttpResponse> {
-    match company_repo.get_primary_company_for_user(&claims.sub).await {
+    let user_id = claims.sub;
+    match company_repo.get_primary_company_for_user(user_id).await {
         Ok(company) => Ok(HttpResponse::Ok().json(company)),
         Err(_) => Ok(HttpResponse::InternalServerError().finish()),
     }
@@ -35,10 +38,16 @@ pub async fn create_company(
     claims: Claims,
     company_repo: Data<CompanyRepository>,
     activity_logger: Data<ActivityLogger>,
-    request: Json<CreateCompanyRequest>,
+    request: Json<CreateCompanyInput>,
     req: HttpRequest,
 ) -> Result<HttpResponse> {
+    let user_id = claims.sub;
+
     let company_name = request.name.clone();
+    let companies = company_repo
+        .get_companies_for_user(user_id)
+        .await
+        .unwrap_or_default();
 
     // Create the company
     let company = match company_repo.create_company(&request).await {
@@ -47,10 +56,10 @@ pub async fn create_company(
     };
 
     // Add the creator as an admin
-    let add_employee_request = AddEmployeeToCompanyRequest {
-        user_id: claims.sub.clone(),
-        role: CompanyRole::Admin,
-        is_primary: Some(true), // Make this their primary company if they don't have one
+    let add_employee_request = AddEmployeeToCompanyInput {
+        user_id,
+        role: Some(CompanyRole::Admin),
+        is_primary: Some(companies.is_empty()), // Make this their primary company if they don't have one
         hire_date: None,
     };
 
@@ -67,7 +76,7 @@ pub async fn create_company(
             );
             metadata.insert(
                 "creator_user_id".to_string(),
-                serde_json::Value::String(claims.sub.clone()),
+                serde_json::Value::String(claims.sub.to_string()),
             );
             metadata.insert(
                 "creator_role".to_string(),
@@ -77,12 +86,12 @@ pub async fn create_company(
             if let Err(e) = activity_logger
                 .log_activity(
                     company.id,
-                    Some(claims.sub.parse().unwrap_or(0)),
+                    Some(user_id),
                     "company_management".to_string(),
                     "company".to_string(),
                     company.id,
                     Action::CREATED.to_string(),
-                    format!("Company '{}' created by user {}", company_name, claims.sub),
+                    format!("Company '{}' created by user {}", company_name, user_id),
                     Some(metadata),
                     &req,
                 )
@@ -113,13 +122,15 @@ pub async fn create_company(
 pub async fn get_company_employees(
     claims: Claims,
     company_repo: Data<CompanyRepository>,
-    path: Path<i64>,
+    path: Path<Uuid>,
 ) -> Result<HttpResponse> {
+    let user_id = claims.sub;
+
     let company_id = path.into_inner();
 
     // Check if user has access to this company
     match company_repo
-        .check_user_company_access(&claims.sub, company_id)
+        .check_user_company_access(user_id, company_id)
         .await
     {
         Ok(Some(_)) => {
@@ -137,14 +148,16 @@ pub async fn get_company_employees(
 pub async fn add_employee_to_company(
     claims: Claims,
     company_repo: Data<CompanyRepository>,
-    path: Path<i64>,
-    request: Json<AddEmployeeToCompanyRequest>,
+    path: Path<Uuid>,
+    request: Json<AddEmployeeToCompanyInput>,
 ) -> Result<HttpResponse> {
+    let user_id = claims.sub;
+
     let company_id = path.into_inner();
 
     // Check if user is admin of this company
     match company_repo
-        .check_user_company_admin(&claims.sub, company_id)
+        .check_user_company_admin(user_id, company_id)
         .await
     {
         Ok(true) => {
@@ -164,18 +177,20 @@ pub async fn add_employee_to_company(
 pub async fn remove_employee_from_company(
     claims: Claims,
     company_repo: Data<CompanyRepository>,
-    path: Path<(i64, String)>,
+    path: Path<(Uuid, Uuid)>,
 ) -> Result<HttpResponse> {
+    let claims_user = claims.sub;
+
     let (company_id, user_id) = path.into_inner();
 
     // Check if user is admin of this company
     match company_repo
-        .check_user_company_admin(&claims.sub, company_id)
+        .check_user_company_admin(claims_user, company_id)
         .await
     {
         Ok(true) => {
             match company_repo
-                .remove_employee_from_company(company_id, &user_id)
+                .remove_employee_from_company(company_id, user_id)
                 .await
             {
                 Ok(true) => Ok(HttpResponse::NoContent().finish()),
@@ -191,19 +206,21 @@ pub async fn remove_employee_from_company(
 pub async fn update_employee_role(
     claims: Claims,
     company_repo: Data<CompanyRepository>,
-    path: Path<(i64, String)>,
+    path: Path<(Uuid, Uuid)>,
     role: Json<CompanyRole>,
 ) -> Result<HttpResponse> {
+    let claims_user = claims.sub;
+
     let (company_id, user_id) = path.into_inner();
 
     // Check if user is admin of this company
     match company_repo
-        .check_user_company_admin(&claims.sub, company_id)
+        .check_user_company_admin(claims_user, company_id)
         .await
     {
         Ok(true) => {
             match company_repo
-                .update_employee_role(company_id, &user_id, &role)
+                .update_employee_role(company_id, user_id, &role)
                 .await
             {
                 Ok(true) => Ok(HttpResponse::NoContent().finish()),

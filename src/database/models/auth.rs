@@ -1,11 +1,12 @@
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use super::user::UserInfo;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct LoginRequest {
+pub struct LoginInput {
     /// User's email address
     pub email: String,
     /// User's password
@@ -24,16 +25,16 @@ pub struct AuthResponse {
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct PasswordResetToken {
-    pub id: String,
-    pub user_id: String,
+    pub id: Uuid,      // UUID primary key
+    pub user_id: Uuid, // UUID foreign key
     pub token: String,
-    pub expires_at: NaiveDateTime,
-    pub used_at: Option<NaiveDateTime>,
-    pub created_at: NaiveDateTime,
+    pub expires_at: DateTime<Utc>,      // TIMESTAMPTZ
+    pub used_at: Option<DateTime<Utc>>, // TIMESTAMPTZ
+    pub created_at: DateTime<Utc>,      // TIMESTAMPTZ
 }
 
 #[derive(Debug, Deserialize)]
-pub struct ForgotPasswordRequest {
+pub struct ForgotPasswordInput {
     /// Email address to send password reset to
     pub email: String,
 }
@@ -45,7 +46,7 @@ pub struct ForgotPasswordResponse {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ResetPasswordRequest {
+pub struct ResetPasswordInput {
     /// Password reset token from email
     pub token: String,
     /// New password

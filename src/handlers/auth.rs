@@ -1,18 +1,30 @@
 use actix_web::{web, HttpRequest, HttpResponse, Result};
+use serde;
+use serde::Serialize;
 use serde_json::json;
 use std::collections::HashMap;
+use uuid::Uuid;
 
 use crate::config::Config;
 use crate::database::models::{
-    AcceptInviteRequest, Action, CreateInviteRequest, CreateUserRequest, ForgotPasswordRequest,
-    LoginRequest, ResetPasswordRequest,
+    AcceptInviteInput, Action, AddEmployeeToCompanyInput, CompanyInfo, CompanyRole,
+    CreateInviteInput, CreateUserInput, ForgotPasswordInput, GetInviteResponse, LoginInput,
+    ResetPasswordInput, UserInfo,
 };
 use crate::database::repositories::invite::InviteRepository;
-use crate::AppState;
+use crate::database::repositories::UserRepository;
+use crate::{AppState, CompanyRepository};
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MeResponse {
+    pub user: UserInfo,
+    pub companies: Vec<CompanyInfo>,
+}
 
 pub async fn register(
     data: web::Data<AppState>,
-    request: web::Json<CreateUserRequest>,
+    request: web::Json<CreateUserInput>,
     req: HttpRequest,
 ) -> Result<HttpResponse> {
     let register_request = request.into_inner();
@@ -32,14 +44,14 @@ pub async fn register(
             );
             metadata.insert(
                 "user_id".to_string(),
-                serde_json::Value::String(user.id.clone()),
+                serde_json::Value::String(user.id.to_string()),
             );
 
             if let Err(e) = data
                 .activity_logger
                 .log_auth_activity(
-                    1,    // Default company for registration
-                    None, // Don't pass user_id to avoid foreign key constraint
+                    Uuid::nil(), // Default company for registration
+                    None,        // Don't pass user_id to avoid foreign key constraint
                     "register",
                     format!("User {} registered successfully", user.email),
                     Some(metadata),
@@ -67,7 +79,7 @@ pub async fn register(
             if let Err(e) = data
                 .activity_logger
                 .log_auth_activity(
-                    1, // Default company for failed registration attempts
+                    Uuid::nil(), // Default company for failed registration attempts
                     None,
                     "register_failed",
                     format!("Failed registration attempt for email: {}", email),
@@ -88,7 +100,7 @@ pub async fn register(
 
 pub async fn login(
     data: web::Data<AppState>,
-    request: web::Json<LoginRequest>,
+    request: web::Json<LoginInput>,
     req: HttpRequest,
 ) -> Result<HttpResponse> {
     let login_request = request.into_inner();
@@ -102,7 +114,7 @@ pub async fn login(
             // Get user's primary company for logging
             if let Ok(Some(company)) = data
                 .company_repository
-                .get_primary_company_for_user(&user.id)
+                .get_primary_company_for_user(user.id)
                 .await
             {
                 let mut metadata = HashMap::new();
@@ -113,7 +125,7 @@ pub async fn login(
                     .activity_logger
                     .log_auth_activity(
                         company.id,
-                        Some(user.id.parse().unwrap_or(0)),
+                        Some(user.id),
                         Action::LOGIN,
                         format!("User {} logged in successfully", user.email),
                         Some(metadata),
@@ -144,8 +156,8 @@ pub async fn login(
             if let Err(e) = data
                 .activity_logger
                 .log_auth_activity(
-                    1,    // Default company for failed login attempts
-                    None, // No user_id for failed attempts
+                    Uuid::nil(), // Default company for failed login attempts
+                    None,        // No user_id for failed attempts
                     "login_failed",
                     format!("Failed login attempt for email: {}", email),
                     Some(metadata),
@@ -177,36 +189,25 @@ pub async fn me(data: web::Data<AppState>, req: HttpRequest) -> Result<HttpRespo
     // Verify token and get user
     match data.auth_service.get_user_from_token(&token).await {
         Ok(user) => {
+            // Get the user's information
+            let user_info = UserInfo::from(user.clone());
+
             // Get user's companies
             let companies = match data
                 .company_repository
-                .get_companies_for_user(&user.id)
+                .get_companies_for_user(user.id)
                 .await
             {
                 Ok(companies) => companies,
                 Err(_) => vec![], // If error getting companies, return empty list
             };
 
-            // Get primary company
-            let primary_company = match data
-                .company_repository
-                .get_primary_company_for_user(&user.id)
-                .await
-            {
-                Ok(company) => company,
-                Err(_) => None,
+            let response = MeResponse {
+                user: user_info,
+                companies,
             };
 
-            Ok(HttpResponse::Ok().json(json!({
-                "user": {
-                    "id": user.id,
-                    "email": user.email,
-                    "name": user.name,
-                    // TODO: Add role from company_employees table based on selected company
-                },
-                "companies": companies,
-                "primary_company": primary_company
-            })))
+            Ok(HttpResponse::Ok().json(json!(response)))
         }
         Err(err) => Ok(HttpResponse::Unauthorized().json(json!({
             "error": err.to_string()
@@ -228,7 +229,7 @@ fn extract_token_from_header(req: &HttpRequest) -> Option<String> {
 pub async fn forgot_password(
     data: web::Data<AppState>,
     config: web::Data<Config>,
-    request: web::Json<ForgotPasswordRequest>,
+    request: web::Json<ForgotPasswordInput>,
 ) -> Result<HttpResponse> {
     match data.auth_service.forgot_password(&request.email).await {
         Ok(token) => {
@@ -254,7 +255,7 @@ pub async fn forgot_password(
 
 pub async fn reset_password(
     data: web::Data<AppState>,
-    request: web::Json<ResetPasswordRequest>,
+    request: web::Json<ResetPasswordInput>,
 ) -> Result<HttpResponse> {
     match data
         .auth_service
@@ -272,8 +273,9 @@ pub async fn reset_password(
 
 pub async fn create_invite(
     data: web::Data<AppState>,
+    config: web::Data<Config>,
     invite_repo: web::Data<InviteRepository>,
-    request: web::Json<CreateInviteRequest>,
+    request: web::Json<CreateInviteInput>,
     req: HttpRequest,
 ) -> Result<HttpResponse> {
     // Extract token from Authorization header
@@ -296,26 +298,44 @@ pub async fn create_invite(
         }
     };
 
-    // TODO: Check if user has permission to create invites (admin or manager) based on company-specific role
-    // Since roles are now company-specific, we need to check the role in the context of a specific company
-    // For now, allowing all authenticated users to create invites
-    /*
-    match user.role {
-        crate::database::models::UserRole::Admin | crate::database::models::UserRole::Manager => {}
-        _ => {
-            return Ok(HttpResponse::Forbidden().json(json!({
-                "error": "You don't have permission to create invites"
-            })));
-        }
-    }
-    */
+    // Check if user has permission to create invites (admin or manager) based on company-specific role
+    // Get user's primary company and role
+    let has_permission = match data
+        .company_repository
+        .get_companies_for_user(user.id)
+        .await
+    {
+        Ok(companies) => match companies.into_iter().find(|c| c.id == request.company_id) {
+            Some(company) => {
+                matches!(company.role, CompanyRole::Admin | CompanyRole::Manager)
+            }
+            None => false,
+        },
+        Err(_) => false,
+    };
 
-    // Check if email already exists
+    if !has_permission {
+        return Ok(HttpResponse::Forbidden().json(json!({
+            "error": "You don't have permission to create invites. Only admins and managers can create invites."
+        })));
+    }
+
+    // Check if email already exists and is already part of the company
     match data.auth_service.get_user_by_email(&request.email).await {
-        Ok(_) => {
-            return Ok(HttpResponse::BadRequest().json(json!({
-                "error": "User with this email already exists"
-            })));
+        Ok(user) => {
+            let companies = data
+                .company_repository
+                .get_companies_for_user(user.id)
+                .await;
+            // If user is already part of the company, return error
+            if let Ok(companies) = companies {
+                // Check if user is already part of the company
+                if companies.iter().any(|c| c.id == request.company_id) {
+                    return Ok(HttpResponse::BadRequest().json(json!({
+                        "error": "User with this email already exists"
+                    })));
+                }
+            }
         }
         Err(_) => {} // User doesn't exist, which is what we want
     }
@@ -323,14 +343,15 @@ pub async fn create_invite(
     match invite_repo
         .create_invite_token(
             &request.email,
-            &user.id,
+            user.id,
             request.role.clone(),
+            request.company_id,
             request.team_id,
         )
         .await
     {
         Ok(invite_token) => {
-            let invite_link = format!("http://localhost:3000/auth/invite/{}", invite_token.token);
+            let invite_link = format!("{}/auth/invite/{}", config.base_url, invite_token.token);
             Ok(HttpResponse::Ok().json(json!({
                 "invite_link": invite_link,
                 "expires_at": invite_token.expires_at
@@ -344,6 +365,8 @@ pub async fn create_invite(
 
 pub async fn get_invite(
     invite_repo: web::Data<InviteRepository>,
+    user_repo: web::Data<UserRepository>,
+    company_repo: web::Data<CompanyRepository>,
     path: web::Path<String>,
 ) -> Result<HttpResponse> {
     let token = path.into_inner();
@@ -351,28 +374,40 @@ pub async fn get_invite(
     match invite_repo.get_invite_token(&token).await {
         Ok(Some(invite_token)) => {
             // Check if token is expired
-            if invite_token.expires_at < chrono::Utc::now().naive_utc() {
+            if invite_token.expires_at < chrono::Utc::now() {
                 return Ok(HttpResponse::BadRequest().json(json!({
                     "error": "Invite token has expired"
                 })));
             }
 
-            // Get inviter name
-            let inviter_name = "Unknown"; // TODO: Get from user repo
+            // Get inviter name from user repository
+            let inviter_name = match user_repo.find_by_id(invite_token.inviter_id).await {
+                Ok(Some(user)) => user.name,
+                _ => "Unknown".to_string(),
+            };
 
-            Ok(HttpResponse::Ok().json(json!({
-                "email": invite_token.email,
-                "role": invite_token.role,
-                "team_id": invite_token.team_id,
-                "inviter_name": inviter_name,
-                "expires_at": invite_token.expires_at
-            })))
+            let company_name = match company_repo.find_by_id(invite_token.company_id).await {
+                Ok(Some(company)) => company.name,
+                _ => "Unknown".to_string(),
+            };
+
+            let invite_response = GetInviteResponse {
+                email: invite_token.email,
+                role: invite_token.role,
+                team_id: invite_token.team_id,
+                company_id: invite_token.company_id,
+                company_name,
+                inviter_name,
+                expires_at: invite_token.expires_at,
+            };
+
+            Ok(HttpResponse::Ok().json(invite_response))
         }
         Ok(None) => Ok(HttpResponse::BadRequest().json(json!({
             "error": "Invalid or expired invite token"
         }))),
         Err(err) => Ok(HttpResponse::InternalServerError().json(json!({
-            "error": format!("Failed to get invite: {}", err)
+            "error": format!("Failed to get invite: {}", err),
         }))),
     }
 }
@@ -380,7 +415,9 @@ pub async fn get_invite(
 pub async fn accept_invite(
     data: web::Data<AppState>,
     invite_repo: web::Data<InviteRepository>,
-    request: web::Json<AcceptInviteRequest>,
+    company_repo: web::Data<CompanyRepository>,
+    user_repo: web::Data<UserRepository>,
+    request: web::Json<AcceptInviteInput>,
 ) -> Result<HttpResponse> {
     // Get invite token
     let invite_token = match invite_repo.get_invite_token(&request.token).await {
@@ -398,40 +435,121 @@ pub async fn accept_invite(
     };
 
     // Check if token is expired
-    if invite_token.expires_at < chrono::Utc::now().naive_utc() {
+    if invite_token.expires_at < chrono::Utc::now() {
         return Ok(HttpResponse::BadRequest().json(json!({
             "error": "Invite token has expired"
         })));
     }
 
     // Check if user already exists
-    match data
-        .auth_service
-        .get_user_by_email(&invite_token.email)
-        .await
-    {
-        Ok(_) => {
-            return Ok(HttpResponse::BadRequest().json(json!({
-                "error": "User with this email already exists"
+    match user_repo.find_by_email(&invite_token.email).await {
+        Ok(Some(user)) => {
+            let companies = company_repo.get_companies_for_user(user.id).await;
+            // If user is already part of the company, return error
+            if let Ok(ref companies_vec) = companies {
+                // Check if user is already part of the company
+                if companies_vec
+                    .iter()
+                    .any(|c| c.id == invite_token.company_id)
+                {
+                    return Ok(HttpResponse::BadRequest().json(json!({
+                        "error": "User with this email already exists"
+                    })));
+                }
+            }
+
+            // Determine if this should be the user's primary company
+            let is_primary = companies.as_ref().map_or(true, |c| c.is_empty());
+
+            // If user exists but is not part of the company, add them to the company
+            if let Err(err) = company_repo
+                .add_employee_to_company(
+                    invite_token.company_id,
+                    &AddEmployeeToCompanyInput {
+                        user_id: user.id,
+                        role: Some(invite_token.role),
+                        is_primary: Some(is_primary),
+                        hire_date: None, // No hire date provided in invite
+                    },
+                )
+                .await
+            {
+                return Ok(HttpResponse::InternalServerError().json(json!({
+                    "error": format!("Failed to add user to company: {}", err)
+                })));
+            }
+
+            // Mark invite as used
+            if let Err(err) = invite_repo.mark_invite_token_as_used(&request.token).await {
+                log::error!("Failed to mark invite token as used: {}", err);
+            }
+
+            // Return success response
+            return Ok(HttpResponse::Ok().json(json!({
+                "message": "Invite accepted successfully",
+                "user": user,
             })));
         }
+        Ok(None) => {}
         Err(_) => {} // User doesn't exist, which is what we want
     }
 
     // Create user account
-    let create_user_request = CreateUserRequest {
+    let create_user_request = CreateUserInput {
         email: invite_token.email.clone(),
         password: request.password.clone(),
         name: request.name.clone(),
-        // TODO: Role will be assigned when creating company_employees relationship
     };
 
     match data.auth_service.register(create_user_request).await {
         Ok(auth_response) => {
+            // Get the company from the inviter
+            let inviter_company = match data
+                .company_repository
+                .get_primary_company_for_user(invite_token.inviter_id)
+                .await
+            {
+                Ok(Some(company)) => company,
+                _ => {
+                    // If we can't get the inviter's company, still mark invite as used but log warning
+                    log::warn!(
+                        "Could not determine company for inviter {} when accepting invite",
+                        invite_token.inviter_id
+                    );
+                    if let Err(err) = invite_repo.mark_invite_token_as_used(&request.token).await {
+                        log::error!("Failed to mark invite token as used: {}", err);
+                    }
+                    return Ok(HttpResponse::Ok().json(auth_response));
+                }
+            };
+
+            // Create company_employees relationship with the role from the invite
+            if let Err(err) = data
+                .company_repository
+                .add_employee_to_company(
+                    inviter_company.id,
+                    &AddEmployeeToCompanyInput {
+                        user_id: auth_response.user.id,
+                        role: Some(invite_token.role),
+                        is_primary: Some(true), // Set as primary company
+                        hire_date: None,        // No hire date provided in invite
+                    },
+                )
+                .await
+            {
+                log::error!(
+                    "Failed to add user {} to company {}: {}",
+                    auth_response.user.id,
+                    inviter_company.id,
+                    err
+                );
+                // Continue anyway since user was created successfully
+            }
+
             // Mark invite as used
             if let Err(err) = invite_repo.mark_invite_token_as_used(&request.token).await {
                 // Log error but don't fail the request since user was created successfully
-                eprintln!("Failed to mark invite token as used: {}", err);
+                log::error!("Failed to mark invite token as used: {}", err);
             }
 
             Ok(HttpResponse::Ok().json(auth_response))
@@ -467,21 +585,28 @@ pub async fn get_my_invites(
         }
     };
 
-    // TODO: Check if user has permission to view invites (admin or manager) based on company-specific role
-    // Since roles are now company-specific, we need to check the role in the context of a specific company
-    // For now, allowing all authenticated users to view invites
-    /*
-    match user.role {
-        crate::database::models::UserRole::Admin | crate::database::models::UserRole::Manager => {}
-        _ => {
-            return Ok(HttpResponse::Forbidden().json(json!({
-                "error": "You don't have permission to view invites"
-            })));
+    // Check if user has permission to view invites (admin or manager) based on company-specific role
+    let has_permission = match data
+        .company_repository
+        .get_companies_for_user(user.id)
+        .await
+    {
+        Ok(companies) => {
+            // Check if user has admin or manager role in any company
+            companies
+                .iter()
+                .any(|company| matches!(company.role, CompanyRole::Admin | CompanyRole::Manager))
         }
-    }
-    */
+        _ => false,
+    };
 
-    match invite_repo.get_invites_by_inviter(&user.id).await {
+    if !has_permission {
+        return Ok(HttpResponse::Forbidden().json(json!({
+            "error": "You don't have permission to view invites. Only admins and managers can view invites."
+        })));
+    }
+
+    match invite_repo.get_invites_by_inviter(user.id).await {
         Ok(invites) => Ok(HttpResponse::Ok().json(json!({
             "invites": invites
         }))),

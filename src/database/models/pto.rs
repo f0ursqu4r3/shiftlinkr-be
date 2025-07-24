@@ -1,19 +1,21 @@
-use chrono::NaiveDateTime;
+use bigdecimal::BigDecimal;
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct PtoBalanceHistory {
-    pub id: i64,
-    pub user_id: String,
+    pub id: Uuid,
+    pub user_id: Uuid,
     pub balance_type: PtoBalanceType,
     pub change_type: PtoChangeType,
     pub hours_changed: i32,
     pub previous_balance: i32,
     pub new_balance: i32,
     pub description: Option<String>,
-    pub related_time_off_id: Option<i64>,
-    pub created_at: NaiveDateTime,
+    pub related_time_off_id: Option<Uuid>, // Reference to time_off_requests table
+    pub created_at: DateTime<Utc>,         // TIMESTAMPTZ
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -142,31 +144,34 @@ impl std::str::FromStr for PtoChangeType {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct PtoBalance {
-    pub user_id: String,
+    pub user_id: Uuid,
+    pub company_id: Uuid,
     pub pto_balance_hours: i32,
     pub sick_balance_hours: i32,
     pub personal_balance_hours: i32,
-    pub pto_accrual_rate: f32,
-    pub hire_date: Option<NaiveDateTime>,
-    pub last_accrual_date: Option<NaiveDateTime>,
+    pub pto_accrual_rate: BigDecimal, // DECIMAL type from PostgreSQL
+    pub hire_date: Option<NaiveDate>, // DATE type
+    pub last_accrual_date: Option<NaiveDate>, // DATE type
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PtoBalanceUpdate {
+pub struct PtoBalanceUpdateInput {
+    pub company_id: Uuid,
     pub pto_balance_hours: Option<i32>,
     pub sick_balance_hours: Option<i32>,
     pub personal_balance_hours: Option<i32>,
-    pub pto_accrual_rate: Option<f32>,
-    pub hire_date: Option<NaiveDateTime>,
+    pub pto_accrual_rate: Option<BigDecimal>, // DECIMAL type
+    pub hire_date: Option<NaiveDate>,         // DATE type
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PtoBalanceAdjustment {
+pub struct PtoBalanceAdjustmentInput {
+    pub company_id: Uuid, // UUID for company references
     pub balance_type: PtoBalanceType,
     pub hours_changed: i32,
     pub description: String,

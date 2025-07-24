@@ -8,35 +8,38 @@ use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use std::future::{ready, Ready};
+use uuid::Uuid;
 
 use crate::config::Config;
-use crate::database::models::{AuthResponse, CreateUserRequest, LoginRequest, User};
+use crate::database::models::{AuthResponse, CompanyRole, CreateUserInput, LoginInput, User};
 use crate::database::repositories::password_reset::PasswordResetTokenRepository;
 use crate::database::repositories::user::UserRepository;
+use crate::CompanyRepository;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
-    pub sub: String, // user id
+    pub sub: Uuid, // user id
     pub email: String,
-    pub role: String,
-    pub exp: usize, // expiration time
+    pub company_id: Option<Uuid>, // optional company ID for company-specific roles
+    pub role: Option<CompanyRole>, // user role (admin, manager, employee)
+    pub exp: usize,               // expiration time
 }
 
 impl Claims {
+    pub fn user_id(&self) -> Uuid {
+        self.sub
+    }
     pub fn is_admin(&self) -> bool {
-        self.role.to_lowercase() == "admin"
+        self.role == Some(CompanyRole::Admin)
     }
-
     pub fn is_manager(&self) -> bool {
-        self.role.to_lowercase() == "manager"
+        self.role == Some(CompanyRole::Manager)
     }
-
     pub fn is_employee(&self) -> bool {
-        self.role.to_lowercase() == "employee"
+        self.role == Some(CompanyRole::Employee)
     }
-
-    pub fn user_id(&self) -> &str {
-        &self.sub
+    pub fn is_manager_or_admin(&self) -> bool {
+        self.is_manager() || self.is_admin()
     }
 }
 
@@ -80,6 +83,7 @@ impl FromRequest for Claims {
 #[derive(Clone)]
 pub struct AuthService {
     user_repository: UserRepository,
+    company_repository: CompanyRepository,
     password_reset_repository: PasswordResetTokenRepository,
     config: Config,
 }
@@ -87,17 +91,19 @@ pub struct AuthService {
 impl AuthService {
     pub fn new(
         user_repository: UserRepository,
+        company_repository: CompanyRepository,
         password_reset_repository: PasswordResetTokenRepository,
         config: Config,
     ) -> Self {
         Self {
             user_repository,
+            company_repository,
             password_reset_repository,
             config,
         }
     }
 
-    pub async fn register(&self, request: CreateUserRequest) -> Result<AuthResponse> {
+    pub async fn register(&self, request: CreateUserInput) -> Result<AuthResponse> {
         // Check if email already exists
         if self.user_repository.email_exists(&request.email).await? {
             return Err(anyhow!("Email already exists"));
@@ -114,7 +120,7 @@ impl AuthService {
 
         // Generate JWT token - for now we'll need to handle this differently since role is company-specific
         // TODO: Update this to handle company-specific roles
-        let token = self.generate_token(&user)?;
+        let token = self.generate_token(&user, None, None)?;
 
         Ok(AuthResponse {
             token,
@@ -122,7 +128,7 @@ impl AuthService {
         })
     }
 
-    pub async fn login(&self, request: LoginRequest) -> Result<AuthResponse> {
+    pub async fn login(&self, request: LoginInput) -> Result<AuthResponse> {
         // Find user by email
         let user = self
             .user_repository
@@ -135,8 +141,28 @@ impl AuthService {
             return Err(anyhow!("Invalid email or password"));
         }
 
+        // Get user's companies
+        let companies = self
+            .company_repository
+            .get_companies_for_user(user.id)
+            .await?;
+
+        let primary_company = match companies.iter().find(|c| c.is_primary) {
+            Some(company) => Some(company),
+            None => match companies.first() {
+                Some(company) => Some(company),
+                None => None,
+            },
+        };
+        let company_id = primary_company.as_ref().map(|c| c.id);
+
+        let role = match primary_company {
+            Some(company) => Some(company.role.clone()),
+            None => None,
+        };
+
         // Generate JWT token
-        let token = self.generate_token(&user)?;
+        let token = self.generate_token(&user, company_id, role)?;
 
         Ok(AuthResponse {
             token,
@@ -156,25 +182,54 @@ impl AuthService {
 
     pub async fn get_user_from_token(&self, token: &str) -> Result<User> {
         let claims = self.verify_token(token)?;
+        let user_id = claims.sub;
         let user = self
             .user_repository
-            .find_by_id(&claims.sub)
+            .find_by_id(user_id)
             .await?
             .ok_or_else(|| anyhow!("User not found"))?;
 
         Ok(user)
     }
 
-    fn generate_token(&self, user: &User) -> Result<String> {
+    pub async fn generate_company_token(&self, user_id: Uuid, company_id: Uuid) -> Result<String> {
+        let user = self
+            .user_repository
+            .find_by_id(user_id)
+            .await?
+            .ok_or_else(|| anyhow!("User not found"))?;
+
+        let company = self
+            .company_repository
+            .find_by_id(company_id)
+            .await?
+            .ok_or_else(|| anyhow!("Company not found"))?;
+        // Get user's role in the company (you'll need to implement this in CompanyRepository)
+        // let role = self.company_repository.get_user_role_in_company(user_id, company_id).await?;
+        let role = Some(CompanyRole::Employee); // Placeholder
+        let retreived_company_id = Some(company.id);
+
+        let token = self.generate_token(&user, retreived_company_id, role)?;
+        Ok(token)
+    }
+
+    // Updated generate_token method
+    fn generate_token(
+        &self,
+        user: &User,
+        company_id: Option<Uuid>,
+        role: Option<CompanyRole>,
+    ) -> Result<String> {
         let expiration = Utc::now()
             .checked_add_signed(Duration::days(self.config.jwt_expiration_days))
             .expect("valid timestamp")
             .timestamp() as usize;
 
         let claims = Claims {
-            sub: user.id.clone(),
+            sub: user.id,
             email: user.email.clone(),
-            role: "employee".to_string(), // Default role since roles are now company-specific
+            company_id,
+            role,
             exp: expiration,
         };
 
@@ -197,10 +252,7 @@ impl AuthService {
             .ok_or_else(|| anyhow!("User not found"))?;
 
         // Generate reset token
-        let reset_token = self
-            .password_reset_repository
-            .create_token(&user.id)
-            .await?;
+        let reset_token = self.password_reset_repository.create_token(user.id).await?;
 
         // In a real application, you would send this token via email
         // For development, we'll return it directly
@@ -230,7 +282,7 @@ impl AuthService {
 
         // Update user's password
         self.user_repository
-            .update_password(&reset_token.user_id, &password_hash)
+            .update_password(reset_token.user_id, &password_hash)
             .await?;
 
         // Mark token as used
@@ -240,7 +292,7 @@ impl AuthService {
 
         // Invalidate all other reset tokens for this user
         self.password_reset_repository
-            .invalidate_user_tokens(&reset_token.user_id)
+            .invalidate_user_tokens(reset_token.user_id)
             .await?;
 
         Ok(())

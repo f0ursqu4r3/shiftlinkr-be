@@ -1,15 +1,16 @@
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct Team {
-    pub id: i64,
+    pub id: Uuid,
     pub name: String,
     pub description: Option<String>,
-    pub location_id: i64,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
+    pub location_id: Uuid,         // UUID type
+    pub created_at: DateTime<Utc>, // TIMESTAMPTZ
+    pub updated_at: DateTime<Utc>, // TIMESTAMPTZ
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -17,14 +18,14 @@ pub struct Team {
 pub struct TeamInput {
     pub name: String,
     pub description: Option<String>,
-    pub location_id: i64,
+    pub location_id: Uuid, // UUID type
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct TeamMember {
-    pub id: i64,
-    pub team_id: i64,
-    pub user_id: i64,
-    pub created_at: NaiveDateTime,
+    pub id: Uuid,                  // UUID type
+    pub team_id: Uuid,             // UUID type
+    pub user_id: Uuid,             // UUID for user references
+    pub created_at: DateTime<Utc>, // TIMESTAMPTZ
 }

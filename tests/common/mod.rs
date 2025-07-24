@@ -4,7 +4,7 @@ use actix_web::{http::StatusCode, test, web};
 use anyhow::Result;
 use be::config::Config;
 use be::database::init_database;
-use be::database::models::{AddEmployeeToCompanyRequest, CompanyRole};
+use be::database::models::{AddEmployeeToCompanyInput, CompanyRole};
 use be::database::repositories::company::CompanyRepository;
 use be::database::repositories::location::LocationRepository;
 use be::database::repositories::password_reset::PasswordResetTokenRepository;
@@ -98,7 +98,7 @@ pub async fn make_user_admin_of_default_company(
     company_repo: &CompanyRepository,
     user_id: &str,
 ) -> Result<()> {
-    let add_employee_request = AddEmployeeToCompanyRequest {
+    let add_employee_request = AddEmployeeToCompanyInput {
         user_id: user_id.to_string(),
         role: CompanyRole::Admin,
         is_primary: Some(true),
@@ -187,7 +187,7 @@ where
 {
     let (token, user_id) = register_test_user(app, email, password, name).await?;
 
-    let add_employee_request = AddEmployeeToCompanyRequest {
+    let add_employee_request = AddEmployeeToCompanyInput {
         user_id: user_id.clone(),
         role: CompanyRole::Manager,
         is_primary: Some(true),

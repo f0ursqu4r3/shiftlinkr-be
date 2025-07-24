@@ -1,5 +1,6 @@
-use chrono::{NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use sqlx::PgPool;
+use uuid::Uuid;
 
 use crate::database::{
     models::{DashboardStats, ShiftStats, TimeOffStats},
@@ -18,35 +19,55 @@ impl StatsRepository {
     // Simple stats that just return basic counts
     pub async fn get_dashboard_stats(
         &self,
-        _user_id: Option<String>,
-        _start_date: Option<NaiveDateTime>,
-        _end_date: Option<NaiveDateTime>,
+        _user_id: Option<Uuid>,
+        _start_date: Option<DateTime<Utc>>,
+        _end_date: Option<DateTime<Utc>>,
     ) -> Result<DashboardStats> {
         // For now, return basic counts
-        let total_shifts = sqlx::query_scalar!("SELECT COUNT(*) FROM shifts")
+        let total_shifts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM shifts")
             .fetch_one(&self.pool)
-            .await? as i64;
+            .await?;
 
-        let now = Utc::now().naive_utc();
-        let upcoming_shifts =
-            sqlx::query_scalar!("SELECT COUNT(*) FROM shifts WHERE start_time > $1", now)
+        let now = Utc::now();
+        let upcoming_shifts: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM shifts WHERE start_time > ?")
+                .bind(now)
                 .fetch_one(&self.pool)
-                .await? as i64;
+                .await?;
 
-        let pending_time_off_requests =
-            sqlx::query_scalar!("SELECT COUNT(*) FROM time_off_requests WHERE status = 'pending'")
+        let pending_time_off_requests: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM time_off_requests WHERE status = 'pending'")
                 .fetch_one(&self.pool)
-                .await? as i64;
+                .await?;
 
-        let pending_swap_requests =
-            sqlx::query_scalar!("SELECT COUNT(*) FROM shift_swaps WHERE status = 'pending'")
+        let pending_swap_requests: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM shift_swaps WHERE status = 'pending'")
                 .fetch_one(&self.pool)
-                .await? as i64;
+                .await?;
 
-        let approved_time_off =
-            sqlx::query_scalar!("SELECT COUNT(*) FROM time_off_requests WHERE status = 'approved'")
+        let approved_time_off: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM time_off_requests WHERE status = 'approved'")
                 .fetch_one(&self.pool)
-                .await? as i64;
+                .await?;
+
+        // Calculate total hours from shifts (convert seconds to hours)
+        let total_hours: f64 = sqlx::query_scalar(
+            "SELECT COALESCE(SUM(EXTRACT(EPOCH FROM (end_time - start_time)) / 3600), 0)::DOUBLE PRECISION FROM shifts"
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        // Calculate team coverage as percentage of shifts that are assigned (not open)
+        let assigned_shifts_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM shifts WHERE status != 'open'")
+                .fetch_one(&self.pool)
+                .await?;
+
+        let team_coverage = if total_shifts > 0 {
+            (assigned_shifts_count as f64 / total_shifts as f64) * 100.0
+        } else {
+            0.0
+        };
 
         Ok(DashboardStats {
             total_shifts,
@@ -54,41 +75,43 @@ impl StatsRepository {
             pending_time_off_requests,
             pending_swap_requests,
             approved_time_off,
-            total_hours: 0.0,     // TODO: Calculate hours
-            team_coverage: 100.0, // TODO: Calculate coverage
+            total_hours,
+            team_coverage,
         })
     }
 
     // Get shift-specific statistics
     pub async fn get_shift_stats(
         &self,
-        _user_id: Option<String>,
-        _start_date: Option<NaiveDateTime>,
-        _end_date: Option<NaiveDateTime>,
+        _user_id: Option<Uuid>,
+        _start_date: Option<DateTime<Utc>>,
+        _end_date: Option<DateTime<Utc>>,
     ) -> Result<ShiftStats> {
-        let total_shifts = sqlx::query_scalar!("SELECT COUNT(*) FROM shifts")
+        let total_shifts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM shifts")
             .fetch_one(&self.pool)
-            .await? as i64;
+            .await?;
 
-        let assigned_shifts =
-            sqlx::query_scalar!("SELECT COUNT(DISTINCT shift_id) FROM shift_assignments WHERE status IN ('scheduled', 'confirmed', 'completed')")
-                .fetch_one(&self.pool)
-                .await? as i64;
+        // Count shifts that are assigned (not open status)
+        let assigned_shifts: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM shifts WHERE status IN ('assigned', 'confirmed', 'completed')",
+        )
+        .fetch_one(&self.pool)
+        .await?;
 
-        let unassigned_shifts =
-            sqlx::query_scalar!("SELECT COUNT(*) FROM shifts WHERE id NOT IN (SELECT DISTINCT shift_id FROM shift_assignments WHERE status IN ('scheduled', 'confirmed', 'completed'))")
+        let unassigned_shifts: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM shifts WHERE status = 'open'")
                 .fetch_one(&self.pool)
-                .await? as i64;
+                .await?;
 
-        let completed_shifts =
-            sqlx::query_scalar!("SELECT COUNT(*) FROM shifts WHERE status = 'completed'")
+        let completed_shifts: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM shifts WHERE status = 'completed'")
                 .fetch_one(&self.pool)
-                .await? as i64;
+                .await?;
 
-        let cancelled_shifts =
-            sqlx::query_scalar!("SELECT COUNT(*) FROM shifts WHERE status = 'cancelled'")
+        let cancelled_shifts: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM shifts WHERE status = 'cancelled'")
                 .fetch_one(&self.pool)
-                .await? as i64;
+                .await?;
 
         Ok(ShiftStats {
             total_shifts,
@@ -102,34 +125,33 @@ impl StatsRepository {
     // Get time-off statistics
     pub async fn get_time_off_stats(
         &self,
-        _user_id: Option<String>,
-        _start_date: Option<NaiveDateTime>,
-        _end_date: Option<NaiveDateTime>,
+        _user_id: Option<Uuid>,
+        _start_date: Option<DateTime<Utc>>,
+        _end_date: Option<DateTime<Utc>>,
     ) -> Result<TimeOffStats> {
-        let total_requests = sqlx::query_scalar!("SELECT COUNT(*) FROM time_off_requests")
+        let total_requests: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM time_off_requests")
             .fetch_one(&self.pool)
-            .await? as i64;
+            .await?;
 
-        let approved_requests =
-            sqlx::query_scalar!("SELECT COUNT(*) FROM time_off_requests WHERE status = 'approved'")
+        let approved_requests: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM time_off_requests WHERE status = 'approved'")
                 .fetch_one(&self.pool)
-                .await? as i64;
+                .await?;
 
-        let denied_requests =
-            sqlx::query_scalar!("SELECT COUNT(*) FROM time_off_requests WHERE status = 'denied'")
+        let denied_requests: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM time_off_requests WHERE status = 'denied'")
                 .fetch_one(&self.pool)
-                .await? as i64;
+                .await?;
 
-        let pending_requests =
-            sqlx::query_scalar!("SELECT COUNT(*) FROM time_off_requests WHERE status = 'pending'")
+        let pending_requests: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM time_off_requests WHERE status = 'pending'")
                 .fetch_one(&self.pool)
-                .await? as i64;
+                .await?;
 
-        let cancelled_requests = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM time_off_requests WHERE status = 'cancelled'"
-        )
-        .fetch_one(&self.pool)
-        .await? as i64;
+        let cancelled_requests: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM time_off_requests WHERE status = 'cancelled'")
+                .fetch_one(&self.pool)
+                .await?;
 
         Ok(TimeOffStats {
             total_requests,

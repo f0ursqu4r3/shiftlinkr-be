@@ -1,6 +1,7 @@
 use anyhow::Result;
 use chrono::Utc;
 use sqlx::PgPool;
+use uuid::Uuid;
 
 use crate::database::models::{
     AssignmentResponse, AssignmentStatus, ShiftAssignment, ShiftAssignmentInput, UserShiftSchedule,
@@ -24,19 +25,53 @@ impl ScheduleRepository {
         let now = Utc::now().naive_utc();
         let schedule = sqlx::query_as::<_, UserShiftSchedule>(
             r#"
-            INSERT INTO user_shift_schedules (
-                user_id, monday_start, monday_end, tuesday_start, tuesday_end,
-                wednesday_start, wednesday_end, thursday_start, thursday_end,
-                friday_start, friday_end, saturday_start, saturday_end,
-                sunday_start, sunday_end, max_hours_per_week, min_hours_per_week,
-                is_available_for_overtime, created_at, updated_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            RETURNING id, user_id, monday_start, monday_end, tuesday_start, tuesday_end,
-                      wednesday_start, wednesday_end, thursday_start, thursday_end,
-                      friday_start, friday_end, saturday_start, saturday_end,
-                      sunday_start, sunday_end, max_hours_per_week, min_hours_per_week,
-                      is_available_for_overtime, created_at, updated_at
+            INSERT INTO
+                user_shift_schedules (
+                    user_id,
+                    monday_start,
+                    monday_end,
+                    tuesday_start,
+                    tuesday_end,
+                    wednesday_start,
+                    wednesday_end,
+                    thursday_start,
+                    thursday_end,
+                    friday_start,
+                    friday_end,
+                    saturday_start,
+                    saturday_end,
+                    sunday_start,
+                    sunday_end,
+                    max_hours_per_week,
+                    min_hours_per_week,
+                    is_available_for_overtime,
+                    created_at,
+                    updated_at
+                )
+            VALUES
+                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING
+                id,
+                user_id,
+                monday_start,
+                monday_end,
+                tuesday_start,
+                tuesday_end,
+                wednesday_start,
+                wednesday_end,
+                thursday_start,
+                thursday_end,
+                friday_start,
+                friday_end,
+                saturday_start,
+                saturday_end,
+                sunday_start,
+                sunday_end,
+                max_hours_per_week,
+                min_hours_per_week,
+                is_available_for_overtime,
+                created_at,
+                updated_at
             "#,
         )
         .bind(&input.user_id)
@@ -65,15 +100,35 @@ impl ScheduleRepository {
         Ok(schedule)
     }
 
-    pub async fn get_user_schedule(&self, user_id: &str) -> Result<Option<UserShiftSchedule>> {
+    pub async fn get_user_schedule(&self, user_id: Uuid) -> Result<Option<UserShiftSchedule>> {
         let schedule = sqlx::query_as::<_, UserShiftSchedule>(
             r#"
-            SELECT id, user_id, monday_start, monday_end, tuesday_start, tuesday_end,
-                   wednesday_start, wednesday_end, thursday_start, thursday_end,
-                   friday_start, friday_end, saturday_start, saturday_end,
-                   sunday_start, sunday_end, max_hours_per_week, min_hours_per_week,
-                   is_available_for_overtime, created_at, updated_at
-            FROM user_shift_schedules WHERE user_id = ?
+            SELECT
+                id,
+                user_id,
+                monday_start,
+                monday_end,
+                tuesday_start,
+                tuesday_end,
+                wednesday_start,
+                wednesday_end,
+                thursday_start,
+                thursday_end,
+                friday_start,
+                friday_end,
+                saturday_start,
+                saturday_end,
+                sunday_start,
+                sunday_end,
+                max_hours_per_week,
+                min_hours_per_week,
+                is_available_for_overtime,
+                created_at,
+                updated_at
+            FROM
+                user_shift_schedules
+            WHERE
+                user_id = ?
             "#,
         )
         .bind(user_id)
@@ -85,24 +140,57 @@ impl ScheduleRepository {
 
     pub async fn update_user_schedule(
         &self,
-        user_id: &str,
+        user_id: Uuid,
         input: UserShiftScheduleInput,
     ) -> Result<Option<UserShiftSchedule>> {
         let now = Utc::now().naive_utc();
         let schedule = sqlx::query_as::<_, UserShiftSchedule>(
             r#"
-            UPDATE user_shift_schedules SET
-                monday_start = ?, monday_end = ?, tuesday_start = ?, tuesday_end = ?,
-                wednesday_start = ?, wednesday_end = ?, thursday_start = ?, thursday_end = ?,
-                friday_start = ?, friday_end = ?, saturday_start = ?, saturday_end = ?,
-                sunday_start = ?, sunday_end = ?, max_hours_per_week = ?, min_hours_per_week = ?,
-                is_available_for_overtime = ?, updated_at = ?
-            WHERE user_id = ?
-            RETURNING id, user_id, monday_start, monday_end, tuesday_start, tuesday_end,
-                      wednesday_start, wednesday_end, thursday_start, thursday_end,
-                      friday_start, friday_end, saturday_start, saturday_end,
-                      sunday_start, sunday_end, max_hours_per_week, min_hours_per_week,
-                      is_available_for_overtime, created_at, updated_at
+            UPDATE
+                user_shift_schedules
+            SET
+                monday_start = ?,
+                monday_end = ?,
+                tuesday_start = ?,
+                tuesday_end = ?,
+                wednesday_start = ?,
+                wednesday_end = ?,
+                thursday_start = ?,
+                thursday_end = ?,
+                friday_start = ?,
+                friday_end = ?,
+                saturday_start = ?,
+                saturday_end = ?,
+                sunday_start = ?,
+                sunday_end = ?,
+                max_hours_per_week = ?,
+                min_hours_per_week = ?,
+                is_available_for_overtime = ?,
+                updated_at = ?
+            WHERE
+                user_id = ?
+            RETURNING
+                id,
+                user_id,
+                monday_start,
+                monday_end,
+                tuesday_start,
+                tuesday_end,
+                wednesday_start,
+                wednesday_end,
+                thursday_start,
+                thursday_end,
+                friday_start,
+                friday_end,
+                saturday_start,
+                saturday_end,
+                sunday_start,
+                sunday_end,
+                max_hours_per_week,
+                min_hours_per_week,
+                is_available_for_overtime,
+                created_at,
+                updated_at
             "#,
         )
         .bind(input.monday_start)
@@ -130,7 +218,7 @@ impl ScheduleRepository {
         Ok(schedule)
     }
 
-    pub async fn delete_user_schedule(&self, user_id: &str) -> Result<bool> {
+    pub async fn delete_user_schedule(&self, user_id: Uuid) -> Result<bool> {
         let result = sqlx::query("DELETE FROM user_shift_schedules WHERE user_id = ?")
             .bind(user_id)
             .execute(&self.pool)
@@ -147,13 +235,31 @@ impl ScheduleRepository {
         let now = Utc::now().naive_utc();
         let assignment = sqlx::query_as::<_, ShiftAssignment>(
             r#"
-            INSERT INTO shift_proposal_assignments (
-                shift_id, user_id, assigned_by, assignment_status, 
-                acceptance_deadline, response, response_notes, created_at, updated_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            RETURNING id, shift_id, user_id, assigned_by, assignment_status,
-                      acceptance_deadline, response, response_notes, created_at, updated_at
+            INSERT INTO
+                shift_proposal_assignments (
+                    shift_id,
+                    user_id,
+                    assigned_by,
+                    assignment_status,
+                    acceptance_deadline,
+                    response,
+                    response_notes,
+                    created_at,
+                    updated_at
+                )
+            VALUES
+                (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING
+                id,
+                shift_id,
+                user_id,
+                assigned_by,
+                assignment_status,
+                acceptance_deadline,
+                response,
+                response_notes,
+                created_at,
+                updated_at
             "#,
         )
         .bind(input.shift_id)
@@ -171,15 +277,27 @@ impl ScheduleRepository {
         Ok(assignment)
     }
 
-    pub async fn get_shift_assignment(&self, id: i64) -> Result<Option<ShiftAssignment>> {
+    pub async fn get_shift_assignment(&self, shift_id: Uuid) -> Result<Option<ShiftAssignment>> {
         let assignment = sqlx::query_as::<_, ShiftAssignment>(
             r#"
-            SELECT id, shift_id, user_id, assigned_by, assignment_status,
-                   acceptance_deadline, response, response_notes, created_at, updated_at
-            FROM shift_proposal_assignments WHERE id = ?
+            SELECT
+                id,
+                shift_id,
+                user_id,
+                assigned_by,
+                assignment_status,
+                acceptance_deadline,
+                response,
+                response_notes,
+                created_at,
+                updated_at
+            FROM
+                shift_proposal_assignments
+            WHERE
+                id = ?
             "#,
         )
-        .bind(id)
+        .bind(shift_id)
         .fetch_optional(&self.pool)
         .await?;
 
@@ -188,13 +306,27 @@ impl ScheduleRepository {
 
     pub async fn get_shift_assignments_by_shift(
         &self,
-        shift_id: i64,
+        shift_id: Uuid,
     ) -> Result<Vec<ShiftAssignment>> {
         let assignments = sqlx::query_as::<_, ShiftAssignment>(
             r#"
-            SELECT id, shift_id, user_id, assigned_by, assignment_status,
-                   acceptance_deadline, response, response_notes, created_at, updated_at
-            FROM shift_proposal_assignments WHERE shift_id = ? ORDER BY created_at
+            SELECT
+                id,
+                shift_id,
+                user_id,
+                assigned_by,
+                assignment_status,
+                acceptance_deadline,
+                response,
+                response_notes,
+                created_at,
+                updated_at
+            FROM
+                shift_proposal_assignments
+            WHERE
+                shift_id = ?
+            ORDER BY
+                created_at
             "#,
         )
         .bind(shift_id)
@@ -206,13 +338,27 @@ impl ScheduleRepository {
 
     pub async fn get_shift_assignments_by_user(
         &self,
-        user_id: &str,
+        user_id: Uuid,
     ) -> Result<Vec<ShiftAssignment>> {
         let assignments = sqlx::query_as::<_, ShiftAssignment>(
             r#"
-            SELECT id, shift_id, user_id, assigned_by, assignment_status,
-                   acceptance_deadline, response, response_notes, created_at, updated_at
-            FROM shift_proposal_assignments WHERE user_id = ? ORDER BY created_at DESC
+            SELECT
+                id,
+                shift_id,
+                user_id,
+                assigned_by,
+                assignment_status,
+                acceptance_deadline,
+                response,
+                response_notes,
+                created_at,
+                updated_at
+            FROM
+                shift_proposal_assignments
+            WHERE
+                user_id = ?
+            ORDER BY
+                created_at DESC
             "#,
         )
         .bind(user_id)
@@ -224,15 +370,27 @@ impl ScheduleRepository {
 
     pub async fn get_pending_assignments_for_user(
         &self,
-        user_id: &str,
+        user_id: Uuid,
     ) -> Result<Vec<ShiftAssignment>> {
         let assignments = sqlx::query_as::<_, ShiftAssignment>(
             r#"
-            SELECT id, shift_id, user_id, assigned_by, assignment_status,
-                   acceptance_deadline, response, response_notes, created_at, updated_at
-            FROM shift_proposal_assignments 
-            WHERE user_id = ? AND assignment_status = 'pending'
-            ORDER BY acceptance_deadline ASC, created_at
+            SELECT
+                id,
+                shift_id,
+                user_id,
+                assigned_by,
+                assignment_status,
+                acceptance_deadline,
+                response,
+                response_notes,
+                created_at,
+                updated_at
+            FROM
+                shift_proposal_assignments
+            WHERE
+                user_id = ? AND assignment_status = 'pending'
+            ORDER BY
+                acceptance_deadline ASC, created_at
             "#,
         )
         .bind(user_id)
@@ -244,7 +402,7 @@ impl ScheduleRepository {
 
     pub async fn respond_to_assignment(
         &self,
-        assignment_id: i64,
+        assignment_id: Uuid,
         response: AssignmentResponse,
         response_notes: Option<String>,
     ) -> Result<Option<ShiftAssignment>> {
@@ -256,11 +414,26 @@ impl ScheduleRepository {
 
         let assignment = sqlx::query_as::<_, ShiftAssignment>(
             r#"
-            UPDATE shift_proposal_assignments SET
-                assignment_status = ?, response = ?, response_notes = ?, updated_at = ?
-            WHERE id = ?
-            RETURNING id, shift_id, user_id, assigned_by, assignment_status,
-                      acceptance_deadline, response, response_notes, created_at, updated_at
+            UPDATE
+                shift_proposal_assignments
+            SET
+                assignment_status = ?,
+                response = ?,
+                response_notes = ?,
+                updated_at = ?
+            WHERE
+                id = ?
+            RETURNING
+                id,
+                shift_id,
+                user_id,
+                assigned_by,
+                assignment_status,
+                acceptance_deadline,
+                response,
+                response_notes,
+                created_at,
+                updated_at
             "#,
         )
         .bind(status.to_string())
@@ -274,15 +447,28 @@ impl ScheduleRepository {
         Ok(assignment)
     }
 
-    pub async fn cancel_assignment(&self, assignment_id: i64) -> Result<Option<ShiftAssignment>> {
+    pub async fn cancel_assignment(&self, assignment_id: Uuid) -> Result<Option<ShiftAssignment>> {
         let now = Utc::now().naive_utc();
         let assignment = sqlx::query_as::<_, ShiftAssignment>(
             r#"
-            UPDATE shift_proposal_assignments SET
-                assignment_status = 'cancelled', updated_at = ?
-            WHERE id = ?
-            RETURNING id, shift_id, user_id, assigned_by, assignment_status,
-                      acceptance_deadline, response, response_notes, created_at, updated_at
+            UPDATE
+                shift_proposal_assignments
+            SET
+                assignment_status = 'cancelled',
+                updated_at = ?
+            WHERE
+                id = ?
+            RETURNING
+                id,
+                shift_id,
+                user_id,
+                assigned_by,
+                assignment_status,
+                acceptance_deadline,
+                response,
+                response_notes,
+                created_at,
+                updated_at
             "#,
         )
         .bind(now)
@@ -297,13 +483,26 @@ impl ScheduleRepository {
         let now = Utc::now().naive_utc();
         let assignments = sqlx::query_as::<_, ShiftAssignment>(
             r#"
-            UPDATE shift_proposal_assignments SET
-                assignment_status = 'expired', updated_at = ?
-            WHERE assignment_status = 'pending' 
-              AND acceptance_deadline IS NOT NULL 
-              AND acceptance_deadline < ?
-            RETURNING id, shift_id, user_id, assigned_by, assignment_status,
-                      acceptance_deadline, response, response_notes, created_at, updated_at
+            UPDATE
+                shift_proposal_assignments
+            SET
+                assignment_status = 'expired',
+                updated_at = ?
+            WHERE
+                assignment_status = 'pending'
+                AND acceptance_deadline IS NOT NULL
+                AND acceptance_deadline < ?
+            RETURNING
+                id,
+                shift_id,
+                user_id,
+                assigned_by,
+                assignment_status,
+                acceptance_deadline,
+                response,
+                response_notes,
+                created_at,
+                updated_at
             "#,
         )
         .bind(now)

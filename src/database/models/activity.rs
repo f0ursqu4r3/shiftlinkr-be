@@ -1,16 +1,17 @@
 use serde::{Deserialize, Serialize};
 use sqlx::types::chrono::{DateTime, Utc};
 use std::collections::HashMap;
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct CompanyActivity {
-    pub id: i64,
-    pub company_id: i64,
-    pub user_id: Option<i64>,
+    pub id: Uuid, // UUID primary key
+    pub company_id: Uuid,
+    pub user_id: Option<Uuid>,
     pub activity_type: String,
     pub entity_type: String,
-    pub entity_id: i64,
+    pub entity_id: Uuid,
     pub action: String,
     pub description: String,
     pub metadata: Option<String>, // JSON as String in SQLite
@@ -21,12 +22,12 @@ pub struct CompanyActivity {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CreateActivityRequest {
-    pub company_id: i64,
-    pub user_id: Option<i64>,
+pub struct CreateActivityInput {
+    pub company_id: String,
+    pub user_id: Option<String>,
     pub activity_type: String,
     pub entity_type: String,
-    pub entity_id: i64,
+    pub entity_id: String,
     pub action: String,
     pub description: String,
     pub metadata: Option<HashMap<String, serde_json::Value>>,
@@ -37,10 +38,10 @@ pub struct CreateActivityRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ActivityFilter {
-    pub company_id: i64,
+    pub company_id: Uuid,
     pub activity_type: Option<String>,
     pub entity_type: Option<String>,
-    pub user_id: Option<i64>,
+    pub user_id: Option<Uuid>,
     pub start_date: Option<DateTime<Utc>>,
     pub end_date: Option<DateTime<Utc>>,
     pub limit: Option<i64>,

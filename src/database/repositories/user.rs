@@ -2,6 +2,7 @@ use crate::database::models::User;
 use anyhow::Result;
 use chrono::Utc;
 use sqlx::PgPool;
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct UserRepository {
@@ -17,7 +18,7 @@ impl UserRepository {
         sqlx::query(
             r#"
             INSERT INTO users (id, email, password_hash, name, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            VALUES (?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&user.id)
@@ -37,7 +38,7 @@ impl UserRepository {
             r#"
             SELECT id, email, password_hash, name, created_at, updated_at
             FROM users
-            WHERE email = $1
+            WHERE email = ?
             "#,
         )
         .bind(email)
@@ -47,12 +48,12 @@ impl UserRepository {
         Ok(user)
     }
 
-    pub async fn find_by_id(&self, id: &str) -> Result<Option<User>> {
+    pub async fn find_by_id(&self, id: Uuid) -> Result<Option<User>> {
         let user = sqlx::query_as::<_, User>(
             r#"
             SELECT id, email, password_hash, name, created_at, updated_at
             FROM users
-            WHERE id = $1
+            WHERE id = ?
             "#,
         )
         .bind(id)
@@ -76,14 +77,14 @@ impl UserRepository {
         Ok(users)
     }
 
-    pub async fn update_user(&self, id: &str, name: &str, email: &str) -> Result<()> {
+    pub async fn update_user(&self, id: Uuid, name: &str, email: &str) -> Result<()> {
         let updated_at = Utc::now().naive_utc();
 
         sqlx::query(
             r#"
             UPDATE users
-            SET name = $1, email = $2, updated_at = $3
-            WHERE id = $4
+            SET name = ?, email = ?, updated_at = ?
+            WHERE id = ?
             "#,
         )
         .bind(name)
@@ -96,8 +97,8 @@ impl UserRepository {
         Ok(())
     }
 
-    pub async fn delete_user(&self, id: &str) -> Result<()> {
-        sqlx::query("DELETE FROM users WHERE id = $1")
+    pub async fn delete_user(&self, id: Uuid) -> Result<()> {
+        sqlx::query("DELETE FROM users WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await?;
@@ -106,7 +107,7 @@ impl UserRepository {
     }
 
     pub async fn email_exists(&self, email: &str) -> Result<bool> {
-        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE email = $1")
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE email = ?")
             .bind(email)
             .fetch_one(&self.pool)
             .await?;
@@ -114,14 +115,14 @@ impl UserRepository {
         Ok(count > 0)
     }
 
-    pub async fn update_password(&self, user_id: &str, password_hash: &str) -> Result<()> {
+    pub async fn update_password(&self, user_id: Uuid, password_hash: &str) -> Result<()> {
         let updated_at = Utc::now().naive_utc();
 
         sqlx::query(
             r#"
             UPDATE users
-            SET password_hash = $1, updated_at = $2
-            WHERE id = $3
+            SET password_hash = ?, updated_at = ?
+            WHERE id = ?
             "#,
         )
         .bind(password_hash)

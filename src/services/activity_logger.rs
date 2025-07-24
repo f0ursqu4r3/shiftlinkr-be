@@ -1,7 +1,8 @@
-use crate::database::models::{ActivityType, CreateActivityRequest, EntityType};
+use crate::database::models::{ActivityType, CreateActivityInput, EntityType};
 use crate::database::repositories::ActivityRepository;
 use actix_web::HttpRequest;
 use std::collections::HashMap;
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct ActivityLogger {
@@ -36,9 +37,9 @@ impl ActivityLogger {
     /// Log user management activity
     pub async fn log_user_activity(
         &self,
-        company_id: i64,
-        user_id: Option<i64>,
-        target_user_id: i64,
+        company_id: Uuid,
+        user_id: Option<Uuid>,
+        target_user_id: Uuid,
         action: &str,
         description: String,
         metadata: Option<HashMap<String, serde_json::Value>>,
@@ -46,12 +47,12 @@ impl ActivityLogger {
     ) -> Result<(), sqlx::Error> {
         let (ip_address, user_agent) = self.extract_client_info(req);
 
-        let request = CreateActivityRequest {
-            company_id,
-            user_id,
+        let request = CreateActivityInput {
+            company_id: company_id.to_string(),
+            user_id: user_id.map(|id| id.to_string()),
             activity_type: ActivityType::USER_MANAGEMENT.to_string(),
             entity_type: EntityType::USER.to_string(),
-            entity_id: target_user_id,
+            entity_id: target_user_id.to_string(),
             action: action.to_string(),
             description,
             metadata,
@@ -66,8 +67,8 @@ impl ActivityLogger {
     /// Log authentication activity
     pub async fn log_auth_activity(
         &self,
-        company_id: i64,
-        user_id: Option<i64>,
+        company_id: Uuid,
+        user_id: Option<Uuid>,
         action: &str,
         description: String,
         metadata: Option<HashMap<String, serde_json::Value>>,
@@ -75,12 +76,12 @@ impl ActivityLogger {
     ) -> Result<(), sqlx::Error> {
         let (ip_address, user_agent) = self.extract_client_info(req);
 
-        let request = CreateActivityRequest {
-            company_id,
-            user_id,
+        let request = CreateActivityInput {
+            company_id: company_id.to_string(),
+            user_id: user_id.map(|id| id.to_string()),
             activity_type: ActivityType::AUTHENTICATION.to_string(),
             entity_type: EntityType::USER.to_string(),
-            entity_id: user_id.unwrap_or(0), // Use 0 for failed logins where user_id is unknown
+            entity_id: user_id.unwrap_or(Uuid::nil()).to_string(), // Use nil UUID for failed logins where user_id is unknown
             action: action.to_string(),
             description,
             metadata,
@@ -95,11 +96,11 @@ impl ActivityLogger {
     /// Generic activity logging for custom cases
     pub async fn log_activity(
         &self,
-        company_id: i64,
-        user_id: Option<i64>,
+        company_id: Uuid,
+        user_id: Option<Uuid>,
         activity_type: String,
         entity_type: String,
-        entity_id: i64,
+        entity_id: Uuid,
         action: String,
         description: String,
         metadata: Option<HashMap<String, serde_json::Value>>,
@@ -107,12 +108,12 @@ impl ActivityLogger {
     ) -> Result<(), sqlx::Error> {
         let (ip_address, user_agent) = self.extract_client_info(req);
 
-        let request = CreateActivityRequest {
-            company_id,
-            user_id,
+        let request = CreateActivityInput {
+            company_id: company_id.to_string(),
+            user_id: user_id.map(|id| id.to_string()),
             activity_type,
             entity_type,
-            entity_id,
+            entity_id: entity_id.to_string(),
             action,
             description,
             metadata,
@@ -127,9 +128,9 @@ impl ActivityLogger {
     /// Log location management activity
     pub async fn log_location_activity(
         &self,
-        company_id: i64,
-        user_id: Option<i64>,
-        location_id: i64,
+        company_id: Uuid,
+        user_id: Option<Uuid>,
+        location_id: Uuid,
         action: &str,
         description: String,
         metadata: Option<HashMap<String, serde_json::Value>>,
@@ -137,12 +138,12 @@ impl ActivityLogger {
     ) -> Result<(), sqlx::Error> {
         let (ip_address, user_agent) = self.extract_client_info(req);
 
-        let request = CreateActivityRequest {
-            company_id,
-            user_id,
+        let request = CreateActivityInput {
+            company_id: company_id.to_string(),
+            user_id: user_id.map(|id| id.to_string()),
             activity_type: ActivityType::LOCATION_MANAGEMENT.to_string(),
             entity_type: EntityType::LOCATION.to_string(),
-            entity_id: location_id,
+            entity_id: location_id.to_string(),
             action: action.to_string(),
             description,
             metadata,
@@ -157,9 +158,9 @@ impl ActivityLogger {
     /// Log team management activity
     pub async fn log_team_activity(
         &self,
-        company_id: i64,
-        user_id: Option<i64>,
-        team_id: i64,
+        company_id: Uuid,
+        user_id: Option<Uuid>,
+        team_id: Uuid,
         action: &str,
         description: String,
         metadata: Option<HashMap<String, serde_json::Value>>,
@@ -167,12 +168,12 @@ impl ActivityLogger {
     ) -> Result<(), sqlx::Error> {
         let (ip_address, user_agent) = self.extract_client_info(req);
 
-        let request = CreateActivityRequest {
-            company_id,
-            user_id,
+        let request = CreateActivityInput {
+            company_id: company_id.to_string(),
+            user_id: user_id.map(|id| id.to_string()),
             activity_type: ActivityType::TEAM_MANAGEMENT.to_string(),
             entity_type: EntityType::TEAM.to_string(),
-            entity_id: team_id,
+            entity_id: team_id.to_string(),
             action: action.to_string(),
             description,
             metadata,
@@ -187,9 +188,9 @@ impl ActivityLogger {
     /// Log shift management activity
     pub async fn log_shift_activity(
         &self,
-        company_id: i64,
-        user_id: Option<i64>,
-        shift_id: i64,
+        company_id: Uuid,
+        user_id: Option<Uuid>,
+        shift_id: Uuid,
         action: &str,
         description: String,
         metadata: Option<HashMap<String, serde_json::Value>>,
@@ -197,12 +198,12 @@ impl ActivityLogger {
     ) -> Result<(), sqlx::Error> {
         let (ip_address, user_agent) = self.extract_client_info(req);
 
-        let request = CreateActivityRequest {
-            company_id,
-            user_id,
+        let request = CreateActivityInput {
+            company_id: company_id.to_string(),
+            user_id: user_id.map(|id| id.to_string()),
             activity_type: ActivityType::SHIFT_MANAGEMENT.to_string(),
             entity_type: EntityType::SHIFT.to_string(),
-            entity_id: shift_id,
+            entity_id: shift_id.to_string(),
             action: action.to_string(),
             description,
             metadata,
@@ -217,9 +218,9 @@ impl ActivityLogger {
     /// Log time off management activity
     pub async fn log_time_off_activity(
         &self,
-        company_id: i64,
-        user_id: Option<i64>,
-        time_off_id: i64,
+        company_id: Uuid,
+        user_id: Option<Uuid>,
+        time_off_id: Uuid,
         action: &str,
         description: String,
         metadata: Option<HashMap<String, serde_json::Value>>,
@@ -227,12 +228,12 @@ impl ActivityLogger {
     ) -> Result<(), sqlx::Error> {
         let (ip_address, user_agent) = self.extract_client_info(req);
 
-        let request = CreateActivityRequest {
-            company_id,
-            user_id,
+        let request = CreateActivityInput {
+            company_id: company_id.to_string(),
+            user_id: user_id.map(|id| id.to_string()),
             activity_type: ActivityType::TIME_OFF_MANAGEMENT.to_string(),
             entity_type: EntityType::TIME_OFF.to_string(),
-            entity_id: time_off_id,
+            entity_id: time_off_id.to_string(),
             action: action.to_string(),
             description,
             metadata,
@@ -247,9 +248,9 @@ impl ActivityLogger {
     /// Log shift swap activity
     pub async fn log_shift_swap_activity(
         &self,
-        company_id: i64,
-        user_id: Option<i64>,
-        swap_id: i64,
+        company_id: Uuid,
+        user_id: Option<Uuid>,
+        swap_id: Uuid,
         action: &str,
         description: String,
         metadata: Option<HashMap<String, serde_json::Value>>,
@@ -257,12 +258,12 @@ impl ActivityLogger {
     ) -> Result<(), sqlx::Error> {
         let (ip_address, user_agent) = self.extract_client_info(req);
 
-        let request = CreateActivityRequest {
-            company_id,
-            user_id,
+        let request = CreateActivityInput {
+            company_id: company_id.to_string(),
+            user_id: user_id.map(|id| id.to_string()),
             activity_type: ActivityType::SHIFT_MANAGEMENT.to_string(),
             entity_type: EntityType::SHIFT_SWAP.to_string(),
-            entity_id: swap_id,
+            entity_id: swap_id.to_string(),
             action: action.to_string(),
             description,
             metadata,

@@ -1,17 +1,18 @@
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct Location {
-    pub id: i64,
+    pub id: Uuid, // UUID primary key
     pub name: String,
     pub address: Option<String>,
     pub phone: Option<String>,
     pub email: Option<String>,
-    pub company_id: i64,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
+    pub company_id: Uuid,          // UUID type
+    pub created_at: DateTime<Utc>, // TIMESTAMPTZ
+    pub updated_at: DateTime<Utc>, // TIMESTAMPTZ
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -21,5 +22,5 @@ pub struct LocationInput {
     pub address: Option<String>,
     pub phone: Option<String>,
     pub email: Option<String>,
-    pub company_id: i64,
+    pub company_id: Uuid, // UUID type
 }

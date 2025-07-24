@@ -1,11 +1,12 @@
-use chrono::{NaiveDateTime, NaiveTime};
+use chrono::{DateTime, NaiveTime, Utc};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct UserShiftSchedule {
-    pub id: i64,
-    pub user_id: String,
+    pub id: Uuid,      // UUID primary key
+    pub user_id: Uuid, // UUID for user references
     pub monday_start: Option<NaiveTime>,
     pub monday_end: Option<NaiveTime>,
     pub tuesday_start: Option<NaiveTime>,
@@ -23,14 +24,14 @@ pub struct UserShiftSchedule {
     pub max_hours_per_week: Option<i32>,
     pub min_hours_per_week: Option<i32>,
     pub is_available_for_overtime: bool,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
+    pub created_at: DateTime<Utc>, // TIMESTAMPTZ
+    pub updated_at: DateTime<Utc>, // TIMESTAMPTZ
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserShiftScheduleInput {
-    pub user_id: String,
+    pub user_id: Uuid, // UUID for user references
     pub monday_start: Option<NaiveTime>,
     pub monday_end: Option<NaiveTime>,
     pub tuesday_start: Option<NaiveTime>,
@@ -53,25 +54,25 @@ pub struct UserShiftScheduleInput {
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftAssignment {
-    pub id: i64,
-    pub shift_id: i64,
-    pub user_id: String,
-    pub assigned_by: String,
+    pub id: Uuid,          // UUID primary key
+    pub shift_id: Uuid,    // UUID for shift references
+    pub user_id: Uuid,     // UUID for user references
+    pub assigned_by: Uuid, // UUID for user references
     pub assignment_status: AssignmentStatus,
-    pub acceptance_deadline: Option<NaiveDateTime>,
+    pub acceptance_deadline: Option<DateTime<Utc>>, // TIMESTAMPTZ
     pub response: Option<AssignmentResponse>,
     pub response_notes: Option<String>,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
+    pub created_at: DateTime<Utc>, // TIMESTAMPTZ
+    pub updated_at: DateTime<Utc>, // TIMESTAMPTZ
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftAssignmentInput {
-    pub shift_id: i64,
-    pub user_id: String,
-    pub assigned_by: String,
-    pub acceptance_deadline: Option<NaiveDateTime>,
+    pub shift_id: Uuid,                             // UUID for shift references
+    pub user_id: Uuid,                              // UUID for user references
+    pub assigned_by: Uuid,                          // UUID for user references
+    pub acceptance_deadline: Option<DateTime<Utc>>, // TIMESTAMPTZ
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

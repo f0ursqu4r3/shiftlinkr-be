@@ -1,7 +1,9 @@
 use actix_web::{web, HttpRequest, HttpResponse, Result};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
+use serde_json::json;
 use std::collections::HashMap;
+use uuid::Uuid;
 
 use crate::database::models::activity::Action;
 use crate::database::models::{ShiftAssignmentInput, ShiftClaimInput, ShiftInput, ShiftStatus};
@@ -11,15 +13,15 @@ use crate::database::repositories::shift::ShiftRepository;
 use crate::database::repositories::shift_claim::ShiftClaimRepository;
 use crate::handlers::admin::ApiResponse;
 use crate::services::activity_logger::ActivityLogger;
-use crate::services::auth::Claims;
+use crate::services::{UserContext, UserContextService};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftQuery {
-    pub location_id: Option<i64>,
-    pub team_id: Option<i64>,
-    pub user_id: Option<i64>,
-    pub company_id: Option<i64>,
+    pub location_id: Option<Uuid>,
+    pub team_id: Option<Uuid>,
+    pub user_id: Option<Uuid>,
+    pub company_id: Option<Uuid>,
     pub start_date: Option<DateTime<Utc>>,
     pub end_date: Option<DateTime<Utc>>,
     pub status: Option<String>,
@@ -28,14 +30,14 @@ pub struct ShiftQuery {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AssignShiftRequest {
-    pub user_id: i64,
+    pub user_id: Uuid,
     pub acceptance_deadline: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DirectAssignShiftRequest {
-    pub user_id: i64,
+    pub user_id: Uuid,
 }
 
 #[derive(Debug, Deserialize)]
@@ -45,106 +47,42 @@ pub struct UpdateShiftStatusRequest {
 
 // Shift handlers
 pub async fn create_shift(
-    claims: Claims,
-    shift_repo: web::Data<ShiftRepository>,
-    company_repo: web::Data<CompanyRepository>,
-    activity_logger: web::Data<ActivityLogger>,
+    user_context: web::Data<UserContext>,
     input: web::Json<ShiftInput>,
-    req: HttpRequest,
+    shift_repo: web::Data<ShiftRepository>,
 ) -> Result<HttpResponse> {
-    // Check if user is admin or manager
-    if !claims.is_admin() && !claims.is_manager() {
-        return Ok(
-            HttpResponse::Forbidden().json(ApiResponse::<()>::error("Insufficient permissions"))
-        );
+    // Only admins and managers can create shifts
+    if !user_context.is_manager_or_admin() {
+        return Ok(HttpResponse::Forbidden().json(json!({
+            "error": "Manager or admin access required to create shifts"
+        })));
     }
 
-    let shift_input = input.into_inner();
-    let location_id = shift_input.location_id;
-    let team_id = shift_input.team_id;
-    let start_time = shift_input.start_time;
-    let end_time = shift_input.end_time;
+    let req = input.into_inner();
 
-    match shift_repo.create_shift(shift_input).await {
+    match shift_repo.create_shift(req).await {
         Ok(shift) => {
-            // Log shift creation activity
-            if let Ok(Some(company)) = company_repo.get_primary_company_for_user(&claims.sub).await
-            {
-                let mut metadata = HashMap::new();
-                metadata.insert(
-                    "location_id".to_string(),
-                    serde_json::Value::Number(serde_json::Number::from(location_id)),
-                );
-                if let Some(team_id) = team_id {
-                    metadata.insert(
-                        "team_id".to_string(),
-                        serde_json::Value::Number(serde_json::Number::from(team_id)),
-                    );
-                }
-                metadata.insert(
-                    "start_time".to_string(),
-                    serde_json::Value::String(start_time.to_string()),
-                );
-                metadata.insert(
-                    "end_time".to_string(),
-                    serde_json::Value::String(end_time.to_string()),
-                );
-
-                if let Err(e) = activity_logger
-                    .log_shift_activity(
-                        company.id,
-                        Some(claims.sub.parse().unwrap_or(0)),
-                        shift.id,
-                        Action::CREATED,
-                        format!(
-                            "Shift created for location {} from {} to {}",
-                            location_id, start_time, end_time
-                        ),
-                        Some(metadata),
-                        &req,
-                    )
-                    .await
-                {
-                    log::warn!("Failed to log shift creation activity: {}", e);
-                }
-            }
-
-            Ok(HttpResponse::Created().json(ApiResponse::success(shift)))
-        }
-        Err(err) => {
-            log::error!("Error creating shift: {}", err);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error("Failed to create shift")))
-        }
+            log::info!("Shift created by user {} for company {:?}", 
+                      user_context.user_id(), user_context.company_id());
+            Ok(HttpResponse::Created().json(&shift))
+        },
+        Err(e) => Ok(HttpResponse::BadRequest().json(json!({
+            "error": e.to_string()
+        }))),
     }
 }
 
 pub async fn get_shifts(
-    claims: Claims,
+    user_context: web::Data<UserContext>,
     shift_repo: web::Data<ShiftRepository>,
-    company_repo: web::Data<CompanyRepository>,
     query: web::Query<ShiftQuery>,
 ) -> Result<HttpResponse> {
-    // If company_id is provided, check company-specific permissions
-    let has_manager_permissions = if let Some(company_id) = query.company_id {
-        match company_repo
-            .check_user_company_manager_or_admin(&claims.sub, company_id)
-            .await
-        {
-            Ok(is_manager) => is_manager,
-            Err(_) => {
-                return Ok(HttpResponse::Forbidden()
-                    .json(ApiResponse::<()>::error("Failed to verify permissions")));
-            }
-        }
-    } else {
-        // Fallback to global role check for backward compatibility
-        claims.is_admin() || claims.is_manager()
-    };
+    // Check if user has manager/admin permissions
+    let has_manager_permissions = user_context.is_manager_or_admin();
 
     let shifts = if let Some(user_id) = query.user_id {
         // Users can only see their own shifts unless they are admin/manager
-        if !has_manager_permissions && user_id != claims.user_id().parse::<i64>().unwrap_or(-1) {
+        if !has_manager_permissions && !user_context.can_access_user_resource(user_id) {
             return Ok(HttpResponse::Forbidden()
                 .json(ApiResponse::<()>::error("Insufficient permissions")));
         }
@@ -155,11 +93,7 @@ pub async fn get_shifts(
         shift_repo.get_shifts_by_location(location_id).await
     } else if let (Some(start_date), Some(end_date)) = (query.start_date, query.end_date) {
         shift_repo
-            .get_shifts_by_date_range(
-                start_date.naive_utc(),
-                end_date.naive_utc(),
-                query.location_id,
-            )
+            .get_shifts_by_date_range(start_date, end_date, query.location_id)
             .await
     } else if query.status.as_deref() == Some("open") {
         if let Some(location_id) = query.location_id {
@@ -173,8 +107,10 @@ pub async fn get_shifts(
             return Ok(HttpResponse::Forbidden()
                 .json(ApiResponse::<()>::error("Insufficient permissions")));
         }
-        if let Some(location_id) = query.location_id {
-            shift_repo.get_open_shifts_by_location(location_id).await
+        
+        // Get shifts for user's company if they have one
+        if let Some(company_id) = user_context.company_id() {
+            shift_repo.get_shifts_by_company(company_id).await
         } else {
             shift_repo.get_open_shifts().await
         }
@@ -183,7 +119,7 @@ pub async fn get_shifts(
     match shifts {
         Ok(shifts) => Ok(HttpResponse::Ok().json(ApiResponse::success(shifts))),
         Err(err) => {
-            log::error!("Error fetching shifts: {}", err);
+            log::error!("Error fetching shifts for user {}: {}", user_context.user_id(), err);
             Ok(HttpResponse::InternalServerError()
                 .json(ApiResponse::<()>::error("Failed to fetch shifts")))
         }
@@ -191,19 +127,19 @@ pub async fn get_shifts(
 }
 
 pub async fn get_shift(
-    claims: Claims,
+    user_context: web::Data<UserContext>,
     shift_repo: web::Data<ShiftRepository>,
-    path: web::Path<i64>,
+    path: web::Path<Uuid>,
 ) -> Result<HttpResponse> {
     let shift_id = path.into_inner();
 
-    match shift_repo.get_shift_by_id(shift_id).await {
+    match shift_repo.find_by_id(shift_id).await {
         Ok(Some(shift)) => {
             // Check if user has permission to view this shift
-            // For now, we'll allow viewing if user is admin/manager or if they have an assignment
-            if !claims.is_admin() && !claims.is_manager() {
-                // Could add additional check here to see if user has assignment for this shift
-                // For now, we'll be permissive
+            // Allow viewing if user is admin/manager or if they have assignment for this shift
+            if !user_context.is_manager_or_admin() {
+                // For now, we'll be permissive for regular employees
+                // In future, could add check if user has assignment for this shift
             }
             Ok(HttpResponse::Ok().json(ApiResponse::success(shift)))
         }
@@ -217,13 +153,13 @@ pub async fn get_shift(
 }
 
 pub async fn update_shift(
-    claims: Claims,
+    user_context: web::Data<UserContext>,
     shift_repo: web::Data<ShiftRepository>,
-    path: web::Path<i64>,
+    path: web::Path<Uuid>,
     input: web::Json<ShiftInput>,
 ) -> Result<HttpResponse> {
     // Check if user is admin or manager
-    if !claims.is_admin() && !claims.is_manager() {
+    if !user_context.is_manager_or_admin() {
         return Ok(
             HttpResponse::Forbidden().json(ApiResponse::<()>::error("Insufficient permissions"))
         );
@@ -248,7 +184,7 @@ pub async fn assign_shift(
     schedule_repo: web::Data<ScheduleRepository>,
     company_repo: web::Data<CompanyRepository>,
     activity_logger: web::Data<ActivityLogger>,
-    path: web::Path<i64>,
+    path: web::Path<Uuid>,
     input: web::Json<AssignShiftRequest>,
     req: HttpRequest,
 ) -> Result<HttpResponse> {
@@ -263,12 +199,14 @@ pub async fn assign_shift(
     let assigned_user_id = input.user_id;
     let acceptance_deadline = input.acceptance_deadline;
 
+    let user_id = claims.user_id();
+
     // Create shift assignment using schedule repository
     let assignment_input = ShiftAssignmentInput {
         shift_id,
-        user_id: assigned_user_id.to_string(),
-        assigned_by: claims.sub.clone(),
-        acceptance_deadline: acceptance_deadline.map(|dt| dt.naive_utc()),
+        user_id: assigned_user_id,
+        assigned_by: user_id,
+        acceptance_deadline,
     };
 
     match schedule_repo
@@ -281,32 +219,32 @@ pub async fn assign_shift(
                 Ok(Some(shift)) => {
                     // Log shift assignment activity
                     if let Ok(Some(company)) =
-                        company_repo.get_primary_company_for_user(&claims.sub).await
+                        company_repo.get_primary_company_for_user(user_id).await
                     {
                         let mut metadata = HashMap::new();
                         metadata.insert(
                             "assigned_user_id".to_string(),
-                            serde_json::Value::Number(serde_json::Number::from(assigned_user_id)),
+                            serde_json::Value::String(assigned_user_id.to_string()),
                         );
                         metadata.insert(
                             "assignment_id".to_string(),
-                            serde_json::Value::Number(serde_json::Number::from(assignment.id)),
+                            serde_json::Value::String(assignment.id.to_string()),
                         );
                         metadata.insert(
                             "location_id".to_string(),
-                            serde_json::Value::Number(serde_json::Number::from(shift.location_id)),
+                            serde_json::Value::String(shift.location_id.to_string()),
                         );
                         if let Some(team_id) = shift.team_id {
                             metadata.insert(
                                 "team_id".to_string(),
-                                serde_json::Value::Number(serde_json::Number::from(team_id)),
+                                serde_json::Value::String(team_id.to_string()),
                             );
                         }
 
                         if let Err(e) = activity_logger
                             .log_shift_activity(
                                 company.id,
-                                Some(claims.sub.parse().unwrap_or(0)),
+                                Some(user_id),
                                 shift_id,
                                 Action::ASSIGNED,
                                 format!(
@@ -359,7 +297,7 @@ pub async fn unassign_shift(
     shift_repo: web::Data<ShiftRepository>,
     company_repo: web::Data<CompanyRepository>,
     activity_logger: web::Data<ActivityLogger>,
-    path: web::Path<i64>,
+    path: web::Path<Uuid>,
     req: HttpRequest,
 ) -> Result<HttpResponse> {
     // Check if user is admin or manager
@@ -370,30 +308,30 @@ pub async fn unassign_shift(
     }
 
     let shift_id = path.into_inner();
+    let user_id = claims.user_id();
 
     match shift_repo.unassign_shift(shift_id).await {
         Ok(Some(shift)) => {
             // Log shift unassignment activity
-            if let Ok(Some(company)) = company_repo.get_primary_company_for_user(&claims.sub).await
-            {
+            if let Ok(Some(company)) = company_repo.get_primary_company_for_user(user_id).await {
                 let mut metadata = HashMap::new();
                 // Note: In the new system, we would get previous assignment info from schedule repository
                 // For now, we'll just log basic info
                 metadata.insert(
                     "location_id".to_string(),
-                    serde_json::Value::Number(serde_json::Number::from(shift.location_id)),
+                    serde_json::Value::String(shift.location_id.to_string()),
                 );
                 if let Some(team_id) = shift.team_id {
                     metadata.insert(
                         "team_id".to_string(),
-                        serde_json::Value::Number(serde_json::Number::from(team_id)),
+                        serde_json::Value::String(team_id.to_string()),
                     );
                 }
 
                 if let Err(e) = activity_logger
                     .log_shift_activity(
                         company.id,
-                        Some(claims.sub.parse().unwrap_or(0)),
+                        Some(user_id),
                         shift_id,
                         Action::UNASSIGNED,
                         "Shift unassigned".to_string(),
@@ -420,7 +358,7 @@ pub async fn unassign_shift(
 pub async fn update_shift_status(
     claims: Claims,
     shift_repo: web::Data<ShiftRepository>,
-    path: web::Path<i64>,
+    path: web::Path<Uuid>,
     input: web::Json<UpdateShiftStatusRequest>,
 ) -> Result<HttpResponse> {
     // Check if user is admin or manager
@@ -455,7 +393,7 @@ pub async fn update_shift_status(
 pub async fn delete_shift(
     claims: Claims,
     shift_repo: web::Data<ShiftRepository>,
-    path: web::Path<i64>,
+    path: web::Path<Uuid>,
 ) -> Result<HttpResponse> {
     // Check if user is admin or manager
     if !claims.is_admin() && !claims.is_manager() {
@@ -481,7 +419,7 @@ pub async fn delete_shift(
 pub async fn get_shift_assignments(
     claims: Claims,
     schedule_repo: web::Data<ScheduleRepository>,
-    path: web::Path<i64>,
+    path: web::Path<Uuid>,
 ) -> Result<HttpResponse> {
     let shift_id = path.into_inner();
 
@@ -534,7 +472,7 @@ pub async fn respond_to_assignment(
     claims: Claims,
     schedule_repo: web::Data<ScheduleRepository>,
     shift_repo: web::Data<ShiftRepository>,
-    path: web::Path<i64>,
+    path: web::Path<Uuid>,
     response_data: web::Json<AssignmentResponseRequest>,
 ) -> Result<HttpResponse> {
     let assignment_id = path.into_inner();
@@ -592,19 +530,19 @@ pub async fn respond_to_assignment(
 
 // Employee shift claiming with proper validation and workflow
 pub async fn claim_shift(
-    claims: Claims,
-    _shift_repo: web::Data<ShiftRepository>,
+    user_context: web::Data<UserContext>,
+    shift_repo: web::Data<ShiftRepository>,
     shift_claim_repo: web::Data<ShiftClaimRepository>,
     company_repo: web::Data<CompanyRepository>,
     activity_logger: web::Data<ActivityLogger>,
-    path: web::Path<i64>,
+    path: web::Path<Uuid>,
     req: HttpRequest,
 ) -> Result<HttpResponse> {
     let shift_id = path.into_inner();
-    let user_id = claims.user_id();
+    let user_id = user_context.user_id();
 
     // Get shift information for validation
-    let shift_info = match shift_claim_repo.get_shift_claim_info(shift_id).await {
+    let shift_info = match shift_repo.find_by_id(shift_id).await {
         Ok(Some(info)) => info,
         Ok(None) => {
             return Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("Shift not found")))

@@ -1,12 +1,13 @@
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct UserCompany {
-    pub id: i64,
+    pub id: Uuid,
     pub user_id: String,
-    pub company_id: i64,
+    pub company_id: Uuid,
     pub pto_balance_hours: i32,
     pub sick_balance_hours: i32,
     pub personal_balance_hours: i32,
@@ -19,9 +20,9 @@ pub struct UserCompany {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CreateUserCompanyRequest {
+pub struct CreateUserCompanyInput {
     pub user_id: String,
-    pub company_id: i64,
+    pub company_id: String,
     pub pto_balance_hours: Option<i32>,
     pub sick_balance_hours: Option<i32>,
     pub personal_balance_hours: Option<i32>,
@@ -31,7 +32,7 @@ pub struct CreateUserCompanyRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct UpdateUserCompanyRequest {
+pub struct UpdateUserCompanyInput {
     pub pto_balance_hours: Option<i32>,
     pub sick_balance_hours: Option<i32>,
     pub personal_balance_hours: Option<i32>,
@@ -43,7 +44,7 @@ pub struct UpdateUserCompanyRequest {
 impl UserCompany {
     pub fn new(
         user_id: String,
-        company_id: i64,
+        company_id: String,
         pto_balance_hours: i32,
         sick_balance_hours: i32,
         personal_balance_hours: i32,
@@ -52,9 +53,9 @@ impl UserCompany {
     ) -> Self {
         let now = chrono::Utc::now().naive_utc();
         Self {
-            id: 0, // Will be set by database
+            id: Uuid::new_v4(),
             user_id,
-            company_id,
+            company_id: Uuid::parse_str(&company_id).expect("Invalid UUID format"),
             pto_balance_hours,
             sick_balance_hours,
             personal_balance_hours,

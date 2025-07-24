@@ -1,22 +1,23 @@
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct Shift {
-    pub id: i64,
+    pub id: Uuid, // UUID primary key
     pub title: String,
     pub description: Option<String>,
-    pub location_id: i64,
-    pub team_id: Option<i64>,
-    pub start_time: NaiveDateTime,
-    pub end_time: NaiveDateTime,
-    pub min_duration_minutes: Option<i64>,
-    pub max_duration_minutes: Option<i64>,
-    pub max_people: Option<i64>,
+    pub location_id: Uuid,                 // UUID for location references
+    pub team_id: Option<Uuid>,             // UUID for team references
+    pub start_time: DateTime<Utc>,         // TIMESTAMPTZ for datetime with timezone
+    pub end_time: DateTime<Utc>,           // TIMESTAMPTZ for datetime with timezone
+    pub min_duration_minutes: Option<i32>, // INTEGER maps to i32
+    pub max_duration_minutes: Option<i32>, // INTEGER maps to i32
+    pub max_people: Option<i32>,           // INTEGER maps to i32
     pub status: ShiftStatus,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
+    pub created_at: DateTime<Utc>, // TIMESTAMPTZ
+    pub updated_at: DateTime<Utc>, // TIMESTAMPTZ
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,16 +25,16 @@ pub struct Shift {
 pub struct ShiftInput {
     pub title: String,
     pub description: Option<String>,
-    pub location_id: i64,
-    pub team_id: Option<i64>,
-    pub start_time: NaiveDateTime,
-    pub end_time: NaiveDateTime,
-    pub min_duration_minutes: Option<i64>,
-    pub max_duration_minutes: Option<i64>,
-    pub max_people: Option<i64>,
+    pub location_id: Uuid,                 // UUID for location references
+    pub team_id: Option<Uuid>,             // UUID for team references
+    pub start_time: DateTime<Utc>,         // TIMESTAMPTZ
+    pub end_time: DateTime<Utc>,           // TIMESTAMPTZ
+    pub min_duration_minutes: Option<i32>, // INTEGER maps to i32
+    pub max_duration_minutes: Option<i32>, // INTEGER maps to i32
+    pub max_people: Option<i32>,           // INTEGER maps to i32
     pub status: ShiftStatus,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
+    pub created_at: DateTime<Utc>, // TIMESTAMPTZ
+    pub updated_at: DateTime<Utc>, // TIMESTAMPTZ
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -102,21 +103,21 @@ impl Default for ShiftStatus {
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftClaim {
-    pub id: i64,
-    pub shift_id: i64,
-    pub user_id: String,
+    pub id: Uuid,       // UUID primary key
+    pub shift_id: Uuid, // UUID for shift references
+    pub user_id: Uuid,  // UUID for user references
     pub status: ShiftClaimStatus,
-    pub approved_by: Option<String>,
+    pub approved_by: Option<Uuid>, // UUID for user references
     pub approval_notes: Option<String>,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
+    pub created_at: DateTime<Utc>, // TIMESTAMPTZ
+    pub updated_at: DateTime<Utc>, // TIMESTAMPTZ
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftClaimInput {
-    pub shift_id: i64,
-    pub user_id: String,
+    pub shift_id: Uuid, // UUID for shift references
+    pub user_id: Uuid,  // UUID for user references
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

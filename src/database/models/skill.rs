@@ -1,14 +1,17 @@
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct Skill {
-    pub id: i64,
+    pub id: Uuid,         // UUID primary key
+    pub company_id: Uuid, // UUID for company references
+    // Skill details
     pub name: String,
     pub description: Option<String>,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
+    pub created_at: DateTime<Utc>, // TIMESTAMPTZ
+    pub updated_at: DateTime<Utc>, // TIMESTAMPTZ
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -21,37 +24,37 @@ pub struct SkillInput {
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct UserSkill {
-    pub id: i64,
-    pub user_id: String,
-    pub skill_id: i64,
+    pub id: Uuid,       // UUID primary key
+    pub user_id: Uuid,  // UUID for user references
+    pub skill_id: Uuid, // UUID for skill references
     pub proficiency_level: ProficiencyLevel,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
+    pub created_at: DateTime<Utc>, // TIMESTAMPTZ
+    pub updated_at: DateTime<Utc>, // TIMESTAMPTZ
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserSkillInput {
-    pub user_id: String,
-    pub skill_id: i64,
+    pub user_id: Uuid,  // UUID for user references
+    pub skill_id: Uuid, // UUID for skill references
     pub proficiency_level: ProficiencyLevel,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftRequiredSkill {
-    pub id: i64,
-    pub shift_id: i64,
-    pub skill_id: i64,
+    pub id: Uuid,       // UUID primary key
+    pub shift_id: Uuid, // UUID for shift references
+    pub skill_id: Uuid, // UUID for skill references
     pub required_level: ProficiencyLevel,
-    pub created_at: NaiveDateTime,
+    pub created_at: DateTime<Utc>, // TIMESTAMPTZ
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftRequiredSkillInput {
-    pub shift_id: i64,
-    pub skill_id: i64,
+    pub shift_id: Uuid, // UUID for shift references
+    pub skill_id: Uuid, // UUID for skill references
     pub required_level: ProficiencyLevel,
 }
 

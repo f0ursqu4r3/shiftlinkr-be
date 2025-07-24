@@ -1,16 +1,17 @@
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct User {
-    pub id: String,
+    pub id: Uuid, // UUID primary key
     pub email: String,
     #[serde(skip_serializing)]
     pub password_hash: String,
     pub name: String,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
+    pub created_at: DateTime<Utc>, // TIMESTAMPTZ
+    pub updated_at: DateTime<Utc>, // TIMESTAMPTZ
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -83,7 +84,7 @@ impl std::str::FromStr for UserRole {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct CreateUserRequest {
+pub struct CreateUserInput {
     /// User's email address
     pub email: String,
     /// User's password
@@ -95,7 +96,7 @@ pub struct CreateUserRequest {
 #[derive(Debug, Serialize)]
 pub struct UserInfo {
     /// User's unique identifier
-    pub id: String,
+    pub id: Uuid, // UUID type
     /// User's email address
     pub email: String,
     /// User's full name
@@ -105,12 +106,12 @@ pub struct UserInfo {
 impl User {
     pub fn new(email: String, password_hash: String, name: String) -> Self {
         Self {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: Uuid::new_v4(), // Generate UUID directly
             email,
             password_hash,
             name,
-            created_at: chrono::Utc::now().naive_utc(),
-            updated_at: chrono::Utc::now().naive_utc(),
+            created_at: Utc::now(), // Use DateTime<Utc>
+            updated_at: Utc::now(),
         }
     }
 }

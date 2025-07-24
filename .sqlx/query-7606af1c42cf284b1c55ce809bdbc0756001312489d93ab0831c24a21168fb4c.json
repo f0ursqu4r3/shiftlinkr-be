@@ -9,7 +9,7 @@
         "Varchar",
         "Text",
         "Timestamptz",
-        "Int4"
+        "Uuid"
       ]
     },
     "nullable": []

@@ -1,40 +1,44 @@
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
-use super::user::{UserInfo, UserRole};
+use super::company::CompanyRole;
+use super::user::UserInfo;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct InviteToken {
-    pub id: String,
+    pub id: Uuid, // UUID primary key
     pub email: String,
     pub token: String,
-    pub inviter_id: String,
-    pub role: UserRole,
-    pub team_id: Option<i64>,
-    pub expires_at: NaiveDateTime,
-    pub used_at: Option<NaiveDateTime>,
-    pub created_at: NaiveDateTime,
+    pub inviter_id: Uuid, // UUID for user references
+    pub role: CompanyRole,
+    pub company_id: Uuid,               // UUID for company references
+    pub team_id: Option<Uuid>,          // UUID for team references
+    pub expires_at: DateTime<Utc>,      // TIMESTAMPTZ
+    pub used_at: Option<DateTime<Utc>>, // TIMESTAMPTZ
+    pub created_at: DateTime<Utc>,      // TIMESTAMPTZ
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CreateInviteRequest {
+pub struct CreateInviteInput {
     pub email: String,
-    pub role: UserRole,
-    pub team_id: Option<i64>,
+    pub role: CompanyRole,
+    pub company_id: Uuid,      // UUID type
+    pub team_id: Option<Uuid>, // UUID type
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateInviteResponse {
     pub invite_link: String,
-    pub expires_at: NaiveDateTime,
+    pub expires_at: DateTime<Utc>, // TIMESTAMPTZ
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetInviteRequest {
+pub struct GetInviteInput {
     pub token: String,
 }
 
@@ -42,15 +46,17 @@ pub struct GetInviteRequest {
 #[serde(rename_all = "camelCase")]
 pub struct GetInviteResponse {
     pub email: String,
-    pub role: UserRole,
-    pub team_name: Option<String>,
+    pub role: CompanyRole,
+    pub team_id: Option<Uuid>, // UUID type
+    pub company_id: Uuid,      // UUID type
+    pub company_name: String,
     pub inviter_name: String,
-    pub expires_at: NaiveDateTime,
+    pub expires_at: DateTime<Utc>, // TIMESTAMPTZ
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AcceptInviteRequest {
+pub struct AcceptInviteInput {
     pub token: String,
     pub name: String,
     pub password: String,

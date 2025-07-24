@@ -1,30 +1,31 @@
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftSwap {
-    pub id: i64,
-    pub requesting_user_id: String,
-    pub original_shift_id: i64,
-    pub target_user_id: Option<String>,
-    pub target_shift_id: Option<i64>,
+    pub id: Uuid,
+    pub requesting_user_id: Uuid,
+    pub original_shift_id: Uuid,
+    pub target_user_id: Option<Uuid>,
+    pub target_shift_id: Option<Uuid>,
     pub notes: Option<String>,
     pub swap_type: ShiftSwapType,
     pub status: ShiftSwapStatus,
-    pub approved_by: Option<String>,
+    pub approved_by: Option<Uuid>,
     pub approval_notes: Option<String>,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftSwapInput {
-    pub original_shift_id: i64,
-    pub requesting_user_id: String,
-    pub target_user_id: Option<String>,
-    pub target_shift_id: Option<i64>,
+    pub original_shift_id: Uuid,
+    pub requesting_user_id: Uuid,
+    pub target_user_id: Option<Uuid>,
+    pub target_shift_id: Option<Uuid>,
     pub notes: Option<String>,
     pub swap_type: ShiftSwapType,
 }
@@ -141,60 +142,35 @@ impl<'r> sqlx::Decode<'r, sqlx::Postgres> for ShiftSwapStatus {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftSwapResponse {
-    pub id: String,
+    pub id: Uuid,
     #[serde(rename = "type")]
     pub swap_type: String,
     pub requested_by: SwapUser,
     pub original_shift: SwapShift,
     pub status: String,
     pub reason: String,
-    pub request_date: NaiveDateTime,
+    pub request_date: DateTime<Utc>,
     pub responses: Option<Vec<SwapResponse>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SwapUser {
-    pub id: String,
-    pub name: String,
-    pub avatar: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SwapShift {
-    pub id: String,
-    pub start_time: NaiveDateTime,
-    pub end_time: NaiveDateTime,
-    pub department: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SwapResponse {
-    pub id: String,
-    pub user: SwapUser,
-    pub status: String,
 }
 
 impl From<ShiftSwap> for ShiftSwapResponse {
     fn from(swap: ShiftSwap) -> Self {
         Self {
-            id: swap.id.to_string(),
+            id: swap.id,
             swap_type: swap.swap_type.to_string(),
             requested_by: SwapUser {
-                id: swap.requesting_user_id.clone(),
+                id: swap.requesting_user_id,
                 name: "Unknown User".to_string(), // Will be filled by join query
                 avatar: "".to_string(),           // Will be filled by join query
             },
             original_shift: SwapShift {
-                id: swap.original_shift_id.to_string(),
-                start_time: NaiveDateTime::default(), // Will be filled by join query
-                end_time: NaiveDateTime::default(),   // Will be filled by join query
-                department: "Unknown".to_string(),    // Will be filled by join query
+                id: swap.original_shift_id,
+                start_time: DateTime::<Utc>::from_timestamp(0, 0).unwrap(), // Will be filled by join query
+                end_time: DateTime::<Utc>::from_timestamp(0, 0).unwrap(), // Will be filled by join query
+                department: "Unknown".to_string(), // Will be filled by join query
             },
             status: swap.status.to_string(),
             reason: swap.notes.unwrap_or_default(),
@@ -206,20 +182,45 @@ impl From<ShiftSwap> for ShiftSwapResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
+pub struct SwapUser {
+    pub id: Uuid,
+    pub name: String,
+    pub avatar: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct SwapShift {
+    pub id: Uuid,
+    pub start_time: DateTime<Utc>,
+    pub end_time: DateTime<Utc>,
+    pub department: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct SwapResponse {
+    pub id: Uuid,
+    pub user: SwapUser,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftSwapResponseRecord {
-    pub id: i64,
-    pub swap_id: i64,
-    pub responding_user_id: String,
+    pub id: Uuid,
+    pub swap_id: Uuid,
+    pub responding_user_id: Uuid,
     pub status: ShiftSwapResponseStatus,
     pub notes: Option<String>,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftSwapResponseInput {
-    pub swap_id: i64,
+    pub swap_id: String,
     pub responding_user_id: String,
     pub status: ShiftSwapResponseStatus,
     pub notes: Option<String>,

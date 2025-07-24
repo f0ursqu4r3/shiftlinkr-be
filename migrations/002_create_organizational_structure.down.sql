@@ -1,9 +1,9 @@
 -- Drop organizational structure tables in reverse dependency order
-ALTER TABLE
-    pto_balance_history DROP CONSTRAINT IF EXISTS fk_pto_balance_history_time_off_id;
+ALTER TABLE pto_balance_history
+DROP CONSTRAINT IF EXISTS fk_pto_balance_history_time_off_id;
 
-ALTER TABLE
-    invite_tokens DROP CONSTRAINT IF EXISTS fk_invite_tokens_team_id;
+ALTER TABLE invite_tokens
+DROP CONSTRAINT IF EXISTS fk_invite_tokens_team_id;
 
 DROP TABLE IF EXISTS shift_claims;
 
