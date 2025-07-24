@@ -28,7 +28,7 @@ pub enum PtoBalanceType {
 
 impl sqlx::Type<sqlx::Postgres> for PtoBalanceType {
     fn type_info() -> sqlx::postgres::PgTypeInfo {
-        <String as sqlx::Type<sqlx::Postgres>>::type_info()
+        sqlx::postgres::PgTypeInfo::with_name("VARCHAR")
     }
 }
 
@@ -91,7 +91,7 @@ pub enum PtoChangeType {
 
 impl sqlx::Type<sqlx::Postgres> for PtoChangeType {
     fn type_info() -> sqlx::postgres::PgTypeInfo {
-        <String as sqlx::Type<sqlx::Postgres>>::type_info()
+        sqlx::postgres::PgTypeInfo::with_name("VARCHAR")
     }
 }
 

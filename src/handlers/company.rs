@@ -5,6 +5,7 @@ use crate::database::models::{
 use crate::database::repositories::company::CompanyRepository;
 use crate::services::activity_logger::ActivityLogger;
 use crate::services::auth::Claims;
+use crate::services::user_context::{self, AsyncUserContext};
 use actix_web::{
     web::{Data, Json, Path},
     HttpRequest, HttpResponse, Result,
@@ -35,13 +36,13 @@ pub async fn get_user_primary_company(
 }
 
 pub async fn create_company(
-    claims: Claims,
+    AsyncUserContext(user_context): AsyncUserContext,
     company_repo: Data<CompanyRepository>,
     activity_logger: Data<ActivityLogger>,
     request: Json<CreateCompanyInput>,
     req: HttpRequest,
 ) -> Result<HttpResponse> {
-    let user_id = claims.sub;
+    let user_id = user_context.user_id();
 
     let company_name = request.name.clone();
     let companies = company_repo
@@ -76,7 +77,7 @@ pub async fn create_company(
             );
             metadata.insert(
                 "creator_user_id".to_string(),
-                serde_json::Value::String(claims.sub.to_string()),
+                serde_json::Value::String(user_id.to_string()),
             );
             metadata.insert(
                 "creator_role".to_string(),

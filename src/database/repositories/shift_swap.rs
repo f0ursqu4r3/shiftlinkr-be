@@ -452,22 +452,26 @@ impl ShiftSwapRepository {
         "#
         .to_string();
 
-        let mut conditions = vec!["ss.company_id = ?"];
         let mut params = vec![company_id.to_string()];
+        let mut conditions = vec![format!("ss.company_id = ${}", params.len() + 1)];
 
         if let Some(uid) = user_id {
-            conditions.push("(ss.requesting_user_id = ? OR ss.target_user_id = ?)");
+            conditions.push(format!(
+                "(ss.requesting_user_id = ${} OR ss.target_user_id = ${})",
+                params.len() + 1,
+                params.len() + 2
+            ));
             params.push(uid.to_string());
             params.push(uid.to_string());
         }
 
         if let Some(ref s) = status {
-            conditions.push("ss.status = ?");
+            conditions.push(format!("ss.status = ${}", params.len() + 1));
             params.push(s.to_string());
         }
 
         if let Some(ref st) = swap_type {
-            conditions.push("ss.swap_type = ?");
+            conditions.push(format!("ss.swap_type = ${}", params.len() + 1));
             params.push(st.to_string());
         }
 
@@ -475,13 +479,6 @@ impl ShiftSwapRepository {
         query.push_str(&conditions.join(" AND "));
 
         query.push_str(" ORDER BY ss.created_at DESC");
-
-        // Replace placeholders with actual SQL parameters
-        // Note: SQLx uses $1, $2, ... for parameters, so we need to replace ? with $n
-        // we should use regex?
-        for (i, _param) in params.iter().enumerate() {
-            query = query.replacen("?", &format!("${}", i + 1), 1);
-        }
 
         let mut prepared = sqlx::query_as::<_, ShiftSwapResponseRow>(&query);
 

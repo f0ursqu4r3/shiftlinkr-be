@@ -71,8 +71,7 @@ impl TimeOffRepository {
         start_date: Option<NaiveDate>,
         end_date: Option<NaiveDate>,
     ) -> Result<Vec<TimeOffRequest>> {
-        let mut query = String::from(
-            r#"
+        let mut query = r#"
             SELECT
                 id,
                 user_id,
@@ -87,42 +86,40 @@ impl TimeOffRepository {
                 updated_at
             FROM
                 time_off_requests
-            "#,
-        );
+            "#
+        .to_string();
+
         let mut params = Vec::new();
+        let mut conditions = vec![];
 
         if let Some(uid) = user_id {
-            query.push_str(" AND user_id = ?");
+            conditions.push(format!("user_id = ${}", params.len() + 1));
             params.push(uid.to_string());
         }
 
         if let Some(s) = status {
-            query.push_str(" AND status = ?");
+            conditions.push(format!("status = ${}", params.len() + 1));
             params.push(s.to_string());
         }
 
         if let Some(sd) = start_date {
-            query.push_str(" AND start_date >= ?");
+            conditions.push(format!("start_date >= ${}", params.len() + 1));
             params.push(sd.to_string());
         }
 
         if let Some(ed) = end_date {
-            query.push_str(" AND end_date <= ?");
+            conditions.push(format!("end_date <= ${}", params.len() + 1));
             params.push(ed.to_string());
         }
 
         if !params.is_empty() {
-            query.push_str(" WHERE");
+            query.push_str(" WHERE ");
+            query.push_str(&conditions.join(" AND "));
         }
 
         query.push_str(" ORDER BY created_at DESC");
 
-        for (i, _param) in params.iter().enumerate() {
-            query = query.replacen("?", &format!("${}", i + 1), 1);
-        }
-
         let mut prepared = sqlx::query_as::<_, TimeOffRequest>(&query);
-
         for param in params {
             prepared = prepared.bind(param);
         }

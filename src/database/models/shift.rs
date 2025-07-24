@@ -72,7 +72,7 @@ impl std::str::FromStr for ShiftStatus {
 
 impl sqlx::Type<sqlx::Postgres> for ShiftStatus {
     fn type_info() -> sqlx::postgres::PgTypeInfo {
-        <String as sqlx::Type<sqlx::Postgres>>::type_info()
+        sqlx::postgres::PgTypeInfo::with_name("VARCHAR")
     }
 }
 
@@ -155,7 +155,7 @@ impl std::str::FromStr for ShiftClaimStatus {
 
 impl sqlx::Type<sqlx::Postgres> for ShiftClaimStatus {
     fn type_info() -> sqlx::postgres::PgTypeInfo {
-        <String as sqlx::Type<sqlx::Postgres>>::type_info()
+        sqlx::postgres::PgTypeInfo::with_name("VARCHAR")
     }
 }
 

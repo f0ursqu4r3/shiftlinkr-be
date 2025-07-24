@@ -113,7 +113,7 @@ impl std::str::FromStr for AssignmentStatus {
 
 impl sqlx::Type<sqlx::Postgres> for AssignmentStatus {
     fn type_info() -> sqlx::postgres::PgTypeInfo {
-        <String as sqlx::Type<sqlx::Postgres>>::type_info()
+        sqlx::postgres::PgTypeInfo::with_name("VARCHAR")
     }
 }
 
@@ -169,7 +169,7 @@ impl std::str::FromStr for AssignmentResponse {
 
 impl sqlx::Type<sqlx::Postgres> for AssignmentResponse {
     fn type_info() -> sqlx::postgres::PgTypeInfo {
-        <String as sqlx::Type<sqlx::Postgres>>::type_info()
+        sqlx::postgres::PgTypeInfo::with_name("VARCHAR")
     }
 }
 

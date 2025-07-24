@@ -93,7 +93,7 @@ impl std::str::FromStr for ProficiencyLevel {
 
 impl sqlx::Type<sqlx::Postgres> for ProficiencyLevel {
     fn type_info() -> sqlx::postgres::PgTypeInfo {
-        <String as sqlx::Type<sqlx::Postgres>>::type_info()
+        sqlx::postgres::PgTypeInfo::with_name("VARCHAR")
     }
 }
 

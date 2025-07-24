@@ -430,7 +430,7 @@ impl ShiftRepository {
     }
 
     pub async fn delete_shift(&self, id: Uuid) -> Result<bool> {
-        let result = sqlx::query("DELETE FROM shifts WHERE id = ?")
+        let result = sqlx::query("DELETE FROM shifts WHERE id = $1")
             .bind(id)
             .execute(&self.pool)
             .await?;

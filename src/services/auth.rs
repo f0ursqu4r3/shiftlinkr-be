@@ -125,6 +125,7 @@ impl AuthService {
         Ok(AuthResponse {
             token,
             user: user.into(),
+            company: None, // No company info on registration
         })
     }
 
@@ -147,17 +148,16 @@ impl AuthService {
             .get_companies_for_user(user.id)
             .await?;
 
-        let primary_company = match companies.iter().find(|c| c.is_primary) {
-            Some(company) => Some(company),
-            None => match companies.first() {
-                Some(company) => Some(company),
-                None => None,
-            },
-        };
+        let primary_company = companies
+            .iter()
+            .find(|c| c.is_primary)
+            .or_else(|| companies.first())
+            .cloned();
+
         let company_id = primary_company.as_ref().map(|c| c.id);
 
         let role = match primary_company {
-            Some(company) => Some(company.role.clone()),
+            Some(ref company) => Some(company.role.clone()),
             None => None,
         };
 
@@ -167,6 +167,7 @@ impl AuthService {
         Ok(AuthResponse {
             token,
             user: user.into(),
+            company: primary_company,
         })
     }
 

@@ -3,6 +3,7 @@ use sqlx::PgPool;
 
 pub mod models;
 pub mod repositories;
+pub mod utils;
 
 pub async fn init_database(database_url: &str) -> Result<PgPool> {
     // Create connection pool

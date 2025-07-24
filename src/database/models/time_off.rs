@@ -72,7 +72,7 @@ impl std::str::FromStr for TimeOffType {
 
 impl sqlx::Type<sqlx::Postgres> for TimeOffType {
     fn type_info() -> sqlx::postgres::PgTypeInfo {
-        <String as sqlx::Type<sqlx::Postgres>>::type_info()
+        sqlx::postgres::PgTypeInfo::with_name("VARCHAR")
     }
 }
 
@@ -128,7 +128,7 @@ impl std::str::FromStr for TimeOffStatus {
 
 impl sqlx::Type<sqlx::Postgres> for TimeOffStatus {
     fn type_info() -> sqlx::postgres::PgTypeInfo {
-        <String as sqlx::Type<sqlx::Postgres>>::type_info()
+        sqlx::postgres::PgTypeInfo::with_name("VARCHAR")
     }
 }
 

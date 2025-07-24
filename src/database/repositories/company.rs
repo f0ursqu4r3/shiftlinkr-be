@@ -175,8 +175,8 @@ impl CompanyRepository {
     ) -> Result<CompanyEmployee> {
         // If this should be the primary company, unset other primary companies for this user
         if request.is_primary.unwrap_or(false) {
-            sqlx::query("UPDATE user_company SET is_primary = false WHERE user_id = ?")
-                .bind(&request.user_id)
+            sqlx::query("UPDATE user_company SET is_primary = false WHERE user_id = $1")
+                .bind(request.user_id)
                 .execute(&self.pool)
                 .await?;
         }
@@ -200,6 +200,11 @@ impl CompanyRepository {
                 role,
                 is_primary,
                 hire_date,
+                pto_balance_hours,
+                sick_balance_hours,
+                personal_balance_hours,
+                pto_accrual_rate,
+                last_accrual_date,
                 created_at,
                 updated_at
             "#,
@@ -210,7 +215,12 @@ impl CompanyRepository {
         .bind(request.is_primary.unwrap_or(false))
         .bind(&request.hire_date)
         .fetch_one(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| {
+            eprintln!("Detailed SQL Error: {:?}", e);
+            eprintln!("Error kind: {:?}", e.as_database_error());
+            e
+        })?;
 
         Ok(company_employee)
     }

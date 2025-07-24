@@ -2,6 +2,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::database::models::CompanyInfo;
+
 use super::user::UserInfo;
 
 #[derive(Debug, Deserialize)]
@@ -20,6 +22,8 @@ pub struct AuthResponse {
     pub token: String,
     /// User information
     pub user: UserInfo,
+    // Company information if available
+    pub company: Option<CompanyInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]

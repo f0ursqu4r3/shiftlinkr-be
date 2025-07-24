@@ -24,7 +24,7 @@ pub enum UserRole {
 
 impl sqlx::Type<sqlx::Postgres> for UserRole {
     fn type_info() -> sqlx::postgres::PgTypeInfo {
-        <String as sqlx::Type<sqlx::Postgres>>::type_info()
+        sqlx::postgres::PgTypeInfo::with_name("VARCHAR")
     }
 }
 
