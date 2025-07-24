@@ -9,7 +9,7 @@ use crate::database::repositories::company::CompanyRepository;
 use crate::database::repositories::shift_swap::ShiftSwapRepository;
 use crate::handlers::admin::ApiResponse;
 use crate::services::activity_logger::ActivityLogger;
-use crate::services::UserContext;
+use crate::services::user_context::AsyncUserContext;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,7 +34,7 @@ pub struct ApprovalRequest {
 
 /// Create a new shift swap request
 pub async fn create_swap_request(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     repo: web::Data<ShiftSwapRepository>,
     company_repo: web::Data<CompanyRepository>,
     activity_logger: web::Data<ActivityLogger>,
@@ -116,7 +116,7 @@ pub async fn create_swap_request(
 
 /// Get shift swap requests with optional filtering
 pub async fn get_swap_requests(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     repo: web::Data<ShiftSwapRepository>,
     query: web::Query<SwapQuery>,
 ) -> Result<HttpResponse> {
@@ -170,7 +170,7 @@ pub async fn get_swap_requests(
 
 /// Get a specific shift swap request by ID
 pub async fn get_swap_request(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     repo: web::Data<ShiftSwapRepository>,
     path: web::Path<i64>,
 ) -> Result<HttpResponse> {
@@ -209,7 +209,7 @@ pub async fn get_swap_request(
 
 /// Respond to a shift swap request (for targeted swaps)
 pub async fn respond_to_swap(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     repo: web::Data<ShiftSwapRepository>,
     company_repo: web::Data<CompanyRepository>,
     activity_logger: web::Data<ActivityLogger>,
@@ -332,7 +332,7 @@ pub async fn respond_to_swap(
 
 /// Approve a shift swap request (managers/admins only)
 pub async fn approve_swap_request(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     repo: web::Data<ShiftSwapRepository>,
     company_repo: web::Data<CompanyRepository>,
     activity_logger: web::Data<ActivityLogger>,
@@ -436,7 +436,7 @@ pub async fn approve_swap_request(
 
 /// Deny a shift swap request (managers/admins only)
 pub async fn deny_swap_request(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     repo: web::Data<ShiftSwapRepository>,
     company_repo: web::Data<CompanyRepository>,
     activity_logger: web::Data<ActivityLogger>,

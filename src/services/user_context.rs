@@ -4,7 +4,8 @@ use actix_web::{
 };
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::future::{ready, Ready};
+use std::future::Future;
+use std::pin::Pin;
 use uuid::Uuid;
 
 use crate::database::models::{
@@ -15,7 +16,7 @@ use crate::database::repositories::{company::CompanyRepository, user::UserReposi
 use crate::services::auth::Claims;
 
 /// User context that contains the current user and their company information
-/// This is automatically injected into requests via the FromRequest trait
+/// This is created per-request and contains the authenticated user's information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserContext {
     pub user: User,
@@ -134,36 +135,64 @@ impl UserContext {
     }
 }
 
-impl FromRequest for UserContext {
+/// Async extractor wrapper for UserContext
+/// This allows UserContext to be extracted directly in handler parameters with clean syntax.
+///
+/// ## Usage
+///
+/// ### Before (verbose):
+/// ```rust
+/// pub async fn handler(
+///     user_context_service: web::Data<UserContextService>,
+///     req: HttpRequest,
+/// ) -> Result<HttpResponse> {
+///     let user_context = match user_context_service.extract_context(&req).await {
+///         Ok(ctx) => ctx,
+///         Err(e) => {
+///             return Ok(HttpResponse::Unauthorized().json(
+///                 ApiResponse::<()>::error(&format!("Auth failed: {}", e))
+///             ));
+///         }
+///     };
+///     // Handler logic...
+/// }
+/// ```
+///
+/// ### After (elegant):
+/// ```rust
+/// pub async fn handler(
+///     AsyncUserContext(user_context): AsyncUserContext,
+/// ) -> Result<HttpResponse> {
+///     // Handler logic with user_context ready to use
+///     // Authentication errors are handled automatically
+/// }
+/// ```
+pub struct AsyncUserContext(pub UserContext);
+
+impl FromRequest for AsyncUserContext {
     type Error = ActixError;
-    type Future = Ready<Result<Self, Self::Error>>;
+    type Future = Pin<Box<dyn Future<Output = Result<Self, Self::Error>>>>;
 
-    fn from_request(req: &HttpRequest, payload: &mut Payload) -> Self::Future {
-        // First extract claims
-        let claims_future = Claims::from_request(req, payload);
+    fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
+        let req = req.clone();
 
-        match claims_future.into_inner() {
-            Ok(_claims) => {
-                // Get repositories from app data
-                let user_repo = req.app_data::<Data<UserRepository>>();
-                let company_repo = req.app_data::<Data<CompanyRepository>>();
+        Box::pin(async move {
+            let service = req
+                .app_data::<Data<UserContextService>>()
+                .ok_or_else(|| ErrorUnauthorized("UserContextService not found in app data"))?;
 
-                if let (Some(_user_repo), Some(_company_repo)) = (user_repo, company_repo) {
-                    // Since we can't make async calls here, we'll need to handle this differently
-                    // We'll return an error and suggest using the service directly in handlers
-                    ready(Err(ErrorUnauthorized(
-                        "UserContext cannot be extracted directly. Use UserContextService in your handler instead.",
-                    )))
-                } else {
-                    ready(Err(ErrorUnauthorized(
-                        "Required repositories not found in app data",
-                    )))
-                }
-            }
-            Err(e) => ready(Err(e)),
-        }
+            let context = service
+                .extract_context(&req)
+                .await
+                .map_err(|e| ErrorUnauthorized(format!("Failed to extract user context: {}", e)))?;
+
+            Ok(AsyncUserContext(context))
+        })
     }
 }
+
+// UserContext does not implement FromRequest directly because it requires async database operations.
+// Use UserContextService::extract_context() in your handlers instead.
 
 /// Service for creating UserContext from requests
 /// Use this in your handlers instead of trying to extract UserContext directly
@@ -185,17 +214,16 @@ impl UserContextService {
     pub async fn extract_context(&self, req: &HttpRequest) -> Result<UserContext> {
         // Extract claims from the request
         let mut payload = Payload::None;
-        let claims_result = Claims::from_request(req, &mut payload)
-            .into_inner()
-            .map_err(|e| anyhow!(e.to_string()))?;
+        let claims_result = Claims::from_request(req, &mut payload);
+
+        // Since FromRequest returns a Ready<Result<Claims, ActixError>>, we need to get the inner result
+        let claims = match claims_result.into_inner() {
+            Ok(claims) => claims,
+            Err(e) => return Err(anyhow!("Failed to extract claims: {}", e)),
+        };
 
         // Create UserContext from claims
-        UserContext::from_claims(
-            &claims_result,
-            &self.user_repository,
-            &self.company_repository,
-        )
-        .await
+        UserContext::from_claims(&claims, &self.user_repository, &self.company_repository).await
     }
 
     /// Create UserContext from existing claims (useful for testing or when you already have claims)

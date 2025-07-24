@@ -8,7 +8,8 @@ use crate::database::repositories::company::CompanyRepository;
 use crate::database::repositories::location::LocationRepository;
 use crate::database::repositories::user::UserRepository;
 use crate::services::auth::Claims;
-use crate::services::{ActivityLogger, UserContext};
+use crate::services::user_context::AsyncUserContext;
+use crate::services::ActivityLogger;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ApiResponse<T> {
@@ -70,7 +71,7 @@ impl ApiResponse<()> {
 
 // Location handlers
 pub async fn create_location(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     location_repo: web::Data<LocationRepository>,
     activity_logger: web::Data<ActivityLogger>,
     input: web::Json<LocationInput>,
@@ -128,7 +129,7 @@ pub async fn create_location(
 }
 
 pub async fn get_locations(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     location_repo: web::Data<LocationRepository>,
     company_repo: web::Data<CompanyRepository>,
 ) -> Result<HttpResponse> {
@@ -165,7 +166,7 @@ pub async fn get_locations(
 }
 
 pub async fn get_location(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     location_repo: web::Data<LocationRepository>,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse> {
@@ -193,7 +194,7 @@ pub async fn get_location(
 }
 
 pub async fn update_location(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     location_repo: web::Data<LocationRepository>,
     path: web::Path<Uuid>,
     input: web::Json<LocationInput>,
@@ -226,7 +227,7 @@ pub async fn update_location(
 }
 
 pub async fn delete_location(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     location_repo: web::Data<LocationRepository>,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse> {
@@ -273,7 +274,7 @@ pub async fn delete_location(
 
 // Team handlers
 pub async fn create_team(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     location_repo: web::Data<LocationRepository>,
     activity_logger: web::Data<ActivityLogger>,
     input: web::Json<TeamInput>,
@@ -352,7 +353,7 @@ pub async fn create_team(
 }
 
 pub async fn get_teams(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     location_repo: web::Data<LocationRepository>,
     query: web::Query<TeamQuery>,
 ) -> Result<HttpResponse> {
@@ -406,7 +407,7 @@ pub async fn get_teams(
 }
 
 pub async fn get_team(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     location_repo: web::Data<LocationRepository>,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse> {
@@ -442,7 +443,7 @@ pub async fn get_team(
 }
 
 pub async fn update_team(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     location_repo: web::Data<LocationRepository>,
     path: web::Path<Uuid>,
     input: web::Json<TeamInput>,
@@ -486,7 +487,7 @@ pub async fn update_team(
 }
 
 pub async fn delete_team(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     location_repo: web::Data<LocationRepository>,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse> {
@@ -530,7 +531,7 @@ pub async fn delete_team(
 
 // Team member handlers
 pub async fn add_team_member(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     location_repo: web::Data<LocationRepository>,
     path: web::Path<(Uuid, Uuid)>,
 ) -> Result<HttpResponse> {
@@ -572,7 +573,7 @@ pub async fn add_team_member(
 }
 
 pub async fn get_team_members(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     location_repo: web::Data<LocationRepository>,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse> {
@@ -615,7 +616,7 @@ pub async fn get_team_members(
 }
 
 pub async fn remove_team_member(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     location_repo: web::Data<LocationRepository>,
     path: web::Path<(Uuid, Uuid)>,
 ) -> Result<HttpResponse> {
@@ -669,7 +670,7 @@ pub struct TeamQuery {
 
 // User management handlers
 pub async fn get_users(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     company_repo: web::Data<CompanyRepository>,
 ) -> Result<HttpResponse> {
     // Check if user is admin or manager
@@ -903,7 +904,7 @@ pub async fn update_user(
 }
 
 pub async fn delete_user(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     user_repo: web::Data<UserRepository>,
     company_repo: web::Data<CompanyRepository>,
     path: web::Path<Uuid>,

@@ -13,7 +13,7 @@ use crate::database::repositories::shift::ShiftRepository;
 use crate::database::repositories::shift_claim::ShiftClaimRepository;
 use crate::handlers::admin::ApiResponse;
 use crate::services::activity_logger::ActivityLogger;
-use crate::services::UserContext;
+use crate::services::user_context::AsyncUserContext;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -47,7 +47,7 @@ pub struct UpdateShiftStatusRequest {
 
 // Shift handlers
 pub async fn create_shift(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     input: web::Json<ShiftInput>,
     shift_repo: web::Data<ShiftRepository>,
 ) -> Result<HttpResponse> {
@@ -76,7 +76,7 @@ pub async fn create_shift(
 }
 
 pub async fn get_shifts(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     shift_repo: web::Data<ShiftRepository>,
     query: web::Query<ShiftQuery>,
 ) -> Result<HttpResponse> {
@@ -134,7 +134,7 @@ pub async fn get_shifts(
 }
 
 pub async fn get_shift(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     shift_repo: web::Data<ShiftRepository>,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse> {
@@ -160,7 +160,7 @@ pub async fn get_shift(
 }
 
 pub async fn update_shift(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     shift_repo: web::Data<ShiftRepository>,
     path: web::Path<Uuid>,
     input: web::Json<ShiftInput>,
@@ -186,7 +186,7 @@ pub async fn update_shift(
 }
 
 pub async fn assign_shift(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     shift_repo: web::Data<ShiftRepository>,
     schedule_repo: web::Data<ScheduleRepository>,
     company_repo: web::Data<CompanyRepository>,
@@ -300,7 +300,7 @@ pub async fn assign_shift(
 }
 
 pub async fn unassign_shift(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     shift_repo: web::Data<ShiftRepository>,
     company_repo: web::Data<CompanyRepository>,
     activity_logger: web::Data<ActivityLogger>,
@@ -363,7 +363,7 @@ pub async fn unassign_shift(
 }
 
 pub async fn update_shift_status(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     shift_repo: web::Data<ShiftRepository>,
     path: web::Path<Uuid>,
     input: web::Json<UpdateShiftStatusRequest>,
@@ -398,7 +398,7 @@ pub async fn update_shift_status(
 }
 
 pub async fn delete_shift(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     shift_repo: web::Data<ShiftRepository>,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse> {
@@ -424,7 +424,7 @@ pub async fn delete_shift(
 
 // Get shift assignments for a specific shift (managers/admins only)
 pub async fn get_shift_assignments(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     schedule_repo: web::Data<ScheduleRepository>,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse> {
@@ -449,7 +449,7 @@ pub async fn get_shift_assignments(
 
 // Get user's pending assignments
 pub async fn get_my_pending_assignments(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     schedule_repo: web::Data<ScheduleRepository>,
 ) -> Result<HttpResponse> {
     let user_id = user_context.user_id();
@@ -476,7 +476,7 @@ pub async fn get_my_pending_assignments(
 
 // Respond to a shift assignment
 pub async fn respond_to_assignment(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     schedule_repo: web::Data<ScheduleRepository>,
     shift_repo: web::Data<ShiftRepository>,
     path: web::Path<Uuid>,
@@ -537,7 +537,7 @@ pub async fn respond_to_assignment(
 
 // Employee shift claiming with proper validation and workflow
 pub async fn claim_shift(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     shift_repo: web::Data<ShiftRepository>,
     shift_claim_repo: web::Data<ShiftClaimRepository>,
     company_repo: web::Data<CompanyRepository>,
@@ -702,7 +702,7 @@ pub async fn claim_shift(
 
 // Get claims for a specific shift (managers/admins only)
 pub async fn get_shift_claims(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     shift_claim_repo: web::Data<ShiftClaimRepository>,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse> {
@@ -727,7 +727,7 @@ pub async fn get_shift_claims(
 
 // Get user's own claims
 pub async fn get_my_claims(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     shift_claim_repo: web::Data<ShiftClaimRepository>,
 ) -> Result<HttpResponse> {
     let user_id = user_context.user_id();
@@ -744,7 +744,7 @@ pub async fn get_my_claims(
 
 // Approve a shift claim (managers/admins only)
 pub async fn approve_shift_claim(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     shift_claim_repo: web::Data<ShiftClaimRepository>,
     shift_repo: web::Data<ShiftRepository>,
     path: web::Path<Uuid>,
@@ -834,7 +834,7 @@ pub async fn approve_shift_claim(
 
 // Reject a shift claim (managers/admins only)
 pub async fn reject_shift_claim(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     shift_claim_repo: web::Data<ShiftClaimRepository>,
     path: web::Path<Uuid>,
     rejection_data: web::Json<ApprovalRequest>,
@@ -870,7 +870,7 @@ pub async fn reject_shift_claim(
 
 // Cancel a shift claim (by the user who made it)
 pub async fn cancel_shift_claim(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     shift_claim_repo: web::Data<ShiftClaimRepository>,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse> {
@@ -900,7 +900,7 @@ pub async fn cancel_shift_claim(
 
 // Get pending claims for approval (managers/admins only)
 pub async fn get_pending_claims(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     shift_claim_repo: web::Data<ShiftClaimRepository>,
 ) -> Result<HttpResponse> {
     // Check if user is admin or manager

@@ -218,7 +218,7 @@ async fn main() -> Result<()> {
                             .route("/{id}", web::delete().to(time_off::delete_time_off_request))
                             .route(
                                 "/{id}/approve",
-                                web::post().to(time_off::approve_time_off_request_endpoint),
+                                web::post().to(time_off::approve_time_off_request),
                             )
                             .route(
                                 "/{id}/deny",

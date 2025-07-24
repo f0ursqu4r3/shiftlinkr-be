@@ -7,7 +7,7 @@ use crate::database::models::{
 };
 use crate::database::repositories::{company::CompanyRepository, skill::SkillRepository};
 use crate::handlers::admin::ApiResponse;
-use crate::services::UserContext;
+use crate::services::user_context::AsyncUserContext;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -24,7 +24,7 @@ pub struct SkillSearchQuery {
 
 // Skills management
 pub async fn create_skill(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     skill_repo: web::Data<SkillRepository>,
     input: web::Json<SkillInput>,
     _req: HttpRequest,
@@ -58,7 +58,7 @@ pub async fn create_skill(
 }
 
 pub async fn get_all_skills(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     skill_repo: web::Data<SkillRepository>,
     _req: HttpRequest,
 ) -> Result<HttpResponse> {
@@ -81,7 +81,6 @@ pub async fn get_all_skills(
 }
 
 pub async fn get_skill(
-    _user_context: web::Data<UserContext>,
     skill_repo: web::Data<SkillRepository>,
     path: web::Path<i64>,
     _req: HttpRequest,
@@ -100,7 +99,7 @@ pub async fn get_skill(
 }
 
 pub async fn update_skill(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     skill_repo: web::Data<SkillRepository>,
     company_repo: web::Data<CompanyRepository>,
     path: web::Path<Uuid>,
@@ -134,7 +133,7 @@ pub async fn update_skill(
 }
 
 pub async fn delete_skill(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     skill_repo: web::Data<SkillRepository>,
     company_repo: web::Data<CompanyRepository>,
     path: web::Path<i64>,
@@ -178,7 +177,7 @@ pub async fn delete_skill(
 
 // User Skills management
 pub async fn add_user_skill(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     skill_repo: web::Data<SkillRepository>,
     input: web::Json<UserSkillInput>,
     _req: HttpRequest,
@@ -200,7 +199,7 @@ pub async fn add_user_skill(
 }
 
 pub async fn get_user_skills(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     skill_repo: web::Data<SkillRepository>,
     path: web::Path<String>,
     _req: HttpRequest,
@@ -224,7 +223,7 @@ pub async fn get_user_skills(
 }
 
 pub async fn update_user_skill(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     skill_repo: web::Data<SkillRepository>,
     path: web::Path<i64>,
     input: web::Json<UpdateUserSkillRequest>,
@@ -257,7 +256,7 @@ pub async fn update_user_skill(
 }
 
 pub async fn remove_user_skill(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     skill_repo: web::Data<SkillRepository>,
     path: web::Path<(String, i64)>,
     _req: HttpRequest,
@@ -287,7 +286,7 @@ pub async fn remove_user_skill(
 
 // Shift Required Skills management
 pub async fn add_shift_required_skill(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     skill_repo: web::Data<SkillRepository>,
     input: web::Json<ShiftRequiredSkillInput>,
     _req: HttpRequest,
@@ -316,7 +315,6 @@ pub async fn add_shift_required_skill(
 }
 
 pub async fn get_shift_required_skills(
-    _user_context: web::Data<UserContext>,
     skill_repo: web::Data<SkillRepository>,
     path: web::Path<i64>,
     _req: HttpRequest,
@@ -337,7 +335,7 @@ pub async fn get_shift_required_skills(
 }
 
 pub async fn remove_shift_required_skill(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     skill_repo: web::Data<SkillRepository>,
     path: web::Path<(i64, i64)>,
     _req: HttpRequest,
@@ -373,7 +371,7 @@ pub async fn remove_shift_required_skill(
 
 // Skill search and matching
 pub async fn get_users_with_skill(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     _skill_repo: web::Data<SkillRepository>,
     path: web::Path<i64>,
     _query: web::Query<SkillSearchQuery>,

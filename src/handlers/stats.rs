@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::database::repositories::stats::StatsRepository;
 use crate::handlers::admin::ApiResponse;
-use crate::services::UserContext;
+use crate::services::user_context::AsyncUserContext;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -17,7 +17,7 @@ pub struct StatsQuery {
 
 /// Get dashboard statistics
 pub async fn get_dashboard_stats(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     repo: web::Data<StatsRepository>,
     query: web::Query<StatsQuery>,
 ) -> Result<HttpResponse> {
@@ -51,7 +51,7 @@ pub async fn get_dashboard_stats(
 
 /// Get shift statistics
 pub async fn get_shift_stats(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     repo: web::Data<StatsRepository>,
     query: web::Query<StatsQuery>,
 ) -> Result<HttpResponse> {
@@ -82,7 +82,7 @@ pub async fn get_shift_stats(
 
 /// Get time-off statistics
 pub async fn get_time_off_stats(
-    user_context: web::Data<UserContext>,
+    AsyncUserContext(user_context): AsyncUserContext,
     repo: web::Data<StatsRepository>,
     query: web::Query<StatsQuery>,
 ) -> Result<HttpResponse> {
