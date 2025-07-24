@@ -98,7 +98,7 @@ impl SkillRepository {
         Ok(skills)
     }
 
-    pub async fn update_skill(&self, id: i64, input: SkillInput) -> Result<Option<Skill>> {
+    pub async fn update_skill(&self, id: Uuid, input: SkillInput) -> Result<Option<Skill>> {
         let now = Utc::now().naive_utc();
         let skill = sqlx::query_as::<_, Skill>(
             r#"

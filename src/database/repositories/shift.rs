@@ -99,7 +99,40 @@ impl ShiftRepository {
         Ok(row.map(|r| r.into()))
     }
 
-    pub async fn get_shifts_by_location(&self, location_id: Uuid) -> Result<Vec<Shift>> {
+    pub async fn find_by_company_id(&self, company_id: Uuid) -> Result<Vec<Shift>> {
+        let rows = sqlx::query_as::<_, Shift>(
+            r#"
+            SELECT
+                s.id,
+                s.title,
+                s.description,
+                s.location_id,
+                s.team_id,
+                s.start_time,
+                s.end_time,
+                s.min_duration_minutes,
+                s.max_duration_minutes,
+                s.max_people,
+                s.status,
+                s.created_at,
+                s.updated_at
+            FROM
+                shifts s
+                JOIN locations l ON s.location_id = l.id
+            WHERE
+                l.company_id = ?
+            ORDER BY
+                s.start_time
+            "#,
+        )
+        .bind(company_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows.into_iter().map(|row| row.into()).collect())
+    }
+
+    pub async fn find_by_location_id(&self, location_id: Uuid) -> Result<Vec<Shift>> {
         let rows = sqlx::query_as::<_, Shift>(
             r#"
             SELECT
@@ -131,7 +164,7 @@ impl ShiftRepository {
         Ok(rows.into_iter().map(|row| row.into()).collect())
     }
 
-    pub async fn get_shifts_by_team(&self, team_id: Uuid) -> Result<Vec<Shift>> {
+    pub async fn find_by_team_id(&self, team_id: Uuid) -> Result<Vec<Shift>> {
         let rows = sqlx::query_as::<_, Shift>(
             r#"
             SELECT
@@ -163,7 +196,7 @@ impl ShiftRepository {
         Ok(rows.into_iter().map(|row| row.into()).collect())
     }
 
-    pub async fn get_shifts_by_date_range(
+    pub async fn find_by_date_range(
         &self,
         start_date: DateTime<Utc>,
         end_date: DateTime<Utc>,
@@ -236,7 +269,7 @@ impl ShiftRepository {
         Ok(rows.into_iter().map(|row| row.into()).collect())
     }
 
-    pub async fn get_open_shifts_by_location(&self, location_id: Uuid) -> Result<Vec<Shift>> {
+    pub async fn find_open_shifts_by_location(&self, location_id: Uuid) -> Result<Vec<Shift>> {
         let rows = sqlx::query_as::<_, Shift>(
             r#"
             SELECT
@@ -270,7 +303,7 @@ impl ShiftRepository {
         Ok(rows.into_iter().map(|row| row.into()).collect())
     }
 
-    pub async fn get_open_shifts(&self) -> Result<Vec<Shift>> {
+    pub async fn find_open_shifts(&self) -> Result<Vec<Shift>> {
         let rows = sqlx::query_as::<_, Shift>(
             r#"
             SELECT
@@ -406,7 +439,7 @@ impl ShiftRepository {
     }
 
     // Get shifts assigned to a specific user through the assignment system
-    pub async fn get_shifts_by_user(&self, user_id: Uuid) -> Result<Vec<Shift>> {
+    pub async fn find_shifts_by_user(&self, user_id: Uuid) -> Result<Vec<Shift>> {
         let rows = sqlx::query_as::<_, Shift>(
             r#"
             SELECT DISTINCT

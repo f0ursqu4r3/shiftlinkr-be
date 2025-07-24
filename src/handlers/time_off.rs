@@ -2,6 +2,7 @@ use actix_web::{web, HttpRequest, HttpResponse, Result};
 use chrono::NaiveDateTime;
 use serde::Deserialize;
 use std::collections::HashMap;
+use uuid::Uuid;
 
 use crate::database::models::{
     Action, PtoBalanceType, TimeOffRequestInput, TimeOffStatus, TimeOffType,
@@ -10,8 +11,8 @@ use crate::database::repositories::company::CompanyRepository;
 use crate::database::repositories::pto_balance::PtoBalanceRepository;
 use crate::database::repositories::time_off::TimeOffRepository;
 use crate::handlers::admin::ApiResponse;
-use crate::services::auth::Claims;
 use crate::services::ActivityLogger;
+use crate::services::UserContext;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -29,8 +30,8 @@ pub struct ApprovalRequest {
 
 /// Create a new time-off request
 pub async fn create_time_off_request(
-    claims: Claims,
-    repo: web::Data<TimeOffRepository>,
+    user_context: web::Data<UserContext>,
+    time_off_repo: web::Data<TimeOffRepository>,
     company_repo: web::Data<CompanyRepository>,
     activity_logger: web::Data<ActivityLogger>,
     input: web::Json<TimeOffRequestInput>,
@@ -39,15 +40,15 @@ pub async fn create_time_off_request(
     // Users can only create requests for themselves unless they're managers/admins
     let mut request_input = input.into_inner();
 
-    if !claims.is_admin() && !claims.is_manager() && request_input.user_id != claims.sub {
+    if !user_context.is_manager_or_admin() && request_input.user_id != user_context.user.id {
         return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
             "Can only create requests for yourself",
         )));
     }
 
     // If employee, force user_id to be their own ID
-    if !claims.is_admin() && !claims.is_manager() {
-        request_input.user_id = claims.sub.clone();
+    if !user_context.is_manager_or_admin() {
+        request_input.user_id = user_context.user.id;
     }
 
     let request_type = request_input.request_type.clone();
@@ -55,11 +56,13 @@ pub async fn create_time_off_request(
     let end_date = request_input.end_date;
     let requesting_user_id = request_input.user_id.clone();
 
-    match repo.create_request(request_input).await {
+    match time_off_repo.create_request(request_input).await {
         Ok(request) => {
             // Log time-off request creation activity
             // Get user's primary company for logging
-            if let Ok(Some(company)) = company_repo.get_primary_company_for_user(&claims.sub).await
+            if let Ok(Some(company)) = company_repo
+                .get_primary_company_for_user(user_context.user.id)
+                .await
             {
                 let mut metadata = HashMap::new();
                 metadata.insert(
@@ -76,13 +79,13 @@ pub async fn create_time_off_request(
                 );
                 metadata.insert(
                     "requesting_user".to_string(),
-                    serde_json::Value::String(requesting_user_id.clone()),
+                    serde_json::Value::String(requesting_user_id.to_string()),
                 );
 
                 if let Err(e) = activity_logger
                     .log_time_off_activity(
                         company.id,
-                        Some(claims.sub.parse().unwrap_or(0)),
+                        Some(user_context.user.id),
                         request.id,
                         Action::CREATED,
                         format!("Time-off request created for user {}", requesting_user_id),
@@ -110,15 +113,18 @@ pub async fn create_time_off_request(
 
 /// Get time-off requests with optional filtering
 pub async fn get_time_off_requests(
-    claims: Claims,
-    repo: web::Data<TimeOffRepository>,
+    user_context: web::Data<UserContext>,
+    time_off_repo: web::Data<TimeOffRepository>,
     query: web::Query<TimeOffQuery>,
 ) -> Result<HttpResponse> {
     // Employees can only see their own requests
-    let user_id = if !claims.is_admin() && !claims.is_manager() {
-        Some(claims.sub.as_str())
+    let user_id = if !user_context.is_manager_or_admin() {
+        Some(user_context.user.id)
     } else {
-        query.user_id.as_deref()
+        query
+            .user_id
+            .as_ref()
+            .and_then(|id| id.parse::<Uuid>().ok())
     };
 
     // Convert status string to enum if provided
@@ -135,7 +141,11 @@ pub async fn get_time_off_requests(
         None
     };
 
-    match repo.get_requests(user_id, status_filter, None, None).await {
+    // Note: Repository method expects Option<Uuid> for user_id
+    match time_off_repo
+        .get_requests(user_id, status_filter, None, None)
+        .await
+    {
         Ok(requests) => Ok(HttpResponse::Ok().json(ApiResponse::success(requests))),
         Err(err) => {
             log::error!("Error fetching time-off requests: {}", err);
@@ -150,16 +160,16 @@ pub async fn get_time_off_requests(
 
 /// Get a specific time-off request by ID
 pub async fn get_time_off_request(
-    claims: Claims,
-    repo: web::Data<TimeOffRepository>,
-    path: web::Path<i64>,
+    user_context: web::Data<UserContext>,
+    time_off_repo: web::Data<TimeOffRepository>,
+    path: web::Path<Uuid>,
 ) -> Result<HttpResponse> {
     let request_id = path.into_inner();
 
-    match repo.get_request_by_id(request_id).await {
+    match time_off_repo.get_request_by_id(request_id).await {
         Ok(Some(request)) => {
             // Check if user has permission to view this request
-            if !claims.is_admin() && !claims.is_manager() && request.user_id != claims.sub {
+            if !user_context.is_manager_or_admin() && request.user_id != user_context.user.id {
                 return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
                     "Cannot view other users' requests",
                 )));
@@ -181,21 +191,22 @@ pub async fn get_time_off_request(
 
 /// Update a time-off request
 pub async fn update_time_off_request(
-    claims: Claims,
-    repo: web::Data<TimeOffRepository>,
+    user_context: web::Data<UserContext>,
+    time_off_repo: web::Data<TimeOffRepository>,
     company_repo: web::Data<CompanyRepository>,
     activity_logger: web::Data<ActivityLogger>,
-    path: web::Path<i64>,
+    path: web::Path<Uuid>,
     input: web::Json<TimeOffRequestInput>,
     req: HttpRequest,
 ) -> Result<HttpResponse> {
     let request_id = path.into_inner();
 
     // First check if the request exists and get current state
-    match repo.get_request_by_id(request_id).await {
+    match time_off_repo.get_request_by_id(request_id).await {
         Ok(Some(existing_request)) => {
             // Check permissions - users can only update their own pending requests
-            if !claims.is_admin() && !claims.is_manager() && existing_request.user_id != claims.sub
+            if !user_context.is_manager_or_admin()
+                && existing_request.user_id != user_context.user.id
             {
                 return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
                     "Cannot update other users' requests",
@@ -215,15 +226,19 @@ pub async fn update_time_off_request(
             let new_end_date = request_input.end_date;
 
             // Ensure user_id doesn't change for non-admin/manager users
-            if !claims.is_admin() && !claims.is_manager() {
-                request_input.user_id = existing_request.user_id.clone();
+            if !user_context.is_manager_or_admin() {
+                request_input.user_id = existing_request.user_id;
             }
 
-            match repo.update_request(request_id, request_input).await {
+            match time_off_repo
+                .update_request(request_id, request_input)
+                .await
+            {
                 Ok(updated_request) => {
                     // Log time-off request update activity
-                    if let Ok(Some(company)) =
-                        company_repo.get_primary_company_for_user(&claims.sub).await
+                    if let Ok(Some(company)) = company_repo
+                        .get_primary_company_for_user(user_context.user.id)
+                        .await
                     {
                         let mut metadata = HashMap::new();
                         metadata.insert(
@@ -240,7 +255,7 @@ pub async fn update_time_off_request(
                         );
                         metadata.insert(
                             "target_user".to_string(),
-                            serde_json::Value::String(updated_request.user_id.clone()),
+                            serde_json::Value::String(updated_request.user_id.to_string()),
                         );
 
                         // Add previous values for comparison
@@ -263,8 +278,8 @@ pub async fn update_time_off_request(
                         if let Err(e) = activity_logger
                             .log_time_off_activity(
                                 company.id,
-                                Some(claims.sub.parse().unwrap_or(0)),
-                                request_id,
+                                Some(user_context.user.id),
+                                request_id, // Use request_id directly
                                 Action::UPDATED,
                                 format!(
                                     "Time-off request updated for user {}",
@@ -305,17 +320,18 @@ pub async fn update_time_off_request(
 
 /// Delete a time-off request
 pub async fn delete_time_off_request(
-    claims: Claims,
-    repo: web::Data<TimeOffRepository>,
-    path: web::Path<i64>,
+    user_context: web::Data<UserContext>,
+    time_off_repo: web::Data<TimeOffRepository>,
+    path: web::Path<Uuid>,
 ) -> Result<HttpResponse> {
     let request_id = path.into_inner();
 
     // First check if the request exists and get current state
-    match repo.get_request_by_id(request_id).await {
+    match time_off_repo.get_request_by_id(request_id).await {
         Ok(Some(existing_request)) => {
             // Check permissions - users can only delete their own pending requests
-            if !claims.is_admin() && !claims.is_manager() && existing_request.user_id != claims.sub
+            if !user_context.is_manager_or_admin()
+                && existing_request.user_id != user_context.user.id
             {
                 return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
                     "Cannot delete other users' requests",
@@ -329,7 +345,7 @@ pub async fn delete_time_off_request(
                 )));
             }
 
-            match repo.delete_request(request_id).await {
+            match time_off_repo.delete_request(request_id).await {
                 Ok(_) => Ok(HttpResponse::NoContent().finish()),
                 Err(err) => {
                     log::error!("Error deleting time-off request: {}", err);
@@ -355,26 +371,33 @@ pub async fn delete_time_off_request(
 
 /// Approve a time-off request (managers/admins only)
 pub async fn approve_time_off_request(
-    claims: Claims,
-    repo: web::Data<TimeOffRepository>,
-    company_repo: web::Data<CompanyRepository>,
+    user_context: web::Data<UserContext>,
+    time_off_repo: web::Data<TimeOffRepository>,
     activity_logger: web::Data<ActivityLogger>,
     pto_repo: web::Data<PtoBalanceRepository>,
-    path: web::Path<i64>,
+    path: web::Path<Uuid>,
     approval: web::Json<ApprovalRequest>,
     req: HttpRequest,
 ) -> Result<HttpResponse> {
     // Only managers and admins can approve requests
-    if !claims.is_admin() && !claims.is_manager() {
+    if !user_context.is_manager_or_admin() {
         return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
             "Insufficient permissions to approve requests",
         )));
     }
 
     let request_id = path.into_inner();
+    let company_id = match user_context.company_id() {
+        Some(id) => id,
+        None => {
+            return Ok(
+                HttpResponse::BadRequest().json(ApiResponse::<()>::error("Company ID is required"))
+            );
+        }
+    };
 
     // First, get the time-off request to check balance requirements
-    let time_off_request = match repo.get_request_by_id(request_id).await {
+    let time_off_request = match time_off_repo.get_request_by_id(request_id).await {
         Ok(Some(request)) => request,
         Ok(None) => {
             return Ok(HttpResponse::NotFound()
@@ -403,7 +426,10 @@ pub async fn approve_time_off_request(
     };
 
     // Check if user has sufficient balance
-    let user_balance = match pto_repo.get_balance(&time_off_request.user_id).await {
+    let user_balance = match pto_repo
+        .get_balance_for_company(time_off_request.user_id, company_id)
+        .await
+    {
         Ok(Some(balance)) => balance,
         Ok(None) => {
             return Ok(
@@ -434,15 +460,16 @@ pub async fn approve_time_off_request(
 
     // Approve the request
     let balance_type_for_logging = balance_type.clone();
-    match repo
-        .approve_request(request_id, &claims.sub, approval.notes.clone())
+    match time_off_repo
+        .approve_request(request_id, user_context.user.id, approval.notes.clone())
         .await
     {
         Ok(approved_request) => {
             // Deduct PTO balance
             match pto_repo
-                .use_balance_for_time_off(
-                    &time_off_request.user_id,
+                .use_balance_for_time_off_for_company(
+                    time_off_request.user_id,
+                    company_id,
                     request_id,
                     balance_type,
                     hours_needed,
@@ -458,53 +485,46 @@ pub async fn approve_time_off_request(
                     );
 
                     // Log time-off request approval activity
-                    if let Ok(Some(company)) =
-                        company_repo.get_primary_company_for_user(&claims.sub).await
-                    {
-                        let mut metadata = HashMap::new();
+                    let mut metadata = HashMap::new();
+                    metadata.insert(
+                        "request_type".to_string(),
+                        serde_json::Value::String(format!("{:?}", time_off_request.request_type)),
+                    );
+                    metadata.insert(
+                        "target_user".to_string(),
+                        serde_json::Value::String(time_off_request.user_id.to_string()),
+                    );
+                    metadata.insert(
+                        "hours_deducted".to_string(),
+                        serde_json::Value::Number(serde_json::Number::from(hours_needed)),
+                    );
+                    metadata.insert(
+                        "balance_type".to_string(),
+                        serde_json::Value::String(format!("{:?}", balance_type_for_logging)),
+                    );
+                    if let Some(notes) = &approval.notes {
                         metadata.insert(
-                            "request_type".to_string(),
-                            serde_json::Value::String(format!(
-                                "{:?}",
-                                time_off_request.request_type
-                            )),
+                            "approval_notes".to_string(),
+                            serde_json::Value::String(notes.clone()),
                         );
-                        metadata.insert(
-                            "target_user".to_string(),
-                            serde_json::Value::String(time_off_request.user_id.clone()),
-                        );
-                        metadata.insert(
-                            "hours_deducted".to_string(),
-                            serde_json::Value::Number(serde_json::Number::from(hours_needed)),
-                        );
-                        metadata.insert(
-                            "balance_type".to_string(),
-                            serde_json::Value::String(format!("{:?}", balance_type_for_logging)),
-                        );
-                        if let Some(notes) = &approval.notes {
-                            metadata.insert(
-                                "approval_notes".to_string(),
-                                serde_json::Value::String(notes.clone()),
-                            );
-                        }
+                    }
 
-                        if let Err(e) = activity_logger
-                            .log_time_off_activity(
-                                company.id,
-                                Some(claims.sub.parse().unwrap_or(0)),
-                                request_id,
-                                Action::APPROVED,
-                                format!(
-                                    "Time-off request approved for user {}",
-                                    time_off_request.user_id
-                                ),
-                                Some(metadata),
-                                &req,
-                            )
-                            .await
-                        {
-                            log::warn!("Failed to log time-off request approval activity: {}", e);
-                        }
+                    if let Err(e) = activity_logger
+                        .log_time_off_activity(
+                            company_id,
+                            Some(user_context.user.id),
+                            request_id,
+                            Action::APPROVED,
+                            format!(
+                                "Time-off request approved for user {}",
+                                time_off_request.user_id
+                            ),
+                            Some(metadata),
+                            &req,
+                        )
+                        .await
+                    {
+                        log::warn!("Failed to log time-off request approval activity: {}", e);
                     }
 
                     Ok(HttpResponse::Ok().json(ApiResponse::success(approved_request)))
@@ -533,25 +553,32 @@ pub async fn approve_time_off_request(
 
 /// Deny a time-off request (managers/admins only)
 pub async fn deny_time_off_request(
-    claims: Claims,
-    repo: web::Data<TimeOffRepository>,
-    company_repo: web::Data<CompanyRepository>,
+    user_context: web::Data<UserContext>,
+    time_off_repo: web::Data<TimeOffRepository>,
     activity_logger: web::Data<ActivityLogger>,
-    path: web::Path<i64>,
+    path: web::Path<Uuid>,
     denial: web::Json<ApprovalRequest>,
     req: HttpRequest,
 ) -> Result<HttpResponse> {
     // Only managers and admins can deny requests
-    if !claims.is_admin() && !claims.is_manager() {
+    if !user_context.is_manager_or_admin() {
         return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
             "Insufficient permissions to deny requests",
         )));
     }
 
     let request_id = path.into_inner();
+    let company_id = match user_context.company.clone() {
+        Some(company) => company.id,
+        None => {
+            return Ok(
+                HttpResponse::BadRequest().json(ApiResponse::<()>::error("Company ID is required"))
+            );
+        }
+    };
 
     // Get the time-off request details for logging
-    let time_off_request = match repo.get_request_by_id(request_id).await {
+    let time_off_request = match time_off_repo.get_request_by_id(request_id).await {
         Ok(Some(request)) => request,
         Ok(None) => {
             return Ok(HttpResponse::NotFound()
@@ -564,47 +591,44 @@ pub async fn deny_time_off_request(
         }
     };
 
-    match repo
-        .deny_request(request_id, &claims.sub, denial.notes.clone())
+    match time_off_repo
+        .deny_request(request_id, user_context.user.id, denial.notes.clone())
         .await
     {
         Ok(denied_request) => {
             // Log time-off request denial activity
-            if let Ok(Some(company)) = company_repo.get_primary_company_for_user(&claims.sub).await
-            {
-                let mut metadata = HashMap::new();
+            let mut metadata = HashMap::new();
+            metadata.insert(
+                "request_type".to_string(),
+                serde_json::Value::String(format!("{:?}", time_off_request.request_type)),
+            );
+            metadata.insert(
+                "target_user".to_string(),
+                serde_json::Value::String(time_off_request.user_id.to_string()),
+            );
+            if let Some(notes) = &denial.notes {
                 metadata.insert(
-                    "request_type".to_string(),
-                    serde_json::Value::String(format!("{:?}", time_off_request.request_type)),
+                    "denial_notes".to_string(),
+                    serde_json::Value::String(notes.clone()),
                 );
-                metadata.insert(
-                    "target_user".to_string(),
-                    serde_json::Value::String(time_off_request.user_id.clone()),
-                );
-                if let Some(notes) = &denial.notes {
-                    metadata.insert(
-                        "denial_notes".to_string(),
-                        serde_json::Value::String(notes.clone()),
-                    );
-                }
+            }
 
-                if let Err(e) = activity_logger
-                    .log_time_off_activity(
-                        company.id,
-                        Some(claims.sub.parse().unwrap_or(0)),
-                        request_id,
-                        Action::REJECTED,
-                        format!(
-                            "Time-off request denied for user {}",
-                            time_off_request.user_id
-                        ),
-                        Some(metadata),
-                        &req,
-                    )
-                    .await
-                {
-                    log::warn!("Failed to log time-off request denial activity: {}", e);
-                }
+            if let Err(e) = activity_logger
+                .log_time_off_activity(
+                    company_id,
+                    Some(user_context.user.id),
+                    request_id,
+                    Action::REJECTED,
+                    format!(
+                        "Time-off request denied for user {}",
+                        time_off_request.user_id
+                    ),
+                    Some(metadata),
+                    &req,
+                )
+                .await
+            {
+                log::warn!("Failed to log time-off request denial activity: {}", e);
             }
 
             Ok(HttpResponse::Ok().json(ApiResponse::success(denied_request)))
@@ -619,19 +643,17 @@ pub async fn deny_time_off_request(
 
 /// Wrapper function for approving time-off requests with PTO balance integration
 async fn approve_time_off_with_balance_check(
-    claims: Claims,
-    repo: web::Data<TimeOffRepository>,
-    company_repo: web::Data<CompanyRepository>,
+    user_context: web::Data<UserContext>,
+    time_off_repo: web::Data<TimeOffRepository>,
     activity_logger: web::Data<ActivityLogger>,
     pto_repo: web::Data<PtoBalanceRepository>,
-    path: web::Path<i64>,
+    path: web::Path<Uuid>,
     approval: web::Json<ApprovalRequest>,
     req: HttpRequest,
 ) -> Result<HttpResponse> {
     approve_time_off_request(
-        claims,
-        repo,
-        company_repo,
+        user_context,
+        time_off_repo,
         activity_logger,
         pto_repo,
         path,
@@ -643,19 +665,17 @@ async fn approve_time_off_with_balance_check(
 
 /// Public wrapper for the approve endpoint
 pub async fn approve_time_off_request_endpoint(
-    claims: Claims,
-    repo: web::Data<TimeOffRepository>,
-    company_repo: web::Data<CompanyRepository>,
+    user_context: web::Data<UserContext>,
+    time_off_repo: web::Data<TimeOffRepository>,
     activity_logger: web::Data<ActivityLogger>,
     pto_repo: web::Data<PtoBalanceRepository>,
-    path: web::Path<i64>,
+    path: web::Path<Uuid>,
     approval: web::Json<ApprovalRequest>,
     req: HttpRequest,
 ) -> Result<HttpResponse> {
     approve_time_off_with_balance_check(
-        claims,
-        repo,
-        company_repo,
+        user_context,
+        time_off_repo,
         activity_logger,
         pto_repo,
         path,

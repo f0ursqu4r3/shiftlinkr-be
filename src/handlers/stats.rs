@@ -1,32 +1,36 @@
 use actix_web::{web, HttpResponse, Result};
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Utc};
 use serde::Deserialize;
+use uuid::Uuid;
 
 use crate::database::repositories::stats::StatsRepository;
 use crate::handlers::admin::ApiResponse;
-use crate::services::auth::Claims;
+use crate::services::UserContext;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StatsQuery {
-    pub start_date: Option<NaiveDateTime>,
-    pub end_date: Option<NaiveDateTime>,
+    pub start_date: Option<DateTime<Utc>>,
+    pub end_date: Option<DateTime<Utc>>,
     pub user_id: Option<String>,
 }
 
 /// Get dashboard statistics
 pub async fn get_dashboard_stats(
-    claims: Claims,
+    user_context: web::Data<UserContext>,
     repo: web::Data<StatsRepository>,
     query: web::Query<StatsQuery>,
 ) -> Result<HttpResponse> {
     // Determine user filter based on permissions
-    let user_id = if claims.is_admin() || claims.is_manager() {
+    let user_id = if user_context.is_manager_or_admin() {
         // Admins and managers can query organization-wide stats or specific users
-        query.user_id.clone()
+        query
+            .user_id
+            .as_ref()
+            .and_then(|id| id.parse::<Uuid>().ok())
     } else {
         // Employees can only see their own stats
-        Some(claims.sub.clone())
+        Some(user_context.user.id)
     };
 
     match repo
@@ -47,17 +51,20 @@ pub async fn get_dashboard_stats(
 
 /// Get shift statistics
 pub async fn get_shift_stats(
-    claims: Claims,
+    user_context: web::Data<UserContext>,
     repo: web::Data<StatsRepository>,
     query: web::Query<StatsQuery>,
 ) -> Result<HttpResponse> {
     // Determine user filter based on permissions
-    let user_id = if claims.is_admin() || claims.is_manager() {
+    let user_id = if user_context.is_manager_or_admin() {
         // Admins and managers can query organization-wide stats or specific users
-        query.user_id.clone()
+        query
+            .user_id
+            .as_ref()
+            .and_then(|id| id.parse::<Uuid>().ok())
     } else {
         // Employees can only see their own stats
-        Some(claims.sub.clone())
+        Some(user_context.user.id)
     };
 
     match repo
@@ -75,17 +82,20 @@ pub async fn get_shift_stats(
 
 /// Get time-off statistics
 pub async fn get_time_off_stats(
-    claims: Claims,
+    user_context: web::Data<UserContext>,
     repo: web::Data<StatsRepository>,
     query: web::Query<StatsQuery>,
 ) -> Result<HttpResponse> {
     // Determine user filter based on permissions
-    let user_id = if claims.is_admin() || claims.is_manager() {
+    let user_id = if user_context.is_manager_or_admin() {
         // Admins and managers can query organization-wide stats or specific users
-        query.user_id.clone()
+        query
+            .user_id
+            .as_ref()
+            .and_then(|id| id.parse::<Uuid>().ok())
     } else {
         // Employees can only see their own stats
-        Some(claims.sub.clone())
+        Some(user_context.user.id)
     };
 
     match repo
