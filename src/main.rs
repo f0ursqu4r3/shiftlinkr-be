@@ -2,21 +2,23 @@ use actix_cors::Cors;
 use actix_web::{get, middleware::Logger, web, App, HttpResponse, HttpServer, Responder};
 use anyhow::Result;
 
-use be::database::{
-    init_database,
-    repositories::{
-        ActivityRepository, CompanyRepository, InviteRepository, LocationRepository,
-        PasswordResetTokenRepository, PtoBalanceRepository, ScheduleRepository,
-        ShiftClaimRepository, ShiftRepository, ShiftSwapRepository, SkillRepository,
-        StatsRepository, TimeOffRepository, UserRepository,
+use be::{
+    config::Config,
+    database::{
+        init_database,
+        repositories::{
+            ActivityRepository, CompanyRepository, InviteRepository, LocationRepository,
+            PasswordResetTokenRepository, PtoBalanceRepository, ScheduleRepository,
+            ShiftClaimRepository, ShiftRepository, ShiftSwapRepository, SkillRepository,
+            StatsRepository, TimeOffRepository, UserRepository,
+        },
     },
+    handlers::{
+        admin, auth, company, pto_balance, schedules, shifts, skills, stats, swaps, time_off,
+    },
+    middleware::RequestId,
+    services::{ActivityLogger, AuthService, UserContextService},
 };
-use be::handlers::{
-    admin, auth, company, pto_balance, schedules, shifts, skills, stats, swaps, time_off,
-};
-use be::middleware::RequestId;
-use be::services::{ActivityLogger, UserContextService};
-use be::{AuthService, Config};
 
 #[get("/")]
 async fn hello() -> impl Responder {

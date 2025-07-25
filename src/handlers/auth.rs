@@ -14,8 +14,9 @@ use crate::database::models::{
 };
 use crate::database::repositories::invite::InviteRepository;
 use crate::database::repositories::UserRepository;
+use crate::repositories::CompanyRepository;
 use crate::services::user_context::AsyncUserContext;
-use crate::{ActivityLogger, AppState, AuthService, CompanyRepository};
+use crate::{ActivityLogger, AuthService};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -25,14 +26,15 @@ pub struct MeResponse {
 }
 
 pub async fn register(
-    data: web::Data<AppState>,
+    auth_service: web::Data<AuthService>,
+    activity_logger: web::Data<ActivityLogger>,
     request: web::Json<CreateUserInput>,
     req: HttpRequest,
 ) -> Result<HttpResponse> {
     let register_request = request.into_inner();
     let email = register_request.email.clone();
 
-    match data.auth_service.register(register_request).await {
+    match auth_service.register(register_request).await {
         Ok(response) => {
             // Log successful registration activity
             let user = &response.user;
@@ -49,8 +51,7 @@ pub async fn register(
                 serde_json::Value::String(user.id.to_string()),
             );
 
-            if let Err(e) = data
-                .activity_logger
+            if let Err(e) = activity_logger
                 .log_auth_activity(
                     Uuid::nil(), // Default company for registration
                     None,        // Don't pass user_id to avoid foreign key constraint
@@ -78,8 +79,7 @@ pub async fn register(
                 serde_json::Value::String(err.to_string()),
             );
 
-            if let Err(e) = data
-                .activity_logger
+            if let Err(e) = activity_logger
                 .log_auth_activity(
                     Uuid::nil(), // Default company for failed registration attempts
                     None,
@@ -101,30 +101,27 @@ pub async fn register(
 }
 
 pub async fn login(
-    data: web::Data<AppState>,
+    auth_service: web::Data<AuthService>,
+    company_repo: web::Data<CompanyRepository>,
+    activity_logger: web::Data<ActivityLogger>,
     request: web::Json<LoginInput>,
     req: HttpRequest,
 ) -> Result<HttpResponse> {
     let login_request = request.into_inner();
     let email = login_request.email.clone();
 
-    match data.auth_service.login(login_request).await {
+    match auth_service.login(login_request).await {
         Ok(response) => {
             // Log successful login activity
             let user = &response.user;
 
             // Get user's primary company for logging
-            if let Ok(Some(company)) = data
-                .company_repository
-                .get_primary_company_for_user(user.id)
-                .await
-            {
+            if let Ok(Some(company)) = company_repo.get_primary_company_for_user(user.id).await {
                 let mut metadata = HashMap::new();
                 metadata.insert("email".to_string(), serde_json::Value::String(email));
                 metadata.insert("success".to_string(), serde_json::Value::Bool(true));
 
-                if let Err(e) = data
-                    .activity_logger
+                if let Err(e) = activity_logger
                     .log_auth_activity(
                         company.id,
                         Some(user.id),
@@ -155,8 +152,7 @@ pub async fn login(
             );
 
             // For failed logins, we'll use company_id = 1 (default company) since we don't know which company
-            if let Err(e) = data
-                .activity_logger
+            if let Err(e) = activity_logger
                 .log_auth_activity(
                     Uuid::nil(), // Default company for failed login attempts
                     None,        // No user_id for failed attempts
@@ -177,7 +173,11 @@ pub async fn login(
     }
 }
 
-pub async fn me(data: web::Data<AppState>, req: HttpRequest) -> Result<HttpResponse> {
+pub async fn me(
+    auth_service: web::Data<AuthService>,
+    company_repository: web::Data<CompanyRepository>,
+    req: HttpRequest,
+) -> Result<HttpResponse> {
     // Extract token from Authorization header
     let token = match extract_token_from_header(&req) {
         Some(token) => token,
@@ -189,17 +189,13 @@ pub async fn me(data: web::Data<AppState>, req: HttpRequest) -> Result<HttpRespo
     };
 
     // Verify token and get user
-    match data.auth_service.get_user_from_token(&token).await {
+    match auth_service.get_user_from_token(&token).await {
         Ok(user) => {
             // Get the user's information
             let user_info = UserInfo::from(user.clone());
 
             // Get user's companies
-            let companies = match data
-                .company_repository
-                .get_companies_for_user(user.id)
-                .await
-            {
+            let companies = match company_repository.get_companies_for_user(user.id).await {
                 Ok(companies) => companies,
                 Err(_) => vec![], // If error getting companies, return empty list
             };
@@ -229,11 +225,11 @@ fn extract_token_from_header(req: &HttpRequest) -> Option<String> {
 }
 
 pub async fn forgot_password(
-    data: web::Data<AppState>,
+    auth_service: web::Data<AuthService>,
     config: web::Data<Config>,
     request: web::Json<ForgotPasswordInput>,
 ) -> Result<HttpResponse> {
-    match data.auth_service.forgot_password(&request.email).await {
+    match auth_service.forgot_password(&request.email).await {
         Ok(token) => {
             let mut response = serde_json::json!({
                 "message": "If the email exists, a password reset link has been sent."
@@ -256,11 +252,10 @@ pub async fn forgot_password(
 }
 
 pub async fn reset_password(
-    data: web::Data<AppState>,
+    auth_service: web::Data<AuthService>,
     request: web::Json<ResetPasswordInput>,
 ) -> Result<HttpResponse> {
-    match data
-        .auth_service
+    match auth_service
         .reset_password(&request.token, &request.new_password)
         .await
     {
@@ -388,7 +383,7 @@ pub async fn get_invite(
 }
 
 pub async fn accept_invite(
-    data: web::Data<AppState>,
+    auth_service: web::Data<AuthService>,
     invite_repo: web::Data<InviteRepository>,
     company_repo: web::Data<CompanyRepository>,
     user_repo: web::Data<UserRepository>,
@@ -476,11 +471,10 @@ pub async fn accept_invite(
         name: request.name.clone(),
     };
 
-    match data.auth_service.register(create_user_request).await {
+    match auth_service.register(create_user_request).await {
         Ok(auth_response) => {
             // Get the company from the inviter
-            let inviter_company = match data
-                .company_repository
+            let inviter_company = match company_repo
                 .get_primary_company_for_user(invite_token.inviter_id)
                 .await
             {
@@ -499,8 +493,7 @@ pub async fn accept_invite(
             };
 
             // Create company_employees relationship with the role from the invite
-            if let Err(err) = data
-                .company_repository
+            if let Err(err) = company_repo
                 .add_employee_to_company(
                     inviter_company.id,
                     &AddEmployeeToCompanyInput {
@@ -536,36 +529,15 @@ pub async fn accept_invite(
 }
 
 pub async fn get_my_invites(
+    AsyncUserContext(user_context): AsyncUserContext,
     invite_repo: web::Data<InviteRepository>,
-    req: HttpRequest,
-    data: web::Data<AppState>,
+    company_repo: web::Data<CompanyRepository>,
 ) -> Result<HttpResponse> {
     // Extract token from Authorization header
-    let token = match extract_token_from_header(&req) {
-        Some(token) => token,
-        None => {
-            return Ok(HttpResponse::Unauthorized().json(json!({
-                "error": "Missing or invalid authorization header"
-            })));
-        }
-    };
-
-    // Verify token and get user
-    let user = match data.auth_service.get_user_from_token(&token).await {
-        Ok(user) => user,
-        Err(err) => {
-            return Ok(HttpResponse::Unauthorized().json(json!({
-                "error": err.to_string()
-            })));
-        }
-    };
+    let user_id = user_context.user_id();
 
     // Check if user has permission to view invites (admin or manager) based on company-specific role
-    let has_permission = match data
-        .company_repository
-        .get_companies_for_user(user.id)
-        .await
-    {
+    let has_permission = match company_repo.get_companies_for_user(user_id).await {
         Ok(companies) => {
             // Check if user has admin or manager role in any company
             companies
@@ -581,7 +553,7 @@ pub async fn get_my_invites(
         })));
     }
 
-    match invite_repo.get_invites_by_inviter(user.id).await {
+    match invite_repo.get_invites_by_inviter(user_id).await {
         Ok(invites) => Ok(HttpResponse::Ok().json(json!({
             "invites": invites
         }))),

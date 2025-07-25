@@ -34,7 +34,3 @@ pretty_assertions = "1.4"
 [[bin]]
 name = "be"
 path = "src/main.rs"
-
-[lib]
-name = "be"
-path = "src/lib.rs"

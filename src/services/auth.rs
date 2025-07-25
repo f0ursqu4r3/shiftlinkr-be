@@ -14,7 +14,7 @@ use crate::config::Config;
 use crate::database::models::{AuthResponse, CompanyRole, CreateUserInput, LoginInput, User};
 use crate::database::repositories::password_reset::PasswordResetTokenRepository;
 use crate::database::repositories::user::UserRepository;
-use crate::CompanyRepository;
+use crate::repositories::CompanyRepository;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
