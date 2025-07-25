@@ -215,12 +215,7 @@ impl CompanyRepository {
         .bind(request.is_primary.unwrap_or(false))
         .bind(&request.hire_date)
         .fetch_one(&self.pool)
-        .await
-        .map_err(|e| {
-            eprintln!("Detailed SQL Error: {:?}", e);
-            eprintln!("Error kind: {:?}", e.as_database_error());
-            e
-        })?;
+        .await?;
 
         Ok(company_employee)
     }

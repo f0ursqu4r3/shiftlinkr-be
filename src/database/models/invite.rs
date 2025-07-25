@@ -25,7 +25,6 @@ pub struct InviteToken {
 pub struct CreateInviteInput {
     pub email: String,
     pub role: CompanyRole,
-    pub company_id: Uuid,      // UUID type
     pub team_id: Option<Uuid>, // UUID type
 }
 

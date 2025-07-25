@@ -44,7 +44,8 @@ impl ActivityRepository {
                 description,
                 metadata,
                 ip_address,
-                user_agent
+                user_agent,
+                created_at
             "#,
         )
         .bind(request.company_id)

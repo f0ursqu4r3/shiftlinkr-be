@@ -90,4 +90,5 @@ pub mod Action {
     pub const REJECTED: &str = "rejected";
     pub const CLAIMED: &str = "claimed";
     pub const RELEASED: &str = "released";
+    pub const SWITCH_COMPANY: &str = "switch_company";
 }

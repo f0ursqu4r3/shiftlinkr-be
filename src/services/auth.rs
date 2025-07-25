@@ -309,4 +309,43 @@ impl AuthService {
 
         Ok(user)
     }
+
+    pub async fn switch_company(
+        &self,
+        user_id: Uuid,
+        new_company_id: Uuid,
+    ) -> Result<AuthResponse> {
+        // Check if user belongs to the new company
+        match self
+            .company_repository
+            .check_user_company_access(user_id, new_company_id)
+            .await
+        {
+            Ok(Some(_)) => {}
+            Ok(None) => return Err(anyhow!("User does not belong to the new company")),
+            Err(e) => return Err(anyhow!("Error checking user company access: {}", e)),
+        }
+
+        let user = self
+            .user_repository
+            .find_by_id(user_id)
+            .await?
+            .ok_or_else(|| anyhow!("User not found"))?;
+
+        let company = self
+            .company_repository
+            .find_company_info_by_id(user_id, new_company_id)
+            .await?
+            .ok_or_else(|| anyhow!("Company not found"))?;
+
+        let role = Some(company.role.clone());
+
+        let token = self.generate_token(&user, Some(new_company_id), role)?;
+
+        Ok(AuthResponse {
+            token,
+            user: user.into(),
+            company: Some(company),
+        })
+    }
 }

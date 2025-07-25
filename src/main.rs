@@ -16,7 +16,7 @@ use be::handlers::{
 };
 use be::middleware::RequestId;
 use be::services::{ActivityLogger, UserContextService};
-use be::{AppState, AuthService, Config};
+use be::{AuthService, Config};
 
 #[get("/")]
 async fn hello() -> impl Responder {
@@ -81,12 +81,8 @@ async fn main() -> Result<()> {
     let activity_repository = ActivityRepository::new(pool.clone());
     let activity_logger = ActivityLogger::new(activity_repository.clone());
 
-    let app_state = web::Data::new(AppState {
-        auth_service,
-        company_repository: company_repository.clone(),
-        activity_repository,
-        activity_logger: activity_logger.clone(),
-    });
+    // Initialize repositories
+    let auth_service_data = web::Data::new(auth_service);
     let user_repo_data = web::Data::new(user_repository);
     let location_repo_data = web::Data::new(location_repository);
     let shift_repo_data = web::Data::new(shift_repository);
@@ -110,7 +106,8 @@ async fn main() -> Result<()> {
     HttpServer::new(move || {
         App::new()
             .app_data(config.clone())
-            .app_data(app_state.clone())
+            .app_data(auth_service_data.clone())
+            .app_data(user_context_service_data.clone())
             .app_data(user_repo_data.clone())
             .app_data(location_repo_data.clone())
             .app_data(shift_repo_data.clone())
@@ -125,7 +122,6 @@ async fn main() -> Result<()> {
             .app_data(schedule_repo_data.clone())
             .app_data(config_data.clone())
             .app_data(activity_logger_data.clone())
-            .app_data(user_context_service_data.clone())
             .wrap(
                 Cors::default()
                     .allowed_origin("http://localhost:3000")
@@ -157,7 +153,8 @@ async fn main() -> Result<()> {
                             .route("/invite", web::post().to(auth::create_invite))
                             .route("/invite/{token}", web::get().to(auth::get_invite))
                             .route("/invite/accept", web::post().to(auth::accept_invite))
-                            .route("/invites", web::get().to(auth::get_my_invites)),
+                            .route("/invites", web::get().to(auth::get_my_invites))
+                            .route("/switch-company/{id}", web::post().to(auth::switch_company)),
                     )
                     .service(
                         web::scope("/admin")

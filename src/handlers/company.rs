@@ -5,7 +5,7 @@ use crate::database::models::{
 use crate::database::repositories::company::CompanyRepository;
 use crate::services::activity_logger::ActivityLogger;
 use crate::services::auth::Claims;
-use crate::services::user_context::{self, AsyncUserContext};
+use crate::services::user_context::AsyncUserContext;
 use actix_web::{
     web::{Data, Json, Path},
     HttpRequest, HttpResponse, Result,
@@ -121,11 +121,11 @@ pub async fn create_company(
 }
 
 pub async fn get_company_employees(
-    claims: Claims,
+    AsyncUserContext(user_context): AsyncUserContext,
     company_repo: Data<CompanyRepository>,
     path: Path<Uuid>,
 ) -> Result<HttpResponse> {
-    let user_id = claims.sub;
+    let user_id = user_context.user_id();
 
     let company_id = path.into_inner();
 

@@ -1,3 +1,4 @@
+use actix_web::web::Path;
 use actix_web::{web, HttpRequest, HttpResponse, Result};
 use serde;
 use serde::Serialize;
@@ -13,7 +14,8 @@ use crate::database::models::{
 };
 use crate::database::repositories::invite::InviteRepository;
 use crate::database::repositories::UserRepository;
-use crate::{AppState, CompanyRepository};
+use crate::services::user_context::AsyncUserContext;
+use crate::{ActivityLogger, AppState, AuthService, CompanyRepository};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -272,80 +274,53 @@ pub async fn reset_password(
 }
 
 pub async fn create_invite(
-    data: web::Data<AppState>,
-    config: web::Data<Config>,
+    AsyncUserContext(user_context): AsyncUserContext,
+    user_repo: web::Data<UserRepository>,
+    company_repo: web::Data<CompanyRepository>,
     invite_repo: web::Data<InviteRepository>,
+    config: web::Data<Config>,
     request: web::Json<CreateInviteInput>,
-    req: HttpRequest,
 ) -> Result<HttpResponse> {
-    // Extract token from Authorization header
-    let token = match extract_token_from_header(&req) {
-        Some(token) => token,
-        None => {
-            return Ok(HttpResponse::Unauthorized().json(json!({
-                "error": "Missing or invalid authorization header"
-            })));
-        }
-    };
+    let user_id = user_context.user_id();
+    let company_id =
+        user_context.company.as_ref().map(|c| c.id).ok_or_else(|| {
+            actix_web::error::ErrorBadRequest("User does not belong to any company")
+        })?;
 
-    // Verify token and get user
-    let user = match data.auth_service.get_user_from_token(&token).await {
-        Ok(user) => user,
-        Err(err) => {
-            return Ok(HttpResponse::Unauthorized().json(json!({
-                "error": err.to_string()
-            })));
-        }
-    };
-
-    // Check if user has permission to create invites (admin or manager) based on company-specific role
-    // Get user's primary company and role
-    let has_permission = match data
-        .company_repository
-        .get_companies_for_user(user.id)
-        .await
-    {
-        Ok(companies) => match companies.into_iter().find(|c| c.id == request.company_id) {
-            Some(company) => {
-                matches!(company.role, CompanyRole::Admin | CompanyRole::Manager)
-            }
-            None => false,
-        },
-        Err(_) => false,
-    };
-
-    if !has_permission {
+    // Check if user has permission to create invites (admin or manager)
+    if !user_context.is_manager_or_admin() {
         return Ok(HttpResponse::Forbidden().json(json!({
             "error": "You don't have permission to create invites. Only admins and managers can create invites."
         })));
     }
 
     // Check if email already exists and is already part of the company
-    match data.auth_service.get_user_by_email(&request.email).await {
-        Ok(user) => {
-            let companies = data
-                .company_repository
-                .get_companies_for_user(user.id)
-                .await;
-            // If user is already part of the company, return error
-            if let Ok(companies) = companies {
-                // Check if user is already part of the company
-                if companies.iter().any(|c| c.id == request.company_id) {
+    match user_repo.find_by_email(&request.email).await {
+        Ok(Some(existing_user)) => {
+            // Check if user is already part of the company
+            let companies = company_repo.get_companies_for_user(existing_user.id).await;
+            if let Ok(companies_vec) = companies {
+                if companies_vec.iter().any(|c| c.id == company_id) {
                     return Ok(HttpResponse::BadRequest().json(json!({
-                        "error": "User with this email already exists"
+                        "error": "User with this email already exists in the company"
                     })));
                 }
             }
         }
-        Err(_) => {} // User doesn't exist, which is what we want
+        Ok(None) => {}
+        Err(err) => {
+            return Ok(HttpResponse::InternalServerError().json(json!({
+                "error": format!("Failed to check existing user: {}", err)
+            })));
+        }
     }
 
     match invite_repo
         .create_invite_token(
             &request.email,
-            user.id,
+            user_id,
             request.role.clone(),
-            request.company_id,
+            company_id,
             request.team_id,
         )
         .await
@@ -612,6 +587,65 @@ pub async fn get_my_invites(
         }))),
         Err(err) => Ok(HttpResponse::InternalServerError().json(json!({
             "error": format!("Failed to get invites: {}", err)
+        }))),
+    }
+}
+
+pub async fn switch_company(
+    AsyncUserContext(user_context): AsyncUserContext,
+    company_repo: web::Data<CompanyRepository>,
+    auth_service: web::Data<AuthService>,
+    activity_logger: web::Data<ActivityLogger>,
+    path: Path<Uuid>,
+    req: HttpRequest,
+) -> Result<HttpResponse> {
+    let new_company_id = path.into_inner();
+    let user_id = user_context.user_id();
+
+    // Check if user belongs to the new company
+    match company_repo
+        .check_user_company_access(user_id, new_company_id)
+        .await
+    {
+        Ok(Some(_)) => {}
+        Ok(None) => {
+            return Ok(HttpResponse::Forbidden().json(json!({
+                "error": "You do not belong to this company"
+            })));
+        }
+        Err(err) => {
+            log::error!("Failed to check user company access: {}", err);
+            return Ok(HttpResponse::InternalServerError().json(json!({
+                "error": "Failed to check company access"
+            })));
+        }
+    }
+
+    match auth_service.switch_company(user_id, new_company_id).await {
+        Ok(response) => {
+            // Log company switch activity
+            if let Err(e) = activity_logger
+                .log_auth_activity(
+                    new_company_id,
+                    Some(user_id),
+                    Action::SWITCH_COMPANY,
+                    format!(
+                        "User {} switched to company {}",
+                        user_context.user.email.clone(),
+                        new_company_id
+                    ),
+                    None,
+                    &req,
+                )
+                .await
+            {
+                log::warn!("Failed to log company switch activity: {}", e);
+            }
+
+            Ok(HttpResponse::Ok().json(response))
+        }
+        Err(err) => Ok(HttpResponse::InternalServerError().json(json!({
+            "error": format!("Failed to switch company: {}", err)
         }))),
     }
 }

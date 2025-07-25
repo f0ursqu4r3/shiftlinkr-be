@@ -1,4 +1,5 @@
 use chrono::{Duration, Utc};
+use futures_util::TryFutureExt;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -36,11 +37,10 @@ impl InviteRepository {
                     company_id,
                     team_id,
                     expires_at,
-                    used_at,
                     created_at
                 )
             VALUES
-                ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING
                 id,
                 email,
@@ -63,6 +63,10 @@ impl InviteRepository {
         .bind(expires_at)
         .bind(created_at)
         .fetch_one(&self.pool)
+        .map_err(|e| {
+            log::error!("Failed to create invite token: {}", e);
+            e
+        })
         .await?;
 
         Ok(invite_token)
