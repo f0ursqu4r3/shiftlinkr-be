@@ -227,12 +227,12 @@ impl CompanyRepository {
         let employess_infos = sqlx::query_as::<_, CompanyEmployeeInfo>(
             r#"
             SELECT
-                u.id as "id!",
+                u.id,
                 u.email,
                 u.name,
                 uc.role,
                 uc.is_primary,
-                uc.hire_date as hired_at,
+                uc.hire_date,
                 u.created_at,
                 u.updated_at
             FROM
@@ -247,7 +247,15 @@ impl CompanyRepository {
         )
         .bind(company_id)
         .fetch_all(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| {
+            log::error!(
+                "Failed to fetch employees for company {}: {}",
+                company_id,
+                e
+            );
+            e
+        })?;
 
         Ok(employess_infos)
     }
@@ -315,5 +323,16 @@ impl CompanyRepository {
             role,
             Some(CompanyRole::Admin | CompanyRole::Manager)
         ))
+    }
+
+    pub async fn has_primary_company(&self, user_id: Uuid) -> Result<bool> {
+        let count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM user_company WHERE user_id = $1 AND is_primary = true",
+        )
+        .bind(user_id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(count > 0)
     }
 }

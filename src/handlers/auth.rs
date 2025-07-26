@@ -174,54 +174,25 @@ pub async fn login(
 }
 
 pub async fn me(
-    auth_service: web::Data<AuthService>,
+    AsyncUserContext(user_context): AsyncUserContext,
     company_repository: web::Data<CompanyRepository>,
-    req: HttpRequest,
 ) -> Result<HttpResponse> {
-    // Extract token from Authorization header
-    let token = match extract_token_from_header(&req) {
-        Some(token) => token,
-        None => {
-            return Ok(HttpResponse::Unauthorized().json(json!({
-                "error": "Missing or invalid authorization header"
-            })));
-        }
+    let user_id = user_context.user_id();
+    // Get the user's information
+    let user_info = UserInfo::from(user_context.user.clone());
+
+    // Get user's companies
+    let companies = match company_repository.get_companies_for_user(user_id).await {
+        Ok(companies) => companies,
+        Err(_) => vec![], // If error getting companies, return empty list
     };
 
-    // Verify token and get user
-    match auth_service.get_user_from_token(&token).await {
-        Ok(user) => {
-            // Get the user's information
-            let user_info = UserInfo::from(user.clone());
+    let response = MeResponse {
+        user: user_info,
+        companies,
+    };
 
-            // Get user's companies
-            let companies = match company_repository.get_companies_for_user(user.id).await {
-                Ok(companies) => companies,
-                Err(_) => vec![], // If error getting companies, return empty list
-            };
-
-            let response = MeResponse {
-                user: user_info,
-                companies,
-            };
-
-            Ok(HttpResponse::Ok().json(json!(response)))
-        }
-        Err(err) => Ok(HttpResponse::Unauthorized().json(json!({
-            "error": err.to_string()
-        }))),
-    }
-}
-
-fn extract_token_from_header(req: &HttpRequest) -> Option<String> {
-    let auth_header = req.headers().get("Authorization")?;
-    let auth_str = auth_header.to_str().ok()?;
-
-    if auth_str.starts_with("Bearer ") {
-        Some(auth_str[7..].to_string())
-    } else {
-        None
-    }
+    Ok(HttpResponse::Ok().json(json!(response)))
 }
 
 pub async fn forgot_password(
@@ -270,11 +241,13 @@ pub async fn reset_password(
 
 pub async fn create_invite(
     AsyncUserContext(user_context): AsyncUserContext,
+    activity_logger: web::Data<ActivityLogger>,
     user_repo: web::Data<UserRepository>,
     company_repo: web::Data<CompanyRepository>,
     invite_repo: web::Data<InviteRepository>,
     config: web::Data<Config>,
     request: web::Json<CreateInviteInput>,
+    req: HttpRequest,
 ) -> Result<HttpResponse> {
     let user_id = user_context.user_id();
     let company_id =
@@ -322,6 +295,50 @@ pub async fn create_invite(
     {
         Ok(invite_token) => {
             let invite_link = format!("{}/auth/invite/{}", config.base_url, invite_token.token);
+
+            // Log invite creation activity
+            let mut metadata = HashMap::new();
+            metadata.insert(
+                "email".to_string(),
+                serde_json::Value::String(request.email.clone()),
+            );
+            metadata.insert(
+                "role".to_string(),
+                serde_json::Value::String(request.role.to_string()),
+            );
+            metadata.insert(
+                "team_id".to_string(),
+                serde_json::Value::String(
+                    request
+                        .team_id
+                        .map_or_else(|| "None".to_string(), |id| id.to_string()),
+                ),
+            );
+            metadata.insert(
+                "company_id".to_string(),
+                serde_json::Value::String(company_id.to_string()),
+            );
+
+            activity_logger
+                .log_activity(
+                    company_id,
+                    Some(user_id),
+                    "invite_creation".to_string(),
+                    "invite".to_string(),
+                    invite_token.id,
+                    Action::INVITED.to_string(),
+                    format!("Invite created for email {}", request.email),
+                    Some(metadata),
+                    &req,
+                )
+                .await
+                .map_err(|e| {
+                    actix_web::error::ErrorInternalServerError(format!(
+                        "Failed to log activity: {}",
+                        e
+                    ))
+                })?;
+
             Ok(HttpResponse::Ok().json(json!({
                 "invite_link": invite_link,
                 "expires_at": invite_token.expires_at
@@ -383,14 +400,16 @@ pub async fn get_invite(
 }
 
 pub async fn accept_invite(
-    auth_service: web::Data<AuthService>,
+    AsyncUserContext(user_context): AsyncUserContext,
     invite_repo: web::Data<InviteRepository>,
     company_repo: web::Data<CompanyRepository>,
-    user_repo: web::Data<UserRepository>,
+    token: Path<String>,
     request: web::Json<AcceptInviteInput>,
 ) -> Result<HttpResponse> {
+    let user = user_context.user;
+
     // Get invite token
-    let invite_token = match invite_repo.get_invite_token(&request.token).await {
+    let invite_token = match invite_repo.get_invite_token(&token).await {
         Ok(Some(invite_token)) => invite_token,
         Ok(None) => {
             return Ok(HttpResponse::BadRequest().json(json!({
@@ -411,120 +430,91 @@ pub async fn accept_invite(
         })));
     }
 
-    // Check if user already exists
-    match user_repo.find_by_email(&invite_token.email).await {
-        Ok(Some(user)) => {
-            let companies = company_repo.get_companies_for_user(user.id).await;
-            // If user is already part of the company, return error
-            if let Ok(ref companies_vec) = companies {
-                // Check if user is already part of the company
-                if companies_vec
-                    .iter()
-                    .any(|c| c.id == invite_token.company_id)
-                {
-                    return Ok(HttpResponse::BadRequest().json(json!({
-                        "error": "User with this email already exists"
-                    })));
-                }
-            }
-
-            // Determine if this should be the user's primary company
-            let is_primary = companies.as_ref().map_or(true, |c| c.is_empty());
-
-            // If user exists but is not part of the company, add them to the company
-            if let Err(err) = company_repo
-                .add_employee_to_company(
-                    invite_token.company_id,
-                    &AddEmployeeToCompanyInput {
-                        user_id: user.id,
-                        role: Some(invite_token.role),
-                        is_primary: Some(is_primary),
-                        hire_date: None, // No hire date provided in invite
-                    },
-                )
-                .await
-            {
-                return Ok(HttpResponse::InternalServerError().json(json!({
-                    "error": format!("Failed to add user to company: {}", err)
-                })));
-            }
-
-            // Mark invite as used
-            if let Err(err) = invite_repo.mark_invite_token_as_used(&request.token).await {
-                log::error!("Failed to mark invite token as used: {}", err);
-            }
-
-            // Return success response
-            return Ok(HttpResponse::Ok().json(json!({
-                "message": "Invite accepted successfully",
-                "user": user,
-            })));
-        }
-        Ok(None) => {}
-        Err(_) => {} // User doesn't exist, which is what we want
+    // Check if the user accepting the invite is the same as the user in the token
+    if user.id != invite_token.inviter_id {
+        return Ok(HttpResponse::Forbidden().json(json!({
+            "error": "You cannot accept this invite"
+        })));
     }
 
-    // Create user account
-    let create_user_request = CreateUserInput {
-        email: invite_token.email.clone(),
-        password: request.password.clone(),
-        name: request.name.clone(),
-    };
-
-    match auth_service.register(create_user_request).await {
-        Ok(auth_response) => {
-            // Get the company from the inviter
-            let inviter_company = match company_repo
-                .get_primary_company_for_user(invite_token.inviter_id)
-                .await
+    // Check if the user is already part of the company
+    match company_repo.get_companies_for_user(user.id).await {
+        Ok(ref companies_vec) => {
+            // If user is already part of the company, return error
+            if companies_vec
+                .iter()
+                .any(|c| c.id == invite_token.company_id)
             {
-                Ok(Some(company)) => company,
-                _ => {
-                    // If we can't get the inviter's company, still mark invite as used but log warning
-                    log::warn!(
-                        "Could not determine company for inviter {} when accepting invite",
-                        invite_token.inviter_id
-                    );
-                    if let Err(err) = invite_repo.mark_invite_token_as_used(&request.token).await {
-                        log::error!("Failed to mark invite token as used: {}", err);
-                    }
-                    return Ok(HttpResponse::Ok().json(auth_response));
-                }
-            };
-
-            // Create company_employees relationship with the role from the invite
-            if let Err(err) = company_repo
-                .add_employee_to_company(
-                    inviter_company.id,
-                    &AddEmployeeToCompanyInput {
-                        user_id: auth_response.user.id,
-                        role: Some(invite_token.role),
-                        is_primary: Some(true), // Set as primary company
-                        hire_date: None,        // No hire date provided in invite
-                    },
-                )
-                .await
-            {
-                log::error!(
-                    "Failed to add user {} to company {}: {}",
-                    auth_response.user.id,
-                    inviter_company.id,
-                    err
+                // Return error indicating user is already part of the company
+                log::warn!(
+                    "User {} is already part of company {} when accepting invite",
+                    user.id,
+                    invite_token.company_id
                 );
-                // Continue anyway since user was created successfully
-            }
 
+                if let Err(err) = invite_repo.mark_invite_token_as_used(&token).await {
+                    log::error!("Failed to mark invite token as used: {}", err);
+                }
+
+                return Ok(HttpResponse::Conflict().json(json!({
+                    "error": "You are already part of this company"
+                })));
+            }
+        }
+        Err(err) => {
+            log::error!("Failed to get companies for user {}: {}", user.id, err);
+            return Ok(HttpResponse::InternalServerError().json(json!({
+                "error": "Failed to check company membership"
+            })));
+        }
+    }
+
+    let has_primary_company = company_repo
+        .has_primary_company(user.id)
+        .await
+        .unwrap_or(false);
+
+    match company_repo
+        .add_employee_to_company(
+            invite_token.company_id,
+            &AddEmployeeToCompanyInput {
+                user_id: user.id,
+                role: Some(invite_token.role),
+                is_primary: Some(!has_primary_company), // Set primary company if user has no primary company
+                hire_date: None,                        // No hire date provided in invite
+            },
+        )
+        .await
+    {
+        Ok(_) => {
             // Mark invite as used
             if let Err(err) = invite_repo.mark_invite_token_as_used(&request.token).await {
-                // Log error but don't fail the request since user was created successfully
                 log::error!("Failed to mark invite token as used: {}", err);
-            }
+            };
+            // Log successful invite acceptance
+            // Return an Ok response with user info
+            let user_info = UserInfo::from(user.clone());
 
-            Ok(HttpResponse::Ok().json(auth_response))
+            // Get user's companies
+            let companies = match company_repo.get_companies_for_user(user.id).await {
+                Ok(companies) => companies,
+                Err(_) => vec![], // If error getting companies, return empty list
+            };
+
+            let response = MeResponse {
+                user: user_info,
+                companies,
+            };
+
+            Ok(HttpResponse::Ok().json(json!(response)))
         }
-        Err(err) => Ok(HttpResponse::BadRequest().json(json!({
-            "error": format!("Failed to create user: {}", err)
-        }))),
+
+        Err(err) => {
+            log::error!("Failed to add user to company: {}", err);
+            return Ok(HttpResponse::InternalServerError().json(json!({
+                "error": format!("Failed to add user to company: {}", err)
+            })));
+        }
     }
 }
 
