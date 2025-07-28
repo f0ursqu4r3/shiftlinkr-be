@@ -11,7 +11,7 @@ use crate::database::repositories::company::CompanyRepository;
 use crate::database::repositories::schedule::ScheduleRepository;
 use crate::database::repositories::shift::ShiftRepository;
 use crate::database::repositories::shift_claim::ShiftClaimRepository;
-use crate::handlers::admin::ApiResponse;
+use crate::handlers::shared::ApiResponse;
 use crate::services::activity_logger::ActivityLogger;
 use crate::services::user_context::AsyncUserContext;
 

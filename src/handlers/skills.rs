@@ -6,7 +6,7 @@ use crate::database::models::{
     ProficiencyLevel, ShiftRequiredSkillInput, SkillInput, UserSkillInput,
 };
 use crate::database::repositories::{company::CompanyRepository, skill::SkillRepository};
-use crate::handlers::admin::ApiResponse;
+use crate::handlers::shared::ApiResponse;
 use crate::services::user_context::AsyncUserContext;
 
 #[derive(Debug, Deserialize)]

@@ -14,6 +14,7 @@ use crate::database::models::{
 };
 use crate::database::repositories::invite::InviteRepository;
 use crate::database::repositories::UserRepository;
+use crate::handlers::shared::ApiResponse;
 use crate::repositories::CompanyRepository;
 use crate::services::user_context::AsyncUserContext;
 use crate::{ActivityLogger, AuthService};
@@ -65,7 +66,7 @@ pub async fn register(
                 log::warn!("Failed to log registration activity: {}", e);
             }
 
-            Ok(HttpResponse::Ok().json(response))
+            Ok(HttpResponse::Ok().json(ApiResponse::success(response)))
         }
         Err(err) => {
             // Log failed registration attempt
@@ -93,9 +94,7 @@ pub async fn register(
                 log::warn!("Failed to log failed registration activity: {}", e);
             }
 
-            Ok(HttpResponse::BadRequest().json(json!({
-                "error": err.to_string()
-            })))
+            Ok(HttpResponse::BadRequest().json(ApiResponse::error(&err.to_string())))
         }
     }
 }
@@ -136,7 +135,7 @@ pub async fn login(
                 }
             }
 
-            Ok(HttpResponse::Ok().json(response))
+            Ok(HttpResponse::Ok().json(ApiResponse::success(response)))
         }
         Err(err) => {
             // Log failed login attempt
@@ -166,9 +165,7 @@ pub async fn login(
                 log::warn!("Failed to log failed login activity: {}", e);
             }
 
-            Ok(HttpResponse::BadRequest().json(json!({
-                "error": err.to_string()
-            })))
+            Ok(HttpResponse::BadRequest().json(ApiResponse::error(&err.to_string())))
         }
     }
 }
@@ -192,7 +189,7 @@ pub async fn me(
         companies,
     };
 
-    Ok(HttpResponse::Ok().json(json!(response)))
+    Ok(HttpResponse::Ok().json(ApiResponse::success(response)))
 }
 
 pub async fn forgot_password(
@@ -211,13 +208,16 @@ pub async fn forgot_password(
                 response["token"] = serde_json::Value::String(token);
             }
 
-            Ok(HttpResponse::Ok().json(response))
+            Ok(HttpResponse::Ok().json(ApiResponse::success(response)))
         }
         Err(_) => {
             // Don't reveal whether the email exists or not for security
-            Ok(HttpResponse::Ok().json(json!({
-                "message": "If the email exists, a password reset link has been sent."
-            })))
+            Ok(
+                HttpResponse::Ok().json(ApiResponse::<()>::success_with_message(
+                    None,
+                    "If the email exists, a password reset link has been sent.",
+                )),
+            )
         }
     }
 }
@@ -230,12 +230,16 @@ pub async fn reset_password(
         .reset_password(&request.token, &request.new_password)
         .await
     {
-        Ok(()) => Ok(HttpResponse::Ok().json(json!({
-            "message": "Password has been reset successfully."
-        }))),
-        Err(err) => Ok(HttpResponse::BadRequest().json(json!({
-            "error": err.to_string()
-        }))),
+        Ok(()) => Ok(
+            HttpResponse::Ok().json(ApiResponse::<()>::success_with_message(
+                None,
+                "Password has been reset successfully.",
+            )),
+        ),
+        Err(err) => Ok(HttpResponse::BadRequest().json(ApiResponse::error(&format!(
+            "Failed to reset password: {}",
+            err
+        )))),
     }
 }
 
@@ -528,35 +532,38 @@ pub async fn reject_invite(
     let invite_token = match invite_repo.get_invite_token(&token).await {
         Ok(Some(invite_token)) => invite_token,
         Ok(None) => {
-            return Ok(HttpResponse::BadRequest().json(json!({
-                "error": "Invalid or expired invite token"
-            })));
+            return Ok(HttpResponse::BadRequest()
+                .json(ApiResponse::error("Invalid or expired invite token")));
         }
         Err(err) => {
-            return Ok(HttpResponse::InternalServerError().json(json!({
-                "error": format!("Failed to get invite: {}", err)
-            })));
+            return Ok(
+                HttpResponse::InternalServerError().json(ApiResponse::error(&format!(
+                    "Failed to get invite: {}",
+                    err
+                ))),
+            );
         }
     };
 
     // Check if the user rejecting the invite is the same as the user in the token
     if user.email != invite_token.email {
-        return Ok(HttpResponse::Forbidden().json(json!({
-            "error": "You cannot reject this invite"
-        })));
+        return Ok(
+            HttpResponse::Forbidden().json(ApiResponse::error("You cannot reject this invite"))
+        );
     }
 
     // Mark invite as used
     if let Err(err) = invite_repo.mark_invite_token_as_used(&token).await {
         log::error!("Failed to mark invite token as used: {}", err);
-        return Ok(HttpResponse::InternalServerError().json(json!({
-            "error": format!("Failed to mark invite token as used: {}", err)
-        })));
+        return Ok(
+            HttpResponse::InternalServerError().json(ApiResponse::error(&format!(
+                "Failed to mark invite token as used: {}",
+                err
+            ))),
+        );
     }
 
-    Ok(HttpResponse::Ok().json(json!({
-        "message": "Invite rejected successfully"
-    })))
+    Ok(HttpResponse::Ok().json(ApiResponse::success("Invite rejected successfully")))
 }
 
 pub async fn get_my_invites(
@@ -579,18 +586,19 @@ pub async fn get_my_invites(
     };
 
     if !has_permission {
-        return Ok(HttpResponse::Forbidden().json(json!({
-            "error": "You don't have permission to view invites. Only admins and managers can view invites."
-        })));
+        return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
+            "You don't have permission to view invites. Only admins and managers can view invites.",
+        )));
     }
 
     match invite_repo.get_invites_by_inviter(user_id).await {
-        Ok(invites) => Ok(HttpResponse::Ok().json(json!({
-            "invites": invites
-        }))),
-        Err(err) => Ok(HttpResponse::InternalServerError().json(json!({
-            "error": format!("Failed to get invites: {}", err)
-        }))),
+        Ok(invites) => Ok(HttpResponse::Ok().json(ApiResponse::success(invites))),
+        Err(err) => Ok(
+            HttpResponse::InternalServerError().json(ApiResponse::error(&format!(
+                "Failed to get invites: {}",
+                err
+            ))),
+        ),
     }
 }
 
@@ -612,15 +620,17 @@ pub async fn switch_company(
     {
         Ok(Some(_)) => {}
         Ok(None) => {
-            return Ok(HttpResponse::Forbidden().json(json!({
-                "error": "You do not belong to this company"
-            })));
+            return Ok(HttpResponse::Forbidden()
+                .json(ApiResponse::error("You do not belong to this company")));
         }
         Err(err) => {
             log::error!("Failed to check user company access: {}", err);
-            return Ok(HttpResponse::InternalServerError().json(json!({
-                "error": "Failed to check company access"
-            })));
+            return Ok(
+                HttpResponse::InternalServerError().json(ApiResponse::error(&format!(
+                    "Failed to check company access: {}",
+                    err
+                ))),
+            );
         }
     }
 
@@ -647,8 +657,11 @@ pub async fn switch_company(
 
             Ok(HttpResponse::Ok().json(response))
         }
-        Err(err) => Ok(HttpResponse::InternalServerError().json(json!({
-            "error": format!("Failed to switch company: {}", err)
-        }))),
+        Err(err) => Ok(
+            HttpResponse::InternalServerError().json(ApiResponse::error(&format!(
+                "Failed to switch company: {}",
+                err
+            ))),
+        ),
     }
 }

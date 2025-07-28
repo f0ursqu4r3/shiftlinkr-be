@@ -23,21 +23,21 @@ impl SkillRepository {
             r#"
             INSERT INTO
                 skills (
-                    company_id
+                    company_id,
                     name,
                     description,
                     created_at,
-                    updated_at,
+                    updated_at
                 )
             VALUES
                 ($1, $2, $3, $4, $5)
             RETURNING
                 id,
-                company_id
+                company_id,
                 name,
                 description,
                 created_at,
-                updated_at,
+                updated_at
             "#,
         )
         .bind(company_id)
@@ -56,6 +56,7 @@ impl SkillRepository {
             r#"
             SELECT
                 id,
+                company_id,
                 name,
                 description,
                 created_at,

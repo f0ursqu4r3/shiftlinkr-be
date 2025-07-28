@@ -3,6 +3,7 @@ pub mod auth;
 pub mod company;
 pub mod pto_balance;
 pub mod schedules;
+pub mod shared;
 pub mod shifts;
 pub mod skills;
 pub mod stats;

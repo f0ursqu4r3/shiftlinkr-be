@@ -10,7 +10,7 @@ use crate::database::models::{
 use crate::database::repositories::company::CompanyRepository;
 use crate::database::repositories::pto_balance::PtoBalanceRepository;
 use crate::database::repositories::time_off::TimeOffRepository;
-use crate::handlers::admin::ApiResponse;
+use crate::handlers::shared::ApiResponse;
 use crate::services::user_context::AsyncUserContext;
 use crate::services::ActivityLogger;
 

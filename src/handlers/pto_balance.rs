@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::database::models::{PtoBalanceAdjustmentInput, PtoBalanceUpdateInput};
 use crate::database::repositories::pto_balance::PtoBalanceRepository;
-use crate::handlers::admin::ApiResponse;
+use crate::handlers::shared::ApiResponse;
 use crate::services::auth::Claims;
 
 #[derive(Debug, Deserialize)]
@@ -27,9 +27,8 @@ pub async fn get_pto_balance(
     let user_id = if let Some(requested_user_id) = query.user_id {
         // Only admins and managers can view other users' balances
         if !claims.is_manager_or_admin() && requested_user_id != claims.sub {
-            return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
-                "Cannot view other users' balances",
-            )));
+            return Ok(HttpResponse::Forbidden()
+                .json(ApiResponse::error("Cannot view other users' balances")));
         }
         requested_user_id
     } else {
@@ -39,11 +38,11 @@ pub async fn get_pto_balance(
 
     match repo.get_balance_for_company(user_id, company_id).await {
         Ok(Some(balance)) => Ok(HttpResponse::Ok().json(ApiResponse::success(balance))),
-        Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("User not found"))),
+        Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::error("User not found"))),
         Err(err) => {
             log::error!("Error fetching PTO balance: {}", err);
             Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error("Failed to fetch PTO balance")))
+                .json(ApiResponse::error("Failed to fetch PTO balance")))
         }
     }
 }
@@ -57,7 +56,7 @@ pub async fn update_pto_balance(
 ) -> Result<HttpResponse> {
     // Only admins and managers can update PTO balances
     if !claims.is_manager_or_admin() {
-        return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
+        return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
             "Insufficient permissions to update PTO balance",
         )));
     }
@@ -65,14 +64,14 @@ pub async fn update_pto_balance(
     let company_id = match claims.company_id {
         Some(id) => {
             if update.company_id != id {
-                return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
+                return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
                     "Cannot update PTO balance for a different company",
                 )));
             }
             id
         }
         None => {
-            return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
+            return Ok(HttpResponse::BadRequest().json(ApiResponse::error(
                 "Company ID is required for updating PTO balance",
             )));
         }
@@ -88,7 +87,7 @@ pub async fn update_pto_balance(
         Err(err) => {
             log::error!("Error updating PTO balance: {}", err);
             Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error("Failed to update PTO balance")))
+                .json(ApiResponse::error("Failed to update PTO balance")))
         }
     }
 }
@@ -102,7 +101,7 @@ pub async fn adjust_pto_balance(
 ) -> Result<HttpResponse> {
     // Only admins and managers can adjust PTO balances
     if !claims.is_admin() && !claims.is_manager() {
-        return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
+        return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
             "Insufficient permissions to adjust PTO balance",
         )));
     }
@@ -110,9 +109,7 @@ pub async fn adjust_pto_balance(
     let user_id = match Uuid::parse_str(&path.into_inner()) {
         Ok(id) => id,
         Err(_) => {
-            return Ok(
-                HttpResponse::BadRequest().json(ApiResponse::<()>::error("Invalid user ID format"))
-            )
+            return Ok(HttpResponse::BadRequest().json(ApiResponse::error("Invalid user ID format")))
         }
     };
 
@@ -126,7 +123,7 @@ pub async fn adjust_pto_balance(
         Err(err) => {
             log::error!("Error adjusting PTO balance: {}", err);
             Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error("Failed to adjust PTO balance")))
+                .json(ApiResponse::error("Failed to adjust PTO balance")))
         }
     }
 }
@@ -142,7 +139,7 @@ pub async fn get_pto_balance_history(
 
     // Users can only view their own history unless they're admins/managers
     if !claims.is_manager_or_admin() && user_id != claims.sub {
-        return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
+        return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
             "Cannot view other users' balance history",
         )));
     }
@@ -152,7 +149,7 @@ pub async fn get_pto_balance_history(
         Err(err) => {
             log::error!("Error fetching PTO balance history: {}", err);
             Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error("Failed to fetch balance history")))
+                .json(ApiResponse::error("Failed to fetch balance history")))
         }
     }
 }
@@ -165,7 +162,7 @@ pub async fn process_pto_accrual(
 ) -> Result<HttpResponse> {
     // Only admins and managers can process accruals
     if !claims.is_manager_or_admin() {
-        return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
+        return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
             "Insufficient permissions to process PTO accrual",
         )));
     }
@@ -175,13 +172,14 @@ pub async fn process_pto_accrual(
         Ok(Some(history)) => Ok(HttpResponse::Created().json(ApiResponse::success(history))),
         Ok(None) => Ok(
             HttpResponse::Ok().json(ApiResponse::<()>::success_with_message(
+                None,
                 "No accrual processed",
             )),
         ),
         Err(err) => {
             log::error!("Error processing PTO accrual: {}", err);
             Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error("Failed to process PTO accrual")))
+                .json(ApiResponse::error("Failed to process PTO accrual")))
         }
     }
 }

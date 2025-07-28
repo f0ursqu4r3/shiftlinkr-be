@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::database::models::{AssignmentResponse, ShiftAssignmentInput, UserShiftScheduleInput};
 use crate::database::repositories::schedule::ScheduleRepository;
-use crate::handlers::admin::ApiResponse;
+use crate::handlers::shared::ApiResponse;
 use crate::services::auth::Claims;
 
 #[derive(Debug, Deserialize)]

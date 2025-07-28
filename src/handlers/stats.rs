@@ -4,7 +4,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::database::repositories::stats::StatsRepository;
-use crate::handlers::admin::ApiResponse;
+use crate::handlers::shared::ApiResponse;
 use crate::services::user_context::AsyncUserContext;
 
 #[derive(Debug, Deserialize)]
