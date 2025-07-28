@@ -154,7 +154,8 @@ async fn main() -> Result<()> {
                             .route("/reset-password", web::post().to(auth::reset_password))
                             .route("/invite", web::post().to(auth::create_invite))
                             .route("/invite/{token}", web::get().to(auth::get_invite))
-                            .route("/invite/accept/{token}", web::post().to(auth::accept_invite))
+                            .route("/invite/{token}/accept", web::post().to(auth::accept_invite))
+                            .route("/invite/{token}/reject", web::post().to(auth::reject_invite))
                             .route("/invites", web::get().to(auth::get_my_invites))
                             .route("/switch-company/{id}", web::post().to(auth::switch_company)),
                     )

@@ -1,4 +1,7 @@
-use crate::database::models::{CompanyActivity, CreateActivityInput};
+use crate::database::{
+    models::{CompanyActivity, CreateActivityInput},
+    utils::sql,
+};
 use sqlx::{PgPool, Result};
 
 #[derive(Clone)]
@@ -17,8 +20,7 @@ impl ActivityRepository {
             .metadata
             .map(|m| serde_json::to_value(&m).unwrap_or_default());
 
-        let company_activity = sqlx::query_as::<_, CompanyActivity>(
-            r#"
+        let company_activity = sqlx::query_as::<_, CompanyActivity>(&sql(r#"
             INSERT INTO
                 company_activities (
                     company_id,
@@ -32,7 +34,7 @@ impl ActivityRepository {
                     ip_address,
                     user_agent
                 )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING
                 id,
                 company_id,
@@ -46,8 +48,7 @@ impl ActivityRepository {
                 ip_address,
                 user_agent,
                 created_at
-            "#,
-        )
+        "#))
         .bind(request.company_id)
         .bind(request.user_id)
         .bind(request.activity_type)

@@ -8,9 +8,9 @@ use uuid::Uuid;
 
 use crate::config::Config;
 use crate::database::models::{
-    AcceptInviteInput, Action, AddEmployeeToCompanyInput, CompanyInfo, CompanyRole,
-    CreateInviteInput, CreateUserInput, ForgotPasswordInput, GetInviteResponse, LoginInput,
-    ResetPasswordInput, UserInfo,
+    Action, AddEmployeeToCompanyInput, CompanyInfo, CompanyRole, CreateInviteInput,
+    CreateUserInput, ForgotPasswordInput, GetInviteResponse, LoginInput, ResetPasswordInput,
+    UserInfo,
 };
 use crate::database::repositories::invite::InviteRepository;
 use crate::database::repositories::UserRepository;
@@ -404,7 +404,6 @@ pub async fn accept_invite(
     invite_repo: web::Data<InviteRepository>,
     company_repo: web::Data<CompanyRepository>,
     token: Path<String>,
-    request: web::Json<AcceptInviteInput>,
 ) -> Result<HttpResponse> {
     let user = user_context.user;
 
@@ -431,7 +430,7 @@ pub async fn accept_invite(
     }
 
     // Check if the user accepting the invite is the same as the user in the token
-    if user.id != invite_token.inviter_id {
+    if user.email != invite_token.email {
         return Ok(HttpResponse::Forbidden().json(json!({
             "error": "You cannot accept this invite"
         })));
@@ -488,7 +487,7 @@ pub async fn accept_invite(
     {
         Ok(_) => {
             // Mark invite as used
-            if let Err(err) = invite_repo.mark_invite_token_as_used(&request.token).await {
+            if let Err(err) = invite_repo.mark_invite_token_as_used(&token).await {
                 log::error!("Failed to mark invite token as used: {}", err);
             };
             // Log successful invite acceptance
@@ -516,6 +515,48 @@ pub async fn accept_invite(
             })));
         }
     }
+}
+
+pub async fn reject_invite(
+    AsyncUserContext(user_context): AsyncUserContext,
+    invite_repo: web::Data<InviteRepository>,
+    token: Path<String>,
+) -> Result<HttpResponse> {
+    let user = user_context.user;
+
+    // Get invite token
+    let invite_token = match invite_repo.get_invite_token(&token).await {
+        Ok(Some(invite_token)) => invite_token,
+        Ok(None) => {
+            return Ok(HttpResponse::BadRequest().json(json!({
+                "error": "Invalid or expired invite token"
+            })));
+        }
+        Err(err) => {
+            return Ok(HttpResponse::InternalServerError().json(json!({
+                "error": format!("Failed to get invite: {}", err)
+            })));
+        }
+    };
+
+    // Check if the user rejecting the invite is the same as the user in the token
+    if user.email != invite_token.email {
+        return Ok(HttpResponse::Forbidden().json(json!({
+            "error": "You cannot reject this invite"
+        })));
+    }
+
+    // Mark invite as used
+    if let Err(err) = invite_repo.mark_invite_token_as_used(&token).await {
+        log::error!("Failed to mark invite token as used: {}", err);
+        return Ok(HttpResponse::InternalServerError().json(json!({
+            "error": format!("Failed to mark invite token as used: {}", err)
+        })));
+    }
+
+    Ok(HttpResponse::Ok().json(json!({
+        "message": "Invite rejected successfully"
+    })))
 }
 
 pub async fn get_my_invites(

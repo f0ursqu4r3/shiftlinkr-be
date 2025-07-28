@@ -3,7 +3,10 @@ use futures_util::TryFutureExt;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::database::models::{CompanyRole, InviteToken};
+use crate::database::{
+    models::{CompanyRole, InviteToken},
+    utils::sql,
+};
 
 pub struct InviteRepository {
     pool: PgPool,
@@ -26,8 +29,7 @@ impl InviteRepository {
         let expires_at = Utc::now() + Duration::days(7); // 7 days to accept
         let created_at = Utc::now();
 
-        let invite_token = sqlx::query_as::<_, InviteToken>(
-            r#"
+        let invite_token = sqlx::query_as::<_, InviteToken>(&sql(r#"
             INSERT INTO
                 invite_tokens (
                     email,
@@ -40,7 +42,7 @@ impl InviteRepository {
                     created_at
                 )
             VALUES
-                ($1, $2, $3, $4, $5, $6, $7, $8)
+                (?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING
                 id,
                 email,
@@ -52,8 +54,7 @@ impl InviteRepository {
                 expires_at,
                 used_at,
                 created_at
-            "#,
-        )
+        "#))
         .bind(email)
         .bind(token)
         .bind(inviter_id)
@@ -73,8 +74,7 @@ impl InviteRepository {
     }
 
     pub async fn get_invite_token(&self, token: &str) -> Result<Option<InviteToken>, sqlx::Error> {
-        let invite_token = sqlx::query_as::<_, InviteToken>(
-            r#"
+        let invite_token = sqlx::query_as::<_, InviteToken>(&sql(r#"
             SELECT
                 id,
                 email,
@@ -89,10 +89,9 @@ impl InviteRepository {
             FROM
                 invite_tokens
             WHERE
-                token = $1
+                token = ?
                 AND used_at IS NULL
-            "#,
-        )
+        "#))
         .bind(token)
         .fetch_optional(&self.pool)
         .await?;
@@ -103,7 +102,7 @@ impl InviteRepository {
     pub async fn mark_invite_token_as_used(&self, token: &str) -> Result<(), sqlx::Error> {
         let used_at = Utc::now();
 
-        sqlx::query("UPDATE invite_tokens SET used_at = $1 WHERE token = $2")
+        sqlx::query(&sql("UPDATE invite_tokens SET used_at = ? WHERE token = ?"))
             .bind(used_at)
             .bind(token)
             .execute(&self.pool)
@@ -116,8 +115,7 @@ impl InviteRepository {
         &self,
         inviter_id: Uuid,
     ) -> Result<Vec<InviteToken>, sqlx::Error> {
-        let invites = sqlx::query_as::<_, InviteToken>(
-            r#"
+        let invites = sqlx::query_as::<_, InviteToken>(&sql(r#"
             SELECT
                 id,
                 email,
@@ -130,10 +128,9 @@ impl InviteRepository {
                 used_at,
                 created_at
             FROM invite_tokens
-            WHERE inviter_id = $1
+            WHERE inviter_id = ?
             ORDER BY created_at DESC
-            "#,
-        )
+        "#))
         .bind(inviter_id)
         .fetch_all(&self.pool)
         .await?;
@@ -143,10 +140,10 @@ impl InviteRepository {
 
     pub async fn cleanup_expired_tokens(&self) -> Result<u64, sqlx::Error> {
         let now = Utc::now();
-        let result = sqlx::query!(
-            "DELETE FROM invite_tokens WHERE expires_at < $1 AND used_at IS NULL",
-            now
-        )
+        let result = sqlx::query(&sql(
+            r#"DELETE FROM invite_tokens WHERE expires_at < ? AND used_at IS NULL"#,
+        ))
+        .bind(now)
         .execute(&self.pool)
         .await?;
 
@@ -158,15 +155,13 @@ impl InviteRepository {
         token: &str,
         inviter_id: Uuid,
     ) -> Result<bool, sqlx::Error> {
-        let result = sqlx::query(
-            r#"
+        let result = sqlx::query(&sql(r#"
             DELETE FROM invite_tokens
             WHERE
-                token = $1
-                AND inviter_id = $2
+                token = ?
+                AND inviter_id = ?
                 AND used_at IS NULL
-            "#,
-        )
+        "#))
         .bind(token)
         .bind(inviter_id)
         .execute(&self.pool)

@@ -1,21 +1,20 @@
+use regex::Regex;
+
 pub fn clean_sql(sql: &str) -> String {
-    sql.lines()
-        .map(|line| line.trim())
-        .filter(|line| !line.is_empty())
-        .collect::<Vec<_>>()
-        .join(" ")
+    let re = Regex::new(r"\s+").unwrap();
+    let replaced = re.replace_all(sql, " ").to_string();
+    replaced.trim().to_string()
 }
 
 pub fn sql(query: &str) -> String {
-    let mut result = String::new();
+    let cleaned = clean_sql(query);
+    let re = Regex::new(r"\?").unwrap();
     let mut param_index = 1;
-    for ch in clean_sql(query).chars() {
-        if ch == '?' {
-            result.push_str(&format!("${}", param_index));
-            param_index += 1;
-        } else {
-            result.push(ch);
-        }
+    let mut result = cleaned.clone();
+    while let Some(mat) = re.find(&result) {
+        let replacement = format!("${}", param_index);
+        result.replace_range(mat.range(), &replacement);
+        param_index += 1;
     }
     result
 }
