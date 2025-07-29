@@ -4,7 +4,6 @@ use crate::database::models::{
 };
 use crate::database::repositories::company::CompanyRepository;
 use crate::services::activity_logger::ActivityLogger;
-use crate::services::auth::Claims;
 use crate::services::user_context::AsyncUserContext;
 use actix_web::{
     web::{Data, Json, Path},
@@ -14,10 +13,10 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 pub async fn get_user_companies(
-    claims: Claims,
+    AsyncUserContext(user_context): AsyncUserContext,
     company_repo: Data<CompanyRepository>,
 ) -> Result<HttpResponse> {
-    let user_id = claims.sub;
+    let user_id = user_context.user_id();
     match company_repo.get_companies_for_user(user_id).await {
         Ok(companies) => Ok(HttpResponse::Ok().json(companies)),
         Err(_) => Ok(HttpResponse::InternalServerError().finish()),
@@ -25,10 +24,11 @@ pub async fn get_user_companies(
 }
 
 pub async fn get_user_primary_company(
-    claims: Claims,
+    AsyncUserContext(user_context): AsyncUserContext,
+
     company_repo: Data<CompanyRepository>,
 ) -> Result<HttpResponse> {
-    let user_id = claims.sub;
+    let user_id = user_context.user_id();
     match company_repo.get_primary_company_for_user(user_id).await {
         Ok(company) => Ok(HttpResponse::Ok().json(company)),
         Err(_) => Ok(HttpResponse::InternalServerError().finish()),
@@ -147,12 +147,12 @@ pub async fn get_company_employees(
 }
 
 pub async fn add_employee_to_company(
-    claims: Claims,
+    AsyncUserContext(user_context): AsyncUserContext,
     company_repo: Data<CompanyRepository>,
     path: Path<Uuid>,
     request: Json<AddEmployeeToCompanyInput>,
 ) -> Result<HttpResponse> {
-    let user_id = claims.sub;
+    let user_id = user_context.user_id();
 
     let company_id = path.into_inner();
 
@@ -176,11 +176,11 @@ pub async fn add_employee_to_company(
 }
 
 pub async fn remove_employee_from_company(
-    claims: Claims,
+    AsyncUserContext(user_context): AsyncUserContext,
     company_repo: Data<CompanyRepository>,
     path: Path<(Uuid, Uuid)>,
 ) -> Result<HttpResponse> {
-    let claims_user = claims.sub;
+    let claims_user = user_context.user_id();
 
     let (company_id, user_id) = path.into_inner();
 
@@ -205,12 +205,12 @@ pub async fn remove_employee_from_company(
 }
 
 pub async fn update_employee_role(
-    claims: Claims,
+    AsyncUserContext(user_context): AsyncUserContext,
     company_repo: Data<CompanyRepository>,
     path: Path<(Uuid, Uuid)>,
     role: Json<CompanyRole>,
 ) -> Result<HttpResponse> {
-    let claims_user = claims.sub;
+    let claims_user = user_context.user_id();
 
     let (company_id, user_id) = path.into_inner();
 

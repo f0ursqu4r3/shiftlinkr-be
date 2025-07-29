@@ -65,7 +65,7 @@ pub struct PtoBalanceUpdateInput {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PtoBalanceAdjustmentInput {
-    // UUID for company references
+    pub change_type: PtoChangeType,
     pub balance_type: PtoBalanceType,
     pub hours_changed: i32,
     pub description: String,

@@ -3,9 +3,12 @@ use chrono::Utc;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::database::models::{
-    AssignmentResponse, AssignmentStatus, ShiftAssignment, ShiftAssignmentInput, UserShiftSchedule,
-    UserShiftScheduleInput,
+use crate::database::{
+    models::{
+        AssignmentResponse, AssignmentStatus, Shift, ShiftAssignment, ShiftAssignmentInput,
+        UserShiftSchedule, UserShiftScheduleInput,
+    },
+    utils::sql,
 };
 
 pub struct ScheduleRepository {
@@ -231,11 +234,11 @@ impl ScheduleRepository {
     // Shift Assignments
     pub async fn create_shift_assignment(
         &self,
+        assigned_by_user_id: Uuid,
         input: ShiftAssignmentInput,
     ) -> Result<ShiftAssignment> {
         let now = Utc::now().naive_utc();
-        let assignment = sqlx::query_as::<_, ShiftAssignment>(
-            r#"
+        let assignment = sqlx::query_as::<_, ShiftAssignment>(&sql(r#"
             INSERT INTO
                 shift_proposal_assignments (
                     shift_id,
@@ -249,7 +252,7 @@ impl ScheduleRepository {
                     updated_at
                 )
             VALUES
-                ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                (?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING
                 id,
                 shift_id,
@@ -261,11 +264,10 @@ impl ScheduleRepository {
                 response_notes,
                 created_at,
                 updated_at
-            "#,
-        )
+        "#))
         .bind(input.shift_id)
         .bind(&input.user_id)
-        .bind(&input.assigned_by)
+        .bind(assigned_by_user_id)
         .bind(AssignmentStatus::Pending.to_string())
         .bind(input.acceptance_deadline)
         .bind(None::<String>)
@@ -276,6 +278,64 @@ impl ScheduleRepository {
         .await?;
 
         Ok(assignment)
+    }
+
+    pub async fn get_user_shift_suggestions(&self, user_id: Uuid) -> Result<Vec<Shift>> {
+        // This function finds open shifts that match a user's availability and don't conflict with their existing schedule.
+        // A more advanced implementation could also factor in user skills, location preferences, and other constraints.
+        let suggestions = sqlx::query_as::<_, Shift>(&sql(r#"
+            SELECT
+                s.id
+                s.title
+                s.description
+                s.location_id
+                s.team_id
+                s.start_time
+                s.end_time
+                s.min_duration_minutes
+                s.max_duration_minutes
+                s.max_people
+                s.status
+                s.created_at
+                s.updated_at
+            FROM
+                shifts s
+                JOIN user_shift_schedules uss ON uss.user_id = ?
+            WHERE
+                -- Consider only open shifts in the near future (e.g., next 30 days)
+                s.status = 'open'
+                AND s.start_time BETWEEN NOW() AND NOW() + INTERVAL '30 days'
+                
+                -- Check if the shift falls within the user's availability for that day of the week.
+                -- This handles cases where availability for a day is not set (NULL).
+                AND CASE EXTRACT(ISODOW FROM s.start_time)
+                    WHEN 1 THEN uss.monday_start IS NOT NULL AND s.start_time::time >= uss.monday_start AND s.end_time::time <= uss.monday_end
+                    WHEN 2 THEN uss.tuesday_start IS NOT NULL AND s.start_time::time >= uss.tuesday_start AND s.end_time::time <= uss.tuesday_end
+                    WHEN 3 THEN uss.wednesday_start IS NOT NULL AND s.start_time::time >= uss.wednesday_start AND s.end_time::time <= uss.wednesday_end
+                    WHEN 4 THEN uss.thursday_start IS NOT NULL AND s.start_time::time >= uss.thursday_start AND s.end_time::time <= uss.thursday_end
+                    WHEN 5 THEN uss.friday_start IS NOT NULL AND s.start_time::time >= uss.friday_start AND s.end_time::time <= uss.friday_end
+                    WHEN 6 THEN uss.saturday_start IS NOT NULL AND s.start_time::time >= uss.saturday_start AND s.end_time::time <= uss.saturday_end
+                    WHEN 7 THEN uss.sunday_start IS NOT NULL AND s.start_time::time >= uss.sunday_start AND s.end_time::time <= uss.sunday_end
+                    ELSE FALSE
+                END
+
+                -- Ensure the user is not already assigned to an overlapping shift.
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM shift_assignments sa
+                    JOIN shifts assigned_shift ON sa.shift_id = assigned_shift.id
+                    WHERE sa.user_id = ?
+                      AND sa.assignment_status = 'accepted' -- Consider only accepted assignments for conflicts
+                      AND assigned_shift.start_time < s.end_time AND assigned_shift.end_time > s.start_time
+                )
+            ORDER BY s.start_time
+            LIMIT 20
+        "#))
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(suggestions)
     }
 
     pub async fn get_shift_assignment(&self, shift_id: Uuid) -> Result<Option<ShiftAssignment>> {

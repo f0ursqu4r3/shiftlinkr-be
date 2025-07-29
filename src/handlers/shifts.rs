@@ -213,12 +213,11 @@ pub async fn assign_shift(
     let assignment_input = ShiftAssignmentInput {
         shift_id,
         user_id: assigned_user_id,
-        assigned_by: user_id,
         acceptance_deadline,
     };
 
     match schedule_repo
-        .create_shift_assignment(assignment_input)
+        .create_shift_assignment(user_id, assignment_input)
         .await
     {
         Ok(assignment) => {

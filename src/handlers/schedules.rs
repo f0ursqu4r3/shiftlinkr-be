@@ -5,7 +5,7 @@ use uuid::Uuid;
 use crate::database::models::{AssignmentResponse, ShiftAssignmentInput, UserShiftScheduleInput};
 use crate::database::repositories::schedule::ScheduleRepository;
 use crate::handlers::shared::ApiResponse;
-use crate::services::auth::Claims;
+use crate::user_context::AsyncUserContext;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -16,13 +16,13 @@ pub struct AssignmentResponseRequest {
 
 // User Shift Schedules
 pub async fn create_user_schedule(
-    claims: Claims,
+    AsyncUserContext(user_context): AsyncUserContext,
     schedule_repo: web::Data<ScheduleRepository>,
     input: web::Json<UserShiftScheduleInput>,
     _req: HttpRequest,
 ) -> Result<HttpResponse> {
     // Users can only create their own schedule, admins can create any
-    if !claims.is_admin() && claims.user_id() != input.user_id {
+    if !user_context.is_admin() && user_context.user_id() != input.user_id {
         return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
             "Can only manage your own schedule",
         )));
@@ -39,7 +39,7 @@ pub async fn create_user_schedule(
 }
 
 pub async fn get_user_schedule(
-    claims: Claims,
+    AsyncUserContext(user_context): AsyncUserContext,
     schedule_repo: web::Data<ScheduleRepository>,
     path: web::Path<Uuid>,
     _req: HttpRequest,
@@ -47,7 +47,7 @@ pub async fn get_user_schedule(
     let user_id = path.into_inner();
 
     // Users can only view their own schedule, admins/managers can view any
-    if !claims.is_manager_or_admin() && claims.user_id() != user_id {
+    if !user_context.is_manager_or_admin() && user_context.user_id() != user_id {
         return Ok(HttpResponse::Forbidden()
             .json(ApiResponse::<()>::error("Can only view your own schedule")));
     }
@@ -66,7 +66,7 @@ pub async fn get_user_schedule(
 }
 
 pub async fn update_user_schedule(
-    claims: Claims,
+    AsyncUserContext(user_context): AsyncUserContext,
     schedule_repo: web::Data<ScheduleRepository>,
     path: web::Path<Uuid>,
     input: web::Json<UserShiftScheduleInput>,
@@ -75,7 +75,7 @@ pub async fn update_user_schedule(
     let user_id = path.into_inner();
 
     // Users can only update their own schedule, admins can update any
-    if !claims.is_admin() && claims.user_id() != user_id {
+    if !user_context.is_admin() && user_context.user_id() != user_id {
         return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
             "Can only manage your own schedule",
         )));
@@ -98,7 +98,7 @@ pub async fn update_user_schedule(
 }
 
 pub async fn delete_user_schedule(
-    claims: Claims,
+    AsyncUserContext(user_context): AsyncUserContext,
     schedule_repo: web::Data<ScheduleRepository>,
     path: web::Path<Uuid>,
     _req: HttpRequest,
@@ -106,7 +106,7 @@ pub async fn delete_user_schedule(
     let user_id = path.into_inner();
 
     // Users can only delete their own schedule, admins can delete any
-    if !claims.is_admin() && claims.user_id() != user_id {
+    if !user_context.is_admin() && user_context.user_id() != user_id {
         return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
             "Can only manage your own schedule",
         )));
@@ -129,20 +129,20 @@ pub async fn delete_user_schedule(
 
 // Shift Assignments
 pub async fn create_shift_assignment(
-    claims: Claims,
+    AsyncUserContext(user_context): AsyncUserContext,
     schedule_repo: web::Data<ScheduleRepository>,
     input: web::Json<ShiftAssignmentInput>,
     _req: HttpRequest,
 ) -> Result<HttpResponse> {
     // Check if user is admin or manager
-    if !claims.is_manager_or_admin() {
+    if !user_context.is_manager_or_admin() {
         return Ok(
             HttpResponse::Forbidden().json(ApiResponse::<()>::error("Manager access required"))
         );
     }
 
     match schedule_repo
-        .create_shift_assignment(input.into_inner())
+        .create_shift_assignment(user_context.user_id(), input.into_inner())
         .await
     {
         Ok(assignment) => Ok(HttpResponse::Created().json(ApiResponse::success(assignment))),
@@ -158,7 +158,7 @@ pub async fn create_shift_assignment(
 }
 
 pub async fn get_shift_assignment(
-    claims: Claims,
+    AsyncUserContext(user_context): AsyncUserContext,
     schedule_repo: web::Data<ScheduleRepository>,
     path: web::Path<Uuid>,
     _req: HttpRequest,
@@ -168,7 +168,7 @@ pub async fn get_shift_assignment(
     match schedule_repo.get_shift_assignment(assignment_id).await {
         Ok(Some(assignment)) => {
             // Users can only view their own assignments, admins/managers can view any
-            if !claims.is_manager_or_admin() && claims.user_id() != assignment.user_id {
+            if !user_context.is_manager_or_admin() && user_context.user_id() != assignment.user_id {
                 return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
                     "Can only view your own assignments",
                 )));
@@ -188,13 +188,13 @@ pub async fn get_shift_assignment(
 }
 
 pub async fn get_shift_assignments_by_shift(
-    claims: Claims,
+    AsyncUserContext(user_context): AsyncUserContext,
     schedule_repo: web::Data<ScheduleRepository>,
     path: web::Path<Uuid>,
     _req: HttpRequest,
 ) -> Result<HttpResponse> {
     // Check if user is admin or manager
-    if !claims.is_manager_or_admin() {
+    if !user_context.is_manager_or_admin() {
         return Ok(
             HttpResponse::Forbidden().json(ApiResponse::<()>::error("Manager access required"))
         );
@@ -213,7 +213,7 @@ pub async fn get_shift_assignments_by_shift(
 }
 
 pub async fn get_shift_assignments_by_user(
-    claims: Claims,
+    AsyncUserContext(user_context): AsyncUserContext,
     schedule_repo: web::Data<ScheduleRepository>,
     path: web::Path<Uuid>,
     _req: HttpRequest,
@@ -221,7 +221,7 @@ pub async fn get_shift_assignments_by_user(
     let user_id = path.into_inner();
 
     // Users can only view their own assignments, admins/managers can view any
-    if !claims.is_manager_or_admin() && claims.user_id() != user_id {
+    if !user_context.is_manager_or_admin() && user_context.user_id() != user_id {
         return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
             "Can only view your own assignments",
         )));
@@ -238,7 +238,7 @@ pub async fn get_shift_assignments_by_user(
 }
 
 pub async fn get_pending_assignments_for_user(
-    claims: Claims,
+    AsyncUserContext(user_context): AsyncUserContext,
     schedule_repo: web::Data<ScheduleRepository>,
     path: web::Path<Uuid>,
     _req: HttpRequest,
@@ -246,7 +246,7 @@ pub async fn get_pending_assignments_for_user(
     let user_id = path.into_inner();
 
     // Users can only view their own pending assignments, admins/managers can view any
-    if !claims.is_manager_or_admin() && claims.user_id() != user_id {
+    if !user_context.is_manager_or_admin() && user_context.user_id() != user_id {
         return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
             "Can only view your own assignments",
         )));
@@ -269,7 +269,7 @@ pub async fn get_pending_assignments_for_user(
 }
 
 pub async fn respond_to_assignment(
-    claims: Claims,
+    AsyncUserContext(user_context): AsyncUserContext,
     schedule_repo: web::Data<ScheduleRepository>,
     path: web::Path<Uuid>,
     input: web::Json<AssignmentResponseRequest>,
@@ -281,7 +281,7 @@ pub async fn respond_to_assignment(
     match schedule_repo.get_shift_assignment(assignment_id).await {
         Ok(Some(assignment)) => {
             // Users can only respond to their own assignments
-            if claims.user_id() != assignment.user_id {
+            if user_context.user_id() != assignment.user_id {
                 return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
                     "Can only respond to your own assignments",
                 )));
@@ -321,13 +321,13 @@ pub async fn respond_to_assignment(
 }
 
 pub async fn cancel_assignment(
-    claims: Claims,
+    AsyncUserContext(user_context): AsyncUserContext,
     schedule_repo: web::Data<ScheduleRepository>,
     path: web::Path<Uuid>,
     _req: HttpRequest,
 ) -> Result<HttpResponse> {
     // Check if user is admin or manager
-    if !claims.is_manager_or_admin() {
+    if !user_context.is_manager_or_admin() {
         return Ok(
             HttpResponse::Forbidden().json(ApiResponse::<()>::error("Manager access required"))
         );
@@ -349,12 +349,12 @@ pub async fn cancel_assignment(
 }
 
 pub async fn expire_overdue_assignments(
-    claims: Claims,
+    AsyncUserContext(user_context): AsyncUserContext,
     schedule_repo: web::Data<ScheduleRepository>,
     _req: HttpRequest,
 ) -> Result<HttpResponse> {
     // Check if user is admin
-    if !claims.is_admin() {
+    if !user_context.is_admin() {
         return Ok(
             HttpResponse::Forbidden().json(ApiResponse::<()>::error("Admin access required"))
         );
@@ -369,6 +369,26 @@ pub async fn expire_overdue_assignments(
             Ok(
                 HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
                     "Failed to expire overdue assignments",
+                )),
+            )
+        }
+    }
+}
+
+pub async fn get_user_shift_suggestions(
+    AsyncUserContext(user_context): AsyncUserContext,
+    schedule_repo: web::Data<ScheduleRepository>,
+    _req: HttpRequest,
+) -> Result<HttpResponse> {
+    let user_id = user_context.user_id();
+
+    match schedule_repo.get_user_shift_suggestions(user_id).await {
+        Ok(suggestions) => Ok(HttpResponse::Ok().json(ApiResponse::success(suggestions))),
+        Err(e) => {
+            log::error!("Failed to get user shift suggestions: {}", e);
+            Ok(
+                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                    "Failed to get user shift suggestions",
                 )),
             )
         }

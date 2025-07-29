@@ -1,7 +1,6 @@
 use actix_web::{web, HttpRequest, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::panic::Location;
 use uuid::Uuid;
 
 use crate::database::models::{
@@ -11,7 +10,6 @@ use crate::database::repositories::company::CompanyRepository;
 use crate::database::repositories::location::LocationRepository;
 use crate::database::repositories::user::UserRepository;
 use crate::handlers::shared::ApiResponse;
-use crate::services::auth::Claims;
 use crate::services::user_context::AsyncUserContext;
 use crate::services::ActivityLogger;
 
@@ -708,7 +706,7 @@ pub async fn get_users(
 }
 
 pub async fn update_user(
-    claims: Claims,
+    AsyncUserContext(user_context): AsyncUserContext,
     user_repo: web::Data<UserRepository>,
     company_repo: web::Data<CompanyRepository>,
     path: web::Path<String>,
@@ -720,7 +718,7 @@ pub async fn update_user(
             return Ok(HttpResponse::BadRequest().json(ApiResponse::error("Invalid user ID")));
         }
     };
-    let user_id = claims.sub;
+    let user_id = user_context.user_id();
     let update_request = input.into_inner();
 
     // Get company_id for permission check
@@ -738,7 +736,7 @@ pub async fn update_user(
             Err(err) => {
                 log::error!(
                     "Error fetching primary company for user {}: {}",
-                    claims.sub,
+                    user_context.user_id(),
                     err
                 );
                 return Ok(HttpResponse::InternalServerError()
@@ -800,7 +798,7 @@ pub async fn update_user(
                     Err(err) => {
                         log::error!(
                             "Error checking admin permissions for user {}: {}",
-                            claims.sub,
+                            user_context.user_id(),
                             err
                         );
                         return Ok(HttpResponse::InternalServerError()

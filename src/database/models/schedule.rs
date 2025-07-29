@@ -73,7 +73,6 @@ pub struct ShiftAssignment {
 pub struct ShiftAssignmentInput {
     pub shift_id: Uuid,                             // UUID for shift references
     pub user_id: Uuid,                              // UUID for user references
-    pub assigned_by: Uuid,                          // UUID for user references
     pub acceptance_deadline: Option<DateTime<Utc>>, // TIMESTAMPTZ
 }
 

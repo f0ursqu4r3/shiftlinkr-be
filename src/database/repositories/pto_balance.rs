@@ -4,10 +4,30 @@ use chrono::{Datelike, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::database::models::{
-    PtoBalance, PtoBalanceAdjustmentInput, PtoBalanceHistory, PtoBalanceType,
-    PtoBalanceUpdateInput, PtoChangeType,
+use crate::database::{
+    models::{
+        PtoBalance, PtoBalanceAdjustmentInput, PtoBalanceHistory, PtoBalanceType,
+        PtoBalanceUpdateInput, PtoChangeType,
+    },
+    utils::sql,
 };
+
+macro_rules! update_field {
+        ($pool:expr, $field_value:expr, $field_name:literal, $user_id:expr, $company_id:expr, $now:expr) => {
+            if let Some(value) = $field_value {
+                sqlx::query(&format!(
+                    "UPDATE user_company SET {} = $1, updated_at = $2 WHERE user_id = $3 AND company_id = $4",
+                    $field_name
+                ))
+                .bind(value)
+                .bind($now)
+                .bind($user_id)
+                .bind($company_id)
+                .execute($pool)
+                .await?;
+            }
+        };
+    }
 
 #[derive(Clone)]
 pub struct PtoBalanceRepository {
@@ -66,55 +86,46 @@ impl PtoBalanceRepository {
         }
 
         // Execute updates for each field that's provided
-        if let Some(hours) = update.pto_balance_hours {
-            sqlx::query("UPDATE user_company SET pto_balance_hours = $1, updated_at = $2 WHERE user_id = $3 AND company_id = $4")
-                .bind(hours)
-                .bind(now)
-                .bind(user_id)
-                .bind(company_id)
-                .execute(&self.pool)
-                .await?;
-        }
-
-        if let Some(hours) = update.sick_balance_hours {
-            sqlx::query("UPDATE user_company SET sick_balance_hours = $1, updated_at = $2 WHERE user_id = $3 AND company_id = $4")
-                .bind(hours)
-                .bind(now)
-                .bind(user_id)
-                .bind(company_id)
-                .execute(&self.pool)
-                .await?;
-        }
-
-        if let Some(hours) = update.personal_balance_hours {
-            sqlx::query("UPDATE user_company SET personal_balance_hours = $1, updated_at = $2 WHERE user_id = $3 AND company_id = $4")
-                .bind(hours)
-                .bind(now)
-                .bind(user_id)
-                .bind(company_id)
-                .execute(&self.pool)
-                .await?;
-        }
-
-        if let Some(rate) = update.pto_accrual_rate {
-            sqlx::query("UPDATE user_company SET pto_accrual_rate = $1, updated_at = $2 WHERE user_id = $3 AND company_id = $4")
-                .bind(rate)
-                .bind(now)
-                .bind(user_id)
-                .bind(company_id)
-                .execute(&self.pool)
-                .await?;
-        }
-
-        if let Some(hire_date) = update.hire_date {
-            sqlx::query("UPDATE user_company SET hire_date = $1, updated_at = $2 WHERE user_id = $3 AND company_id = $4")
-                .bind(hire_date)
-                .bind(now)
-                .bind(user_id)
-                .bind(company_id)
-                .execute(&self.pool)
-                .await?;
-        }
+        update_field!(
+            &self.pool,
+            update.pto_balance_hours,
+            "pto_balance_hours",
+            user_id,
+            company_id,
+            now
+        );
+        update_field!(
+            &self.pool,
+            update.sick_balance_hours,
+            "sick_balance_hours",
+            user_id,
+            company_id,
+            now
+        );
+        update_field!(
+            &self.pool,
+            update.personal_balance_hours,
+            "personal_balance_hours",
+            user_id,
+            company_id,
+            now
+        );
+        update_field!(
+            &self.pool,
+            update.pto_accrual_rate,
+            "pto_accrual_rate",
+            user_id,
+            company_id,
+            now
+        );
+        update_field!(
+            &self.pool,
+            update.hire_date,
+            "hire_date",
+            user_id,
+            company_id,
+            now
+        );
 
         // Return updated balance
         self.get_balance_for_company(user_id, company_id)
@@ -164,10 +175,19 @@ impl PtoBalanceRepository {
 
         // Update balance in user_company table
         let query = format!(
-            "UPDATE user_company SET {} = $1, updated_at = $2 WHERE user_id = $3 AND company_id = $4",
+            "
+            UPDATE
+                user_company
+            SET
+                {} = ?,
+                updated_at = ?
+            WHERE
+                user_id = ?
+                AND company_id = ?
+            ",
             field_name
         );
-        sqlx::query(&query)
+        sqlx::query(&sql(&query))
             .bind(new_balance)
             .bind(now)
             .bind(user_id)
@@ -177,13 +197,13 @@ impl PtoBalanceRepository {
 
         // Create history record
         let balance_type_str = adjustment.balance_type.to_string();
-        let change_type_str = PtoChangeType::Adjustment.to_string();
+        let change_type_str = adjustment.change_type.to_string();
 
-        let history_row = sqlx::query_as::<_, PtoBalanceHistory>(
-            r#"
+        let history_row = sqlx::query_as::<_, PtoBalanceHistory>(&sql(r#"
             INSERT INTO
                 pto_balance_history (
                     user_id,
+                    company_id,
                     balance_type,
                     change_type,
                     hours_changed,
@@ -193,10 +213,11 @@ impl PtoBalanceRepository {
                     created_at
                 )
             VALUES
-                ($1, $2, $3, $4, $5, $6, $7, $8)
+                (?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING 
                 id,
                 user_id,
+                company_id,
                 balance_type,
                 change_type,
                 hours_changed,
@@ -205,9 +226,9 @@ impl PtoBalanceRepository {
                 description,
                 related_time_off_id,
                 created_at
-            "#,
-        )
+        "#))
         .bind(user_id)
+        .bind(company_id)
         .bind(balance_type_str)
         .bind(change_type_str)
         .bind(adjustment.hours_changed)

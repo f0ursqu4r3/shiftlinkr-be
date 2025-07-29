@@ -286,6 +286,10 @@ async fn main() -> Result<()> {
                             .route("/{user_id}", web::get().to(schedules::get_user_schedule))
                             .route("/{user_id}", web::put().to(schedules::update_user_schedule))
                             .route("/{user_id}", web::delete().to(schedules::delete_user_schedule))
+                            .route(
+                                "/{user_id}/suggestions",
+                                web::get().to(schedules::get_user_shift_suggestions),
+                            )
                     )
                     .service(
                         web::scope("/assignments")
