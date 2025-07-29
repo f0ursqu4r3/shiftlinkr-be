@@ -53,9 +53,9 @@ pub async fn create_shift(
 ) -> Result<HttpResponse> {
     // Only admins and managers can create shifts
     if !user_context.is_manager_or_admin() {
-        return Ok(HttpResponse::Forbidden().json(json!({
-            "error": "Manager or admin access required to create shifts"
-        })));
+        return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
+            "Manager or admin access required to create shifts",
+        )));
     }
 
     let req = input.into_inner();
@@ -69,9 +69,10 @@ pub async fn create_shift(
             );
             Ok(HttpResponse::Created().json(&shift))
         }
-        Err(e) => Ok(HttpResponse::BadRequest().json(json!({
-            "error": e.to_string()
-        }))),
+        Err(e) => Ok(HttpResponse::BadRequest().json(ApiResponse::error(&format!(
+            "Failed to create shift: {}",
+            e
+        )))),
     }
 }
 
@@ -267,12 +268,10 @@ pub async fn assign_shift(
                         }
                     }
 
-                    Ok(
-                        HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-                            "shift": shift,
-                            "assignment": assignment
-                        }))),
-                    )
+                    Ok(HttpResponse::Ok().json(ApiResponse::success(json!({
+                        "shift": shift,
+                        "assignment": assignment
+                    }))))
                 }
                 Ok(None) => {
                     Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("Shift not found")))

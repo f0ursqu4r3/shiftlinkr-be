@@ -254,29 +254,32 @@ pub async fn create_invite(
     req: HttpRequest,
 ) -> Result<HttpResponse> {
     let user_id = user_context.user_id();
-    let company_id =
-        user_context.company.as_ref().map(|c| c.id).ok_or_else(|| {
-            actix_web::error::ErrorBadRequest("User does not belong to any company")
-        })?;
+    let company_id = match user_context.company.as_ref() {
+        Some(company) => company.id,
+        None => {
+            return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
+                "User does not belong to any company",
+            )));
+        }
+    };
 
     // Check if user has permission to create invites (admin or manager)
     if !user_context.is_manager_or_admin() {
-        return Ok(HttpResponse::Forbidden().json(json!({
-            "error": "You don't have permission to create invites. Only admins and managers can create invites."
-        })));
+        return Ok(HttpResponse::Forbidden().json(ApiResponse::error("You don't have permission to create invites. Only admins and managers can create invites.")));
     }
 
     // Check if email already exists and is already part of the company
     match user_repo.find_by_email(&request.email).await {
         Ok(Some(existing_user)) => {
             // Check if user is already part of the company
-            let companies = company_repo.get_companies_for_user(existing_user.id).await;
-            if let Ok(companies_vec) = companies {
-                if companies_vec.iter().any(|c| c.id == company_id) {
-                    return Ok(HttpResponse::BadRequest().json(json!({
-                        "error": "User with this email already exists in the company"
-                    })));
-                }
+            if company_repo
+                .check_user_company_access(existing_user.id, company_id)
+                .await
+                .is_ok()
+            {
+                return Ok(HttpResponse::BadRequest().json(ApiResponse::error(
+                    "User with this email already exists in the company",
+                )));
             }
         }
         Ok(None) => {}
@@ -323,7 +326,7 @@ pub async fn create_invite(
                 serde_json::Value::String(company_id.to_string()),
             );
 
-            activity_logger
+            if let Err(err) = activity_logger
                 .log_activity(
                     company_id,
                     Some(user_id),
@@ -336,21 +339,21 @@ pub async fn create_invite(
                     &req,
                 )
                 .await
-                .map_err(|e| {
-                    actix_web::error::ErrorInternalServerError(format!(
-                        "Failed to log activity: {}",
-                        e
-                    ))
-                })?;
+            {
+                log::error!("Failed to log invite creation activity: {}", err);
+            }
 
-            Ok(HttpResponse::Ok().json(json!({
+            Ok(HttpResponse::Ok().json(ApiResponse::success(json!({
                 "invite_link": invite_link,
                 "expires_at": invite_token.expires_at
-            })))
+            }))))
         }
-        Err(err) => Ok(HttpResponse::InternalServerError().json(json!({
-            "error": format!("Failed to create invite: {}", err)
-        }))),
+        Err(err) => Ok(
+            HttpResponse::InternalServerError().json(ApiResponse::error(&format!(
+                "Failed to create invite: {}",
+                err
+            ))),
+        ),
     }
 }
 
@@ -392,14 +395,18 @@ pub async fn get_invite(
                 expires_at: invite_token.expires_at,
             };
 
-            Ok(HttpResponse::Ok().json(invite_response))
+            Ok(HttpResponse::Ok().json(ApiResponse::success(invite_response)))
         }
-        Ok(None) => Ok(HttpResponse::BadRequest().json(json!({
-            "error": "Invalid or expired invite token"
-        }))),
-        Err(err) => Ok(HttpResponse::InternalServerError().json(json!({
-            "error": format!("Failed to get invite: {}", err),
-        }))),
+        Ok(None) => {
+            Ok(HttpResponse::BadRequest()
+                .json(ApiResponse::error("Invalid or expired invite token")))
+        }
+        Err(err) => Ok(
+            HttpResponse::InternalServerError().json(ApiResponse::error(&format!(
+                "Failed to get invite: {}",
+                err
+            ))),
+        ),
     }
 }
 
