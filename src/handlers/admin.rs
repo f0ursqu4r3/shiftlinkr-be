@@ -1,9 +1,12 @@
 use actix_web::{web, HttpRequest, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::panic::Location;
 use uuid::Uuid;
 
-use crate::database::models::{Action, CompanyRole, LocationInput, TeamInput};
+use crate::database::models::{
+    Action, CompanyRole, CreateUpdateLocationInput, LocationInput, TeamInput,
+};
 use crate::database::repositories::company::CompanyRepository;
 use crate::database::repositories::location::LocationRepository;
 use crate::database::repositories::user::UserRepository;
@@ -40,23 +43,41 @@ pub async fn create_location(
     AsyncUserContext(user_context): AsyncUserContext,
     location_repo: web::Data<LocationRepository>,
     activity_logger: web::Data<ActivityLogger>,
-    input: web::Json<LocationInput>,
+    input: web::Json<CreateUpdateLocationInput>,
     req: HttpRequest,
 ) -> Result<HttpResponse> {
     // Check if user is admin or manager for the specified company
-    let company_id = input.company_id;
     let user_id = user_context.user_id();
 
-    if !user_context.is_manager_or_admin() || user_context.company_id() != Some(company_id) {
+    if !user_context.is_manager_or_admin() {
         return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
             "Insufficient permissions to create location",
         )));
     }
 
+    let company_id = match user_context.company_id() {
+        Some(company_id) => company_id,
+        None => {
+            return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
+                "User does not belong to any company",
+            )));
+        }
+    };
+
     let location_input = input.into_inner();
+
     let location_name = location_input.name.clone();
 
-    match location_repo.create_location(location_input).await {
+    match location_repo
+        .create_location(LocationInput {
+            name: location_input.name,
+            address: location_input.address,
+            phone: location_input.phone,
+            email: location_input.email,
+            company_id,
+        })
+        .await
+    {
         Ok(location) => {
             // Log location creation activity
             let mut metadata = HashMap::new();
@@ -161,12 +182,19 @@ pub async fn update_location(
     AsyncUserContext(user_context): AsyncUserContext,
     location_repo: web::Data<LocationRepository>,
     path: web::Path<Uuid>,
-    input: web::Json<LocationInput>,
+    input: web::Json<CreateUpdateLocationInput>,
 ) -> Result<HttpResponse> {
     // Check if user is admin or manager
-    let company_id = input.company_id;
+    let company_id = match user_context.company_id() {
+        Some(company_id) => company_id,
+        None => {
+            return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
+                "User does not belong to any company",
+            )));
+        }
+    };
 
-    if !user_context.is_manager_or_admin() || user_context.company_id() != Some(company_id) {
+    if !user_context.is_manager_or_admin() {
         return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
             "Insufficient permissions to update location",
         )));
@@ -175,7 +203,16 @@ pub async fn update_location(
     let location_id = path.into_inner();
 
     match location_repo
-        .update_location(location_id, input.into_inner())
+        .update_location(
+            location_id,
+            LocationInput {
+                name: input.name.clone(),
+                address: input.address.clone(),
+                phone: input.phone.clone(),
+                email: input.email.clone(),
+                company_id,
+            },
+        )
         .await
     {
         Ok(Some(location)) => Ok(HttpResponse::Ok().json(ApiResponse::success(location))),

@@ -14,7 +14,7 @@ impl LocationRepository {
         Self { pool }
     }
 
-    pub async fn create_location(&self, input: LocationInput) -> Result<Location> {
+    pub async fn create_location(&self, location: LocationInput) -> Result<Location> {
         let now = Utc::now();
         let location = sqlx::query_as::<_, Location>(
             r#"
@@ -41,11 +41,11 @@ impl LocationRepository {
                 updated_at
             "#,
         )
-        .bind(input.name)
-        .bind(input.address)
-        .bind(input.phone)
-        .bind(input.email)
-        .bind(input.company_id)
+        .bind(location.name)
+        .bind(location.address)
+        .bind(location.phone)
+        .bind(location.email)
+        .bind(location.company_id)
         .bind(now)
         .bind(now)
         .fetch_one(&self.pool)

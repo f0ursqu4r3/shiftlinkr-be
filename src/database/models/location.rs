@@ -18,9 +18,18 @@ pub struct Location {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LocationInput {
+    pub company_id: Uuid, // UUID type
     pub name: String,
     pub address: Option<String>,
     pub phone: Option<String>,
     pub email: Option<String>,
-    pub company_id: Uuid, // UUID type
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateUpdateLocationInput {
+    pub name: String,
+    pub address: Option<String>,
+    pub phone: Option<String>,
+    pub email: Option<String>,
 }
