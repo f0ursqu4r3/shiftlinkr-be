@@ -243,6 +243,7 @@ async fn main() -> Result<()> {
                     .service(
                         web::scope("/pto-balance")
                             .route("", web::get().to(pto_balance::get_pto_balance))
+                            .route("/{user_id}", web::get().to(pto_balance::get_pto_balance))
                             .route("/{user_id}", web::put().to(pto_balance::update_pto_balance))
                             .route(
                                 "/{user_id}/adjust",
@@ -253,7 +254,7 @@ async fn main() -> Result<()> {
                                 web::get().to(pto_balance::get_pto_balance_history),
                             )
                             .route(
-                                "/{user_id}/accrual/{company_id}",
+                                "/{user_id}/accrual",
                                 web::post().to(pto_balance::process_pto_accrual),
                             ),
                     )

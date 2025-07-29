@@ -5,7 +5,7 @@ use uuid::Uuid;
 use crate::database::models::{PtoBalanceAdjustmentInput, PtoBalanceUpdateInput};
 use crate::database::repositories::pto_balance::PtoBalanceRepository;
 use crate::handlers::shared::ApiResponse;
-use crate::services::auth::Claims;
+use crate::user_context::AsyncUserContext;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -15,68 +15,80 @@ pub struct BalanceQueryInput {
     pub limit: Option<i32>,
 }
 
+/// Helper function to get company ID or return error
+fn get_company_id_or_error(
+    user_context: &crate::user_context::UserContext,
+) -> Result<Uuid, HttpResponse> {
+    user_context.company.as_ref().map(|c| c.id).ok_or_else(|| {
+        HttpResponse::BadRequest().json(ApiResponse::<()>::error(
+            "User does not belong to any company",
+        ))
+    })
+}
+
+/// Helper function to check if user can access another user's data
+fn can_access_user_data(
+    user_context: &crate::user_context::UserContext,
+    target_user_id: Uuid,
+) -> bool {
+    user_context.is_manager_or_admin() || target_user_id == user_context.user.id
+}
+
 /// Get PTO balance for a user
 pub async fn get_pto_balance(
-    claims: Claims,
+    AsyncUserContext(user_context): AsyncUserContext,
     repo: web::Data<PtoBalanceRepository>,
-    query: web::Query<BalanceQueryInput>,
+    path: Option<web::Path<Uuid>>,
 ) -> Result<HttpResponse> {
-    let company_id = query.company_id;
-
-    // Determine which user's balance to retrieve
-    let user_id = if let Some(requested_user_id) = query.user_id {
-        // Only admins and managers can view other users' balances
-        if !claims.is_manager_or_admin() && requested_user_id != claims.sub {
-            return Ok(HttpResponse::Forbidden()
-                .json(ApiResponse::error("Cannot view other users' balances")));
+    let user_id = match path {
+        Some(path) => {
+            let target_user_id = path.into_inner();
+            if !can_access_user_data(&user_context, target_user_id) {
+                return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
+                    "Cannot view other users' PTO balance",
+                )));
+            }
+            target_user_id
         }
-        requested_user_id
-    } else {
-        // Default to current user's balance
-        claims.sub
+        None => user_context.user.id,
+    };
+
+    let company_id = match get_company_id_or_error(&user_context) {
+        Ok(id) => id,
+        Err(err) => return Ok(err),
     };
 
     match repo.get_balance_for_company(user_id, company_id).await {
         Ok(Some(balance)) => Ok(HttpResponse::Ok().json(ApiResponse::success(balance))),
-        Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::error("User not found"))),
+        Ok(None) => {
+            Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("PTO balance not found")))
+        }
         Err(err) => {
             log::error!("Error fetching PTO balance: {}", err);
             Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::error("Failed to fetch PTO balance")))
+                .json(ApiResponse::<()>::error("Failed to fetch PTO balance")))
         }
     }
 }
 
 /// Update PTO balance for a user (admins/managers only)
 pub async fn update_pto_balance(
-    claims: Claims,
+    AsyncUserContext(user_context): AsyncUserContext,
     repo: web::Data<PtoBalanceRepository>,
     path: web::Path<Uuid>,
     update: web::Json<PtoBalanceUpdateInput>,
 ) -> Result<HttpResponse> {
     // Only admins and managers can update PTO balances
-    if !claims.is_manager_or_admin() {
-        return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
+    if !user_context.is_manager_or_admin() {
+        return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
             "Insufficient permissions to update PTO balance",
         )));
     }
 
-    let company_id = match claims.company_id {
-        Some(id) => {
-            if update.company_id != id {
-                return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
-                    "Cannot update PTO balance for a different company",
-                )));
-            }
-            id
-        }
-        None => {
-            return Ok(HttpResponse::BadRequest().json(ApiResponse::error(
-                "Company ID is required for updating PTO balance",
-            )));
-        }
+    let company_id = match get_company_id_or_error(&user_context) {
+        Ok(id) => id,
+        Err(err) => return Ok(err),
     };
-
     let user_id = path.into_inner();
 
     match repo
@@ -87,33 +99,30 @@ pub async fn update_pto_balance(
         Err(err) => {
             log::error!("Error updating PTO balance: {}", err);
             Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::error("Failed to update PTO balance")))
+                .json(ApiResponse::<()>::error("Failed to update PTO balance")))
         }
     }
 }
 
 /// Adjust PTO balance (admins/managers only)
 pub async fn adjust_pto_balance(
-    claims: Claims,
+    AsyncUserContext(user_context): AsyncUserContext,
     repo: web::Data<PtoBalanceRepository>,
-    path: web::Path<String>,
+    path: web::Path<Uuid>, // Changed from String to Uuid
     adjustment: web::Json<PtoBalanceAdjustmentInput>,
 ) -> Result<HttpResponse> {
     // Only admins and managers can adjust PTO balances
-    if !claims.is_admin() && !claims.is_manager() {
-        return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
+    if !user_context.is_manager_or_admin() {
+        return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
             "Insufficient permissions to adjust PTO balance",
         )));
     }
 
-    let user_id = match Uuid::parse_str(&path.into_inner()) {
+    let company_id = match get_company_id_or_error(&user_context) {
         Ok(id) => id,
-        Err(_) => {
-            return Ok(HttpResponse::BadRequest().json(ApiResponse::error("Invalid user ID format")))
-        }
+        Err(err) => return Ok(err),
     };
-
-    let company_id = adjustment.company_id;
+    let user_id = path.into_inner();
 
     match repo
         .adjust_balance_for_company(user_id, company_id, adjustment.into_inner())
@@ -123,14 +132,14 @@ pub async fn adjust_pto_balance(
         Err(err) => {
             log::error!("Error adjusting PTO balance: {}", err);
             Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::error("Failed to adjust PTO balance")))
+                .json(ApiResponse::<()>::error("Failed to adjust PTO balance")))
         }
     }
 }
 
 /// Get PTO balance history for a user
 pub async fn get_pto_balance_history(
-    claims: Claims,
+    AsyncUserContext(user_context): AsyncUserContext,
     repo: web::Data<PtoBalanceRepository>,
     path: web::Path<Uuid>,
     query: web::Query<BalanceQueryInput>,
@@ -138,8 +147,8 @@ pub async fn get_pto_balance_history(
     let user_id = path.into_inner();
 
     // Users can only view their own history unless they're admins/managers
-    if !claims.is_manager_or_admin() && user_id != claims.sub {
-        return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
+    if !can_access_user_data(&user_context, user_id) {
+        return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
             "Cannot view other users' balance history",
         )));
     }
@@ -149,25 +158,30 @@ pub async fn get_pto_balance_history(
         Err(err) => {
             log::error!("Error fetching PTO balance history: {}", err);
             Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::error("Failed to fetch balance history")))
+                .json(ApiResponse::<()>::error("Failed to fetch balance history")))
         }
     }
 }
 
 /// Process PTO accrual for a user (admins/managers only)
 pub async fn process_pto_accrual(
-    claims: Claims,
+    AsyncUserContext(user_context): AsyncUserContext,
     repo: web::Data<PtoBalanceRepository>,
-    path: web::Path<(Uuid, Uuid)>,
+    path: web::Path<Uuid>,
 ) -> Result<HttpResponse> {
     // Only admins and managers can process accruals
-    if !claims.is_manager_or_admin() {
-        return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
+    if !user_context.is_manager_or_admin() {
+        return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
             "Insufficient permissions to process PTO accrual",
         )));
     }
 
-    let (user_id, company_id) = path.into_inner();
+    let company_id = match get_company_id_or_error(&user_context) {
+        Ok(id) => id,
+        Err(err) => return Ok(err),
+    };
+    let user_id = path.into_inner();
+
     match repo.process_accrual_for_company(user_id, company_id).await {
         Ok(Some(history)) => Ok(HttpResponse::Created().json(ApiResponse::success(history))),
         Ok(None) => Ok(
@@ -179,7 +193,7 @@ pub async fn process_pto_accrual(
         Err(err) => {
             log::error!("Error processing PTO accrual: {}", err);
             Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::error("Failed to process PTO accrual")))
+                .json(ApiResponse::<()>::error("Failed to process PTO accrual")))
         }
     }
 }

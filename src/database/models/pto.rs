@@ -148,7 +148,6 @@ impl std::str::FromStr for PtoChangeType {
 #[serde(rename_all = "camelCase")]
 pub struct PtoBalance {
     pub user_id: Uuid,
-    pub company_id: Uuid,
     pub pto_balance_hours: i32,
     pub sick_balance_hours: i32,
     pub personal_balance_hours: i32,
@@ -160,7 +159,6 @@ pub struct PtoBalance {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PtoBalanceUpdateInput {
-    pub company_id: Uuid,
     pub pto_balance_hours: Option<i32>,
     pub sick_balance_hours: Option<i32>,
     pub personal_balance_hours: Option<i32>,
@@ -171,7 +169,7 @@ pub struct PtoBalanceUpdateInput {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PtoBalanceAdjustmentInput {
-    pub company_id: Uuid, // UUID for company references
+    // UUID for company references
     pub balance_type: PtoBalanceType,
     pub hours_changed: i32,
     pub description: String,
