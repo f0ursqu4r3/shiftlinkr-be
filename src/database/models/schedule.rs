@@ -2,6 +2,8 @@ use chrono::{DateTime, NaiveTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use super::macros::string_enum;
+
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct UserShiftSchedule {
@@ -75,62 +77,15 @@ pub struct ShiftAssignmentInput {
     pub acceptance_deadline: Option<DateTime<Utc>>, // TIMESTAMPTZ
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum AssignmentStatus {
-    Pending,
-    Accepted,
-    Declined,
-    Expired,
-    Cancelled,
-}
-
-impl std::fmt::Display for AssignmentStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AssignmentStatus::Pending => write!(f, "pending"),
-            AssignmentStatus::Accepted => write!(f, "accepted"),
-            AssignmentStatus::Declined => write!(f, "declined"),
-            AssignmentStatus::Expired => write!(f, "expired"),
-            AssignmentStatus::Cancelled => write!(f, "cancelled"),
-        }
-    }
-}
-
-impl std::str::FromStr for AssignmentStatus {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "pending" => Ok(AssignmentStatus::Pending),
-            "accepted" => Ok(AssignmentStatus::Accepted),
-            "declined" => Ok(AssignmentStatus::Declined),
-            "expired" => Ok(AssignmentStatus::Expired),
-            "cancelled" => Ok(AssignmentStatus::Cancelled),
-            _ => Err(format!("Invalid assignment status: {}", s)),
-        }
-    }
-}
-
-impl sqlx::Type<sqlx::Postgres> for AssignmentStatus {
-    fn type_info() -> sqlx::postgres::PgTypeInfo {
-        sqlx::postgres::PgTypeInfo::with_name("VARCHAR")
-    }
-}
-
-impl<'q> sqlx::Encode<'q, sqlx::Postgres> for AssignmentStatus {
-    fn encode_by_ref(
-        &self,
-        buf: &mut sqlx::postgres::PgArgumentBuffer,
-    ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
-        let s = self.to_string();
-        <String as sqlx::Encode<'q, sqlx::Postgres>>::encode_by_ref(&s, buf)
-    }
-}
-
-impl<'r> sqlx::Decode<'r, sqlx::Postgres> for AssignmentStatus {
-    fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
-        let s = <String as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
-        s.parse::<AssignmentStatus>().map_err(|e| e.into())
+string_enum! {
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+    #[serde(rename_all = "lowercase")]
+    pub enum AssignmentStatus {
+        Pending => "pending",
+        Accepted => "accepted",
+        Declined => "declined",
+        Expired => "expired",
+        Cancelled => "cancelled",
     }
 }
 
@@ -140,52 +95,11 @@ impl Default for AssignmentStatus {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum AssignmentResponse {
-    Accept,
-    Decline,
-}
-
-impl std::fmt::Display for AssignmentResponse {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AssignmentResponse::Accept => write!(f, "accept"),
-            AssignmentResponse::Decline => write!(f, "decline"),
-        }
-    }
-}
-
-impl std::str::FromStr for AssignmentResponse {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "accept" => Ok(AssignmentResponse::Accept),
-            "decline" => Ok(AssignmentResponse::Decline),
-            _ => Err(format!("Invalid assignment response: {}", s)),
-        }
-    }
-}
-
-impl sqlx::Type<sqlx::Postgres> for AssignmentResponse {
-    fn type_info() -> sqlx::postgres::PgTypeInfo {
-        sqlx::postgres::PgTypeInfo::with_name("VARCHAR")
-    }
-}
-
-impl<'q> sqlx::Encode<'q, sqlx::Postgres> for AssignmentResponse {
-    fn encode_by_ref(
-        &self,
-        buf: &mut sqlx::postgres::PgArgumentBuffer,
-    ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
-        let s = self.to_string();
-        <String as sqlx::Encode<'q, sqlx::Postgres>>::encode_by_ref(&s, buf)
-    }
-}
-
-impl<'r> sqlx::Decode<'r, sqlx::Postgres> for AssignmentResponse {
-    fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
-        let s = <String as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
-        s.parse::<AssignmentResponse>().map_err(|e| e.into())
+string_enum! {
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+    #[serde(rename_all = "lowercase")]
+    pub enum AssignmentResponse {
+        Accept => "accept",
+        Decline => "decline",
     }
 }

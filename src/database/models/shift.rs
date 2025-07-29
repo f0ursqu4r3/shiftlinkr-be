@@ -2,6 +2,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use super::macros::string_enum;
+
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct Shift {
@@ -37,59 +39,13 @@ pub struct ShiftInput {
     pub updated_at: DateTime<Utc>, // TIMESTAMPTZ
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ShiftStatus {
-    Open,
-    Assigned,
-    Completed,
-    Cancelled,
-}
-
-impl std::fmt::Display for ShiftStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ShiftStatus::Open => write!(f, "open"),
-            ShiftStatus::Assigned => write!(f, "assigned"),
-            ShiftStatus::Completed => write!(f, "completed"),
-            ShiftStatus::Cancelled => write!(f, "cancelled"),
-        }
-    }
-}
-
-impl std::str::FromStr for ShiftStatus {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "open" => Ok(ShiftStatus::Open),
-            "assigned" => Ok(ShiftStatus::Assigned),
-            "completed" => Ok(ShiftStatus::Completed),
-            "cancelled" => Ok(ShiftStatus::Cancelled),
-            _ => Err(format!("Invalid shift status: {}", s)),
-        }
-    }
-}
-
-impl sqlx::Type<sqlx::Postgres> for ShiftStatus {
-    fn type_info() -> sqlx::postgres::PgTypeInfo {
-        sqlx::postgres::PgTypeInfo::with_name("VARCHAR")
-    }
-}
-
-impl<'q> sqlx::Encode<'q, sqlx::Postgres> for ShiftStatus {
-    fn encode_by_ref(
-        &self,
-        buf: &mut sqlx::postgres::PgArgumentBuffer,
-    ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
-        let s = self.to_string();
-        <String as sqlx::Encode<'q, sqlx::Postgres>>::encode_by_ref(&s, buf)
-    }
-}
-
-impl<'r> sqlx::Decode<'r, sqlx::Postgres> for ShiftStatus {
-    fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
-        let s = <String as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
-        s.parse::<ShiftStatus>().map_err(|e| e.into())
+string_enum! {
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub enum ShiftStatus {
+        Open => "open",
+        Assigned => "assigned",
+        Completed => "completed",
+        Cancelled => "cancelled",
     }
 }
 

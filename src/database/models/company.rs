@@ -3,6 +3,8 @@ use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use super::macros::string_enum;
+
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct Company {
@@ -37,72 +39,19 @@ pub struct CompanyEmployee {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum CompanyRole {
-    Employee,
-    Manager,
-    Admin,
-}
-
-impl sqlx::Type<sqlx::Postgres> for CompanyRole {
-    fn type_info() -> sqlx::postgres::PgTypeInfo {
-        sqlx::postgres::PgTypeInfo::with_name("VARCHAR")
-    }
-}
-
-impl<'q> sqlx::Encode<'q, sqlx::Postgres> for CompanyRole {
-    fn encode_by_ref(
-        &self,
-        buf: &mut sqlx::postgres::PgArgumentBuffer,
-    ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
-        let s = match self {
-            CompanyRole::Admin => "admin",
-            CompanyRole::Manager => "manager",
-            CompanyRole::Employee => "employee",
-        };
-        <&str as sqlx::Encode<'q, sqlx::Postgres>>::encode_by_ref(&s, buf)
-    }
-}
-
-impl<'r> sqlx::Decode<'r, sqlx::Postgres> for CompanyRole {
-    fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
-        let s = <String as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
-        match s.as_str() {
-            "admin" => Ok(CompanyRole::Admin),
-            "manager" => Ok(CompanyRole::Manager),
-            "employee" => Ok(CompanyRole::Employee),
-            _ => Err(format!("Invalid CompanyRole: {}", s).into()),
-        }
+string_enum! {
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+    #[serde(rename_all = "lowercase")]
+    pub enum CompanyRole {
+        Admin => "admin",
+        Manager => "manager",
+        Employee => "employee",
     }
 }
 
 impl Default for CompanyRole {
     fn default() -> Self {
         CompanyRole::Employee
-    }
-}
-
-impl std::fmt::Display for CompanyRole {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CompanyRole::Admin => write!(f, "admin"),
-            CompanyRole::Manager => write!(f, "manager"),
-            CompanyRole::Employee => write!(f, "employee"),
-        }
-    }
-}
-
-impl std::str::FromStr for CompanyRole {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "admin" => Ok(CompanyRole::Admin),
-            "manager" => Ok(CompanyRole::Manager),
-            "employee" => Ok(CompanyRole::Employee),
-            _ => Err(format!("Invalid CompanyRole: {}", s)),
-        }
     }
 }
 

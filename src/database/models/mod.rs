@@ -3,6 +3,7 @@ pub mod auth;
 pub mod company;
 pub mod invite;
 pub mod location;
+pub mod macros;
 pub mod pto;
 pub mod schedule;
 pub mod shift;

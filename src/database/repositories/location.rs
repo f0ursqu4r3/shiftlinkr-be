@@ -3,7 +3,10 @@ use chrono::Utc;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::database::models::{Location, LocationInput, Team, TeamInput, TeamMember};
+use crate::database::{
+    models::{Location, LocationInput, Team, TeamInput, TeamMember},
+    utils::sql,
+};
 
 pub struct LocationRepository {
     pool: PgPool,
@@ -207,9 +210,22 @@ impl LocationRepository {
     }
 
     pub async fn get_all_teams_for_company(&self, company_id: Uuid) -> Result<Vec<Team>> {
-        let teams = sqlx::query_as::<_, Team>(
-            "SELECT id, name, description, location_id, created_at, updated_at FROM teams WHERE company_id = $1 ORDER BY name"
-        )
+        let teams = sqlx::query_as::<_, Team>(&sql(r#"
+            SELECT
+                t.id,
+                t.name,
+                t.description,
+                t.location_id,
+                t.created_at,
+                t.updated_at
+            FROM
+                teams t
+                INNER JOIN locations l ON t.location_id = l.id
+            WHERE
+                l.company_id = ?
+            ORDER BY
+                t.name
+        "#))
         .bind(company_id)
         .fetch_all(&self.pool)
         .await?;
