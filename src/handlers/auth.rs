@@ -301,7 +301,10 @@ pub async fn create_invite(
         .await
     {
         Ok(invite_token) => {
-            let invite_link = format!("{}/auth/invite/{}", config.base_url, invite_token.token);
+            let invite_link = format!(
+                "{}/auth/invite/{}",
+                config.client_base_url, invite_token.token
+            );
 
             // Log invite creation activity
             let mut metadata = HashMap::new();

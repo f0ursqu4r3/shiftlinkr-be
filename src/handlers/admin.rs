@@ -10,6 +10,7 @@ use crate::database::repositories::company::CompanyRepository;
 use crate::database::repositories::location::LocationRepository;
 use crate::database::repositories::user::UserRepository;
 use crate::handlers::shared::ApiResponse;
+use crate::repositories::TeamRepository;
 use crate::services::user_context::AsyncUserContext;
 use crate::services::ActivityLogger;
 
@@ -118,29 +119,30 @@ pub async fn get_locations(
     location_repo: web::Data<LocationRepository>,
     company_repo: web::Data<CompanyRepository>,
 ) -> Result<HttpResponse> {
-    // Get all companies the user has access to
     let user_id = user_context.user_id();
 
     match company_repo.get_companies_for_user(user_id).await {
         Ok(companies) => {
-            let mut all_locations = Vec::new();
-            // Get locations for each company the user has access to
-            for company in companies {
-                match location_repo.get_locations_by_company(company.id).await {
-                    Ok(mut locations) => {
-                        all_locations.append(&mut locations);
-                    }
-                    Err(err) => {
-                        log::error!(
-                            "Error fetching locations for company {}: {}",
-                            company.id,
-                            err
-                        );
-                        // Continue with other companies instead of failing completely
-                    }
+            if companies.is_empty() {
+                return Ok(
+                    HttpResponse::Ok().json(ApiResponse::success(Vec::<LocationInput>::new()))
+                );
+            }
+            let company_ids: Vec<Uuid> = companies.iter().map(|c| c.id).collect();
+
+            match location_repo
+                .get_locations_by_company_ids(company_ids)
+                .await
+            {
+                Ok(all_locations) => {
+                    Ok(HttpResponse::Ok().json(ApiResponse::success(all_locations)))
+                }
+                Err(err) => {
+                    log::error!("Error fetching locations for user {}: {}", user_id, err);
+                    Ok(HttpResponse::InternalServerError()
+                        .json(ApiResponse::error("Failed to fetch locations")))
                 }
             }
-            Ok(HttpResponse::Ok().json(ApiResponse::success(all_locations)))
         }
         Err(err) => {
             log::error!("Error fetching user companies: {}", err);
@@ -153,19 +155,40 @@ pub async fn get_locations(
 pub async fn get_location(
     AsyncUserContext(user_context): AsyncUserContext,
     location_repo: web::Data<LocationRepository>,
+    company_repo: web::Data<CompanyRepository>,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse> {
     let location_id = path.into_inner();
+    let user_id = user_context.user_id();
 
     match location_repo.find_by_id(location_id).await {
         Ok(Some(location)) => {
-            // Check if user has access to this location
-            if user_context.company_id() != Some(location.company_id) {
-                return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
-                    "Insufficient permissions to access location",
-                )));
+            // Check if user has access to this location's company
+            match company_repo
+                .check_user_company_access(user_id, location.company_id)
+                .await
+            {
+                Ok(Some(_)) => {
+                    // User has access, proceed
+                    Ok(HttpResponse::Ok().json(ApiResponse::success(location)))
+                }
+                Ok(None) => {
+                    // User does not have access
+                    Ok(HttpResponse::Forbidden().json(ApiResponse::error(
+                        "Insufficient permissions to access location",
+                    )))
+                }
+                Err(err) => {
+                    log::error!(
+                        "Error checking company access for user {} and location {}: {}",
+                        user_id,
+                        location_id,
+                        err
+                    );
+                    Ok(HttpResponse::InternalServerError()
+                        .json(ApiResponse::error("Failed to verify permissions")))
+                }
             }
-            Ok(HttpResponse::Ok().json(ApiResponse::success(location)))
         }
         Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::error("Location not found"))),
         Err(err) => {
@@ -269,6 +292,7 @@ pub async fn delete_location(
 pub async fn create_team(
     AsyncUserContext(user_context): AsyncUserContext,
     location_repo: web::Data<LocationRepository>,
+    team_repo: web::Data<TeamRepository>,
     activity_logger: web::Data<ActivityLogger>,
     input: web::Json<TeamInput>,
     req: HttpRequest,
@@ -301,7 +325,7 @@ pub async fn create_team(
         }
     };
 
-    match location_repo.create_team(team_input).await {
+    match team_repo.create_team(team_input).await {
         Ok(team) => {
             // Log team creation activity
             let mut metadata = HashMap::new();
@@ -346,6 +370,7 @@ pub async fn create_team(
 pub async fn get_teams(
     AsyncUserContext(user_context): AsyncUserContext,
     location_repo: web::Data<LocationRepository>,
+    team_repo: web::Data<TeamRepository>,
     query: web::Query<TeamQuery>,
 ) -> Result<HttpResponse> {
     let teams = if let Some(location_id) = query.location_id {
@@ -369,14 +394,14 @@ pub async fn get_teams(
                     .json(ApiResponse::error("Failed to fetch location")));
             }
         }
-        location_repo.get_teams_by_location(location_id).await
+        team_repo.get_teams_by_location(location_id).await
     } else if user_context.company_id().is_some() {
         if !user_context.is_manager_or_admin() {
             return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
                 "Insufficient permissions to update location",
             )));
         }
-        location_repo
+        team_repo
             .get_all_teams_for_company(user_context.company_id().unwrap())
             .await
     } else {
@@ -398,6 +423,7 @@ pub async fn get_teams(
 pub async fn get_team(
     AsyncUserContext(user_context): AsyncUserContext,
     location_repo: web::Data<LocationRepository>,
+    team_repo: web::Data<TeamRepository>,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse> {
     let team_id = path.into_inner();
@@ -420,7 +446,7 @@ pub async fn get_team(
         }
     };
 
-    match location_repo.get_team_by_id(team_id).await {
+    match team_repo.get_team_by_id(team_id).await {
         Ok(Some(team)) => Ok(HttpResponse::Ok().json(ApiResponse::success(team))),
         Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::error("Team not found"))),
         Err(err) => {
@@ -436,6 +462,7 @@ pub async fn get_team(
 pub async fn update_team(
     AsyncUserContext(user_context): AsyncUserContext,
     location_repo: web::Data<LocationRepository>,
+    team_repo: web::Data<TeamRepository>,
     path: web::Path<Uuid>,
     input: web::Json<TeamInput>,
 ) -> Result<HttpResponse> {
@@ -464,7 +491,7 @@ pub async fn update_team(
         }
     };
 
-    match location_repo.update_team(team_id, input.into_inner()).await {
+    match team_repo.update_team(team_id, input.into_inner()).await {
         Ok(Some(team)) => Ok(HttpResponse::Ok().json(ApiResponse::success(team))),
         Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::error("Team not found"))),
         Err(err) => {
@@ -478,6 +505,7 @@ pub async fn update_team(
 pub async fn delete_team(
     AsyncUserContext(user_context): AsyncUserContext,
     location_repo: web::Data<LocationRepository>,
+    team_repo: web::Data<TeamRepository>,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse> {
     let team_id = path.into_inner();
@@ -505,7 +533,7 @@ pub async fn delete_team(
         }
     };
 
-    match location_repo.delete_team(team_id).await {
+    match team_repo.delete_team(team_id).await {
         Ok(true) => Ok(HttpResponse::Ok().json(ApiResponse::success("Team deleted successfully"))),
         Ok(false) => Ok(HttpResponse::NotFound().json(ApiResponse::error("Team not found"))),
         Err(err) => {
@@ -520,6 +548,7 @@ pub async fn delete_team(
 pub async fn add_team_member(
     AsyncUserContext(user_context): AsyncUserContext,
     location_repo: web::Data<LocationRepository>,
+    team_repo: web::Data<TeamRepository>,
     path: web::Path<(Uuid, Uuid)>,
 ) -> Result<HttpResponse> {
     let (team_id, user_id) = path.into_inner();
@@ -547,7 +576,7 @@ pub async fn add_team_member(
         }
     };
 
-    match location_repo.add_team_member(team_id, user_id).await {
+    match team_repo.add_team_member(team_id, user_id).await {
         Ok(team_member) => Ok(HttpResponse::Created().json(ApiResponse::success(team_member))),
         Err(err) => {
             log::error!("Error adding team member: {}", err);
@@ -560,6 +589,7 @@ pub async fn add_team_member(
 pub async fn get_team_members(
     AsyncUserContext(user_context): AsyncUserContext,
     location_repo: web::Data<LocationRepository>,
+    team_repo: web::Data<TeamRepository>,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse> {
     let team_id = path.into_inner();
@@ -588,7 +618,7 @@ pub async fn get_team_members(
     };
 
     // Fetch team members
-    match location_repo.get_team_members(team_id).await {
+    match team_repo.get_team_members(team_id).await {
         Ok(members) => Ok(HttpResponse::Ok().json(ApiResponse::success(members))),
         Err(err) => {
             log::error!("Error fetching team members for team {}: {}", team_id, err);
@@ -601,6 +631,7 @@ pub async fn get_team_members(
 pub async fn remove_team_member(
     AsyncUserContext(user_context): AsyncUserContext,
     location_repo: web::Data<LocationRepository>,
+    team_repo: web::Data<TeamRepository>,
     path: web::Path<(Uuid, Uuid)>,
 ) -> Result<HttpResponse> {
     let (team_id, user_id) = path.into_inner();
@@ -628,7 +659,7 @@ pub async fn remove_team_member(
         }
     };
 
-    match location_repo.remove_team_member(team_id, user_id).await {
+    match team_repo.remove_team_member(team_id, user_id).await {
         Ok(true) => {
             Ok(HttpResponse::Ok().json(ApiResponse::success("Team member removed successfully")))
         }

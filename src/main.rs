@@ -10,7 +10,7 @@ use be::{
             ActivityRepository, CompanyRepository, InviteRepository, LocationRepository,
             PasswordResetTokenRepository, PtoBalanceRepository, ScheduleRepository,
             ShiftClaimRepository, ShiftRepository, ShiftSwapRepository, SkillRepository,
-            StatsRepository, TimeOffRepository, UserRepository,
+            StatsRepository, TeamRepository, TimeOffRepository, UserRepository,
         },
     },
     handlers::{
@@ -55,19 +55,24 @@ async fn main() -> Result<()> {
     println!("✅ Database initialized");
 
     // Initialize repositories and services
-    let user_repository = UserRepository::new(pool.clone());
-    let location_repository = LocationRepository::new(pool.clone());
-    let shift_repository = ShiftRepository::new(pool.clone());
-    let password_reset_repository = PasswordResetTokenRepository::new(pool.clone());
-    let invite_repository = InviteRepository::new(pool.clone());
-    let time_off_repository = TimeOffRepository::new(pool.clone());
-    let shift_swap_repository = ShiftSwapRepository::new(pool.clone());
-    let stats_repository = StatsRepository::new(pool.clone());
-    let pto_balance_repository = PtoBalanceRepository::new(pool.clone());
-    let shift_claim_repository = ShiftClaimRepository::new(pool.clone());
     let company_repository = CompanyRepository::new(pool.clone());
-    let skill_repository = SkillRepository::new(pool.clone());
+    let invite_repository = InviteRepository::new(pool.clone());
+    let location_repository = LocationRepository::new(pool.clone());
+    let password_reset_repository = PasswordResetTokenRepository::new(pool.clone());
+    let pto_balance_repository = PtoBalanceRepository::new(pool.clone());
     let schedule_repository = ScheduleRepository::new(pool.clone());
+    let shift_claim_repository = ShiftClaimRepository::new(pool.clone());
+    let shift_repository = ShiftRepository::new(pool.clone());
+    let shift_swap_repository = ShiftSwapRepository::new(pool.clone());
+    let skill_repository = SkillRepository::new(pool.clone());
+    let stats_repository = StatsRepository::new(pool.clone());
+    let team_repository = TeamRepository::new(pool.clone());
+    let time_off_repository = TimeOffRepository::new(pool.clone());
+    let user_repository = UserRepository::new(pool.clone());
+
+    // Create user context service and auth service
+    let user_context_service =
+        UserContextService::new(user_repository.clone(), company_repository.clone());
     let auth_service = AuthService::new(
         user_repository.clone(),
         company_repository.clone(),
@@ -75,31 +80,28 @@ async fn main() -> Result<()> {
         config.clone(),
     );
 
-    // Create user context service
-    let user_context_service =
-        UserContextService::new(user_repository.clone(), company_repository.clone());
-
-    // Create app state and repository data
-    let activity_repository = ActivityRepository::new(pool.clone());
-    let activity_logger = ActivityLogger::new(activity_repository.clone());
-
     // Initialize repositories
     let auth_service_data = web::Data::new(auth_service);
-    let user_repo_data = web::Data::new(user_repository);
-    let location_repo_data = web::Data::new(location_repository);
-    let shift_repo_data = web::Data::new(shift_repository);
-    let invite_repo_data = web::Data::new(invite_repository);
-    let time_off_repo_data = web::Data::new(time_off_repository);
-    let shift_swap_repo_data = web::Data::new(shift_swap_repository);
-    let stats_repo_data = web::Data::new(stats_repository);
-    let pto_balance_repo_data = web::Data::new(pto_balance_repository);
-    let shift_claim_repo_data = web::Data::new(shift_claim_repository);
     let company_repo_data = web::Data::new(company_repository);
-    let skill_repo_data = web::Data::new(skill_repository);
-    let schedule_repo_data = web::Data::new(schedule_repository);
     let config_data = web::Data::new(config.clone());
-    let activity_logger_data = web::Data::new(activity_logger);
+    let invite_repo_data = web::Data::new(invite_repository);
+    let location_repo_data = web::Data::new(location_repository);
+    let pto_balance_repo_data = web::Data::new(pto_balance_repository);
+    let schedule_repo_data = web::Data::new(schedule_repository);
+    let shift_claim_repo_data = web::Data::new(shift_claim_repository);
+    let shift_repo_data = web::Data::new(shift_repository);
+    let shift_swap_repo_data = web::Data::new(shift_swap_repository);
+    let skill_repo_data = web::Data::new(skill_repository);
+    let stats_repo_data = web::Data::new(stats_repository);
+    let team_repo_data = web::Data::new(team_repository);
+    let time_off_repo_data = web::Data::new(time_off_repository);
     let user_context_service_data = web::Data::new(user_context_service);
+    let user_repo_data = web::Data::new(user_repository);
+
+    // Create activity logger
+    let activity_repository = ActivityRepository::new(pool.clone());
+    let activity_logger = ActivityLogger::new(activity_repository.clone());
+    let activity_logger_data = web::Data::new(activity_logger);
 
     let server_address = config.server_address();
     println!("🌐 Server starting on http://{}", server_address);
@@ -108,25 +110,26 @@ async fn main() -> Result<()> {
     HttpServer::new(move || {
         App::new()
             .app_data(config.clone())
+            .app_data(activity_logger_data.clone())
             .app_data(auth_service_data.clone())
+            .app_data(company_repo_data.clone())
+            .app_data(config_data.clone())
+            .app_data(invite_repo_data.clone())
+            .app_data(location_repo_data.clone())
+            .app_data(pto_balance_repo_data.clone())
+            .app_data(schedule_repo_data.clone())
+            .app_data(shift_claim_repo_data.clone())
+            .app_data(shift_repo_data.clone())
+            .app_data(shift_swap_repo_data.clone())
+            .app_data(skill_repo_data.clone())
+            .app_data(stats_repo_data.clone())
+            .app_data(team_repo_data.clone())
+            .app_data(time_off_repo_data.clone())
             .app_data(user_context_service_data.clone())
             .app_data(user_repo_data.clone())
-            .app_data(location_repo_data.clone())
-            .app_data(shift_repo_data.clone())
-            .app_data(invite_repo_data.clone())
-            .app_data(time_off_repo_data.clone())
-            .app_data(shift_swap_repo_data.clone())
-            .app_data(stats_repo_data.clone())
-            .app_data(pto_balance_repo_data.clone())
-            .app_data(shift_claim_repo_data.clone())
-            .app_data(company_repo_data.clone())
-            .app_data(skill_repo_data.clone())
-            .app_data(schedule_repo_data.clone())
-            .app_data(config_data.clone())
-            .app_data(activity_logger_data.clone())
             .wrap(
                 Cors::default()
-                    .allowed_origin("http://localhost:3000")
+                    .allowed_origin(&config.client_base_url.clone())
                     .allowed_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"])
                     .allowed_headers(vec![
                         "Authorization",
