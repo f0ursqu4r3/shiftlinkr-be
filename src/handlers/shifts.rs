@@ -50,32 +50,48 @@ pub struct UpdateShiftStatusRequest {
 // Shift handlers
 pub async fn create_shift(
     AsyncUserContext(user_context): AsyncUserContext,
-    input: web::Json<ShiftInput>,
+    activity_logger: web::Data<ActivityLogger>,
     shift_repo: web::Data<ShiftRepository>,
+    input: web::Json<ShiftInput>,
+    req: HttpRequest,
 ) -> Result<HttpResponse> {
-    // Only admins and managers can create shifts
-    if !user_context.is_manager_or_admin() {
-        return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
-            "Manager or admin access required to create shifts",
-        )));
+    user_context.requires_manager()?;
+
+    let shift_input = input.into_inner();
+
+    let shift = shift_repo.create_shift(shift_input).await.map_err(|e| {
+        log::error!("Failed to create shift: {}", e);
+        AppError::DatabaseError(e)
+    })?;
+
+    // Log shift creation activity
+    let metadata = ActivityLogger::metadata(vec![
+        ("location_id", shift.location_id.to_string()),
+        (
+            "team_id",
+            shift
+                .team_id
+                .map_or("None".to_string(), |id| id.to_string()),
+        ),
+        ("start_time", shift.start_time.to_string()),
+        ("end_time", shift.end_time.to_string()),
+    ]);
+    if let Err(e) = activity_logger
+        .log_shift_activity(
+            user_context.company_id().unwrap_or_default(),
+            Some(user_context.user.id),
+            shift.id,
+            Action::CREATED,
+            "Shift created".to_string(),
+            Some(metadata),
+            &req,
+        )
+        .await
+    {
+        log::warn!("Failed to log shift creation activity: {}", e);
     }
 
-    let req = input.into_inner();
-
-    match shift_repo.create_shift(req).await {
-        Ok(shift) => {
-            log::info!(
-                "Shift created by user {} for company {:?}",
-                user_context.user_id(),
-                user_context.company_id()
-            );
-            Ok(HttpResponse::Created().json(&shift))
-        }
-        Err(e) => Ok(HttpResponse::BadRequest().json(ApiResponse::error(&format!(
-            "Failed to create shift: {}",
-            e
-        )))),
-    }
+    Ok(ApiResponse::created(shift))
 }
 
 pub async fn get_shifts(

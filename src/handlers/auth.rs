@@ -117,7 +117,7 @@ pub async fn reset_password(
         .map_err(|e| {
             log::error!("Failed to reset password: {}", e);
             AppError::DatabaseError(e)
-        });
+        })?;
 
     Ok(ApiResponse::success_message(
         "Password has been reset successfully.",
