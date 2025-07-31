@@ -1,140 +1,180 @@
-use actix_web::{web, HttpResponse, Result};
+use actix_web::{web, HttpRequest, HttpResponse, Result};
 use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::database::models::{PtoBalanceAdjustmentInput, PtoBalanceUpdateInput};
 use crate::database::repositories::pto_balance::PtoBalanceRepository;
+use crate::error::AppError;
 use crate::handlers::shared::ApiResponse;
 use crate::user_context::AsyncUserContext;
+use crate::ActivityLogger;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BalanceQueryInput {
-    pub company_id: Uuid,
     pub user_id: Option<Uuid>,
     pub limit: Option<i32>,
-}
-
-/// Helper function to get company ID or return error
-fn get_company_id_or_error(
-    user_context: &crate::user_context::UserContext,
-) -> Result<Uuid, HttpResponse> {
-    user_context.company.as_ref().map(|c| c.id).ok_or_else(|| {
-        HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-            "User does not belong to any company",
-        ))
-    })
-}
-
-/// Helper function to check if user can access another user's data
-fn can_access_user_data(
-    user_context: &crate::user_context::UserContext,
-    target_user_id: Uuid,
-) -> bool {
-    user_context.is_manager_or_admin() || target_user_id == user_context.user.id
 }
 
 /// Get PTO balance for a user
 pub async fn get_pto_balance(
     AsyncUserContext(user_context): AsyncUserContext,
-    repo: web::Data<PtoBalanceRepository>,
+    pto_repo: web::Data<PtoBalanceRepository>,
     path: Option<web::Path<Uuid>>,
 ) -> Result<HttpResponse> {
-    let user_id = match path {
-        Some(path) => {
-            let target_user_id = path.into_inner();
-            if !can_access_user_data(&user_context, target_user_id) {
-                return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
-                    "Cannot view other users' PTO balance",
-                )));
-            }
-            target_user_id
-        }
-        None => user_context.user.id,
-    };
+    let user_id = path.map(|p| p.into_inner()).unwrap_or(user_context.user.id);
 
-    let company_id = match get_company_id_or_error(&user_context) {
-        Ok(id) => id,
-        Err(err) => return Ok(err),
-    };
+    user_context.requires_same_user(user_id)?;
 
-    match repo.get_balance_for_company(user_id, company_id).await {
-        Ok(Some(balance)) => Ok(HttpResponse::Ok().json(ApiResponse::success(balance))),
-        Ok(None) => {
-            Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("PTO balance not found")))
-        }
-        Err(err) => {
+    let company_id = user_context.strict_company_id()?;
+
+    let balance = pto_repo
+        .get_balance_for_company(user_id, company_id)
+        .await
+        .map_err(|err| {
             log::error!("Error fetching PTO balance: {}", err);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error("Failed to fetch PTO balance")))
-        }
-    }
+            AppError::DatabaseError(err)
+        })?
+        .ok_or_else(|| {
+            log::error!("PTO balance not found for user {}", user_id);
+            AppError::NotFound(format!("PTO balance not found for user {}", user_id))
+        })?;
+
+    Ok(ApiResponse::success(balance))
 }
 
 /// Update PTO balance for a user (admins/managers only)
 pub async fn update_pto_balance(
     AsyncUserContext(user_context): AsyncUserContext,
-    repo: web::Data<PtoBalanceRepository>,
+    activity_logger: web::Data<ActivityLogger>,
+    pto_repo: web::Data<PtoBalanceRepository>,
     path: web::Path<Uuid>,
     update: web::Json<PtoBalanceUpdateInput>,
+    req: HttpRequest,
 ) -> Result<HttpResponse> {
-    // Only admins and managers can update PTO balances
-    if !user_context.is_manager_or_admin() {
-        return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
-            "Insufficient permissions to update PTO balance",
-        )));
-    }
+    user_context.requires_manager()?;
 
-    let company_id = match get_company_id_or_error(&user_context) {
-        Ok(id) => id,
-        Err(err) => return Ok(err),
-    };
+    let company_id = user_context.strict_company_id()?;
     let user_id = path.into_inner();
+    let update_data = update.into_inner();
 
-    match repo
-        .update_balance_for_company(user_id, company_id, update.into_inner())
+    let balance = pto_repo
+        .update_balance_for_company(user_id, company_id, update_data.clone())
+        .await
+        .map_err(|err| {
+            log::error!("Error updating PTO balance: {}", err);
+            AppError::DatabaseError(err)
+        })?;
+
+    // Log the update activity
+    let metadata = ActivityLogger::metadata(vec![
+        (&"company_id".to_string(), company_id.to_string()),
+        (&"user_id".to_string(), user_id.to_string()),
+        (
+            &"pto_balance_hours".to_string(),
+            update_data.pto_balance_hours.unwrap_or(0).to_string(),
+        ),
+        (
+            &"sick_balance_hours".to_string(),
+            update_data.sick_balance_hours.unwrap_or(0).to_string(),
+        ),
+        (
+            &"personal_balance_hours".to_string(),
+            update_data.personal_balance_hours.unwrap_or(0).to_string(),
+        ),
+        (
+            &"pto_accrual_rate".to_string(),
+            update_data.pto_accrual_rate.unwrap_or_default().to_string(),
+        ),
+        (
+            &"hire_date".to_string(),
+            update_data.hire_date.unwrap_or_default().to_string(),
+        ),
+    ]);
+
+    if let Err(e) = activity_logger
+        .log_user_activity(
+            company_id,
+            Some(user_context.user.id),
+            user_id,
+            "update_pto_balance",
+            format!(
+                "Updated PTO balance for user {} in company {}",
+                user_id, company_id
+            ),
+            Some(metadata),
+            &req,
+        )
         .await
     {
-        Ok(updated_balance) => Ok(HttpResponse::Ok().json(ApiResponse::success(updated_balance))),
-        Err(err) => {
-            log::error!("Error updating PTO balance: {}", err);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error("Failed to update PTO balance")))
-        }
+        log::warn!("Failed to log PTO balance update activity: {}", e);
     }
+
+    Ok(ApiResponse::success(balance))
 }
 
 /// Adjust PTO balance (admins/managers only)
 pub async fn adjust_pto_balance(
     AsyncUserContext(user_context): AsyncUserContext,
-    repo: web::Data<PtoBalanceRepository>,
+    activity_logger: web::Data<ActivityLogger>,
+    pto_repo: web::Data<PtoBalanceRepository>,
     path: web::Path<Uuid>, // Changed from String to Uuid
     adjustment: web::Json<PtoBalanceAdjustmentInput>,
+    req: HttpRequest,
 ) -> Result<HttpResponse> {
     // Only admins and managers can adjust PTO balances
-    if !user_context.is_manager_or_admin() {
-        return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
-            "Insufficient permissions to adjust PTO balance",
-        )));
-    }
+    user_context.requires_manager()?;
 
-    let company_id = match get_company_id_or_error(&user_context) {
-        Ok(id) => id,
-        Err(err) => return Ok(err),
-    };
+    let company_id = user_context.strict_company_id()?;
     let user_id = path.into_inner();
+    let adjustment_data = adjustment.into_inner();
 
-    match repo
-        .adjust_balance_for_company(user_id, company_id, adjustment.into_inner())
+    let balance = pto_repo
+        .adjust_balance_for_company(user_id, company_id, adjustment_data.clone())
+        .await
+        .map_err(|err| {
+            log::error!("Error adjusting PTO balance: {}", err);
+            AppError::DatabaseError(err)
+        })?;
+
+    // Log the adjustment activity
+    let metadata = ActivityLogger::metadata(vec![
+        (&"company_id".to_string(), company_id.to_string()),
+        (&"user_id".to_string(), user_id.to_string()),
+        (
+            &"change_type".to_string(),
+            adjustment_data.change_type.to_string(),
+        ),
+        (
+            &"balance_type".to_string(),
+            adjustment_data.balance_type.to_string(),
+        ),
+        (
+            &"hours_changed".to_string(),
+            adjustment_data.hours_changed.to_string(),
+        ),
+        (&"description".to_string(), adjustment_data.description),
+    ]);
+
+    if let Err(e) = activity_logger
+        .log_user_activity(
+            company_id,
+            Some(user_context.user.id),
+            user_id,
+            "adjust_pto_balance",
+            format!(
+                "Adjusted PTO balance for user {} in company {}",
+                user_id, company_id
+            ),
+            Some(metadata),
+            &req,
+        )
         .await
     {
-        Ok(history) => Ok(HttpResponse::Created().json(ApiResponse::success(history))),
-        Err(err) => {
-            log::error!("Error adjusting PTO balance: {}", err);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error("Failed to adjust PTO balance")))
-        }
+        log::warn!("Failed to log PTO balance adjustment activity: {}", e);
     }
+
+    Ok(ApiResponse::success(balance))
 }
 
 /// Get PTO balance history for a user
@@ -146,54 +186,84 @@ pub async fn get_pto_balance_history(
 ) -> Result<HttpResponse> {
     let user_id = path.into_inner();
 
-    // Users can only view their own history unless they're admins/managers
-    if !can_access_user_data(&user_context, user_id) {
-        return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
-            "Cannot view other users' balance history",
-        )));
-    }
+    user_context.requires_same_user(user_id)?;
+    let company_id = user_context.strict_company_id()?;
 
-    match repo.get_balance_history(user_id, query.limit).await {
-        Ok(history) => Ok(HttpResponse::Ok().json(ApiResponse::success(history))),
-        Err(err) => {
+    let balance_history = repo
+        .get_balance_history(user_id, company_id, query.limit)
+        .await
+        .map_err(|err| {
             log::error!("Error fetching PTO balance history: {}", err);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error("Failed to fetch balance history")))
-        }
-    }
+            AppError::DatabaseError(err)
+        })?;
+
+    Ok(ApiResponse::success(balance_history))
 }
 
 /// Process PTO accrual for a user (admins/managers only)
 pub async fn process_pto_accrual(
     AsyncUserContext(user_context): AsyncUserContext,
+    activity_logger: web::Data<ActivityLogger>,
     repo: web::Data<PtoBalanceRepository>,
     path: web::Path<Uuid>,
+    req: HttpRequest,
 ) -> Result<HttpResponse> {
     // Only admins and managers can process accruals
-    if !user_context.is_manager_or_admin() {
-        return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
-            "Insufficient permissions to process PTO accrual",
-        )));
-    }
-
-    let company_id = match get_company_id_or_error(&user_context) {
-        Ok(id) => id,
-        Err(err) => return Ok(err),
-    };
+    user_context.requires_manager()?;
+    let company_id = user_context.strict_company_id()?;
     let user_id = path.into_inner();
 
-    match repo.process_accrual_for_company(user_id, company_id).await {
-        Ok(Some(history)) => Ok(HttpResponse::Created().json(ApiResponse::success(history))),
-        Ok(None) => Ok(
-            HttpResponse::Ok().json(ApiResponse::<()>::success_with_message(
-                None,
-                "No accrual processed",
-            )),
-        ),
-        Err(err) => {
+    let result = repo
+        .process_accrual_for_company(user_id, company_id)
+        .await
+        .map_err(|err| {
             log::error!("Error processing PTO accrual: {}", err);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error("Failed to process PTO accrual")))
-        }
+            AppError::DatabaseError(err)
+        })?
+        .ok_or_else(|| {
+            log::error!("PTO accrual not found for user {}", user_id);
+            AppError::NotFound(format!("PTO accrual not found for user {}", user_id))
+        })?;
+
+    // Log the accrual activity
+    let metadata = ActivityLogger::metadata(vec![
+        (&"user_id", result.user_id.to_string()),
+        (&"company_id", result.company_id.to_string()),
+        (
+            &"hire_date",
+            result
+                .hire_date
+                .map(|dt| dt.format("%Y-%m-%dT%H:%M:%SZ").to_string())
+                .unwrap_or_else(|| "N/A".to_string()),
+        ),
+        (
+            &"last_accrual_date",
+            result
+                .last_accrual_date
+                .map(|dt| dt.format("%Y-%m-%dT%H:%M:%SZ").to_string())
+                .unwrap_or_else(|| "N/A".to_string()),
+        ),
+        (
+            &"months_since_last_accrual",
+            result.months_since_last_accrual.to_string(),
+        ),
+        (&"hours_to_accrue", result.hours_to_accrue.to_string()),
+        (&"new_balance", result.new_balance.to_string()),
+    ]);
+    if let Err(e) = activity_logger
+        .log_user_activity(
+            company_id,
+            Some(user_context.user.id),
+            user_id,
+            "process_pto_accrual",
+            format!("Processed PTO accrual for user {}", user_id),
+            Some(metadata),
+            &req,
+        )
+        .await
+    {
+        log::warn!("Failed to log PTO accrual activity: {}", e);
     }
+
+    Ok(ApiResponse::success(result))
 }

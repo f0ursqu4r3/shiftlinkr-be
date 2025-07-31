@@ -131,13 +131,17 @@ impl TeamRepository {
         Ok(team)
     }
 
-    pub async fn delete_team(&self, id: Uuid) -> Result<bool> {
+    pub async fn delete_team(&self, id: Uuid) -> Result<Option<()>> {
         let result = sqlx::query("DELETE FROM teams WHERE id = $1")
             .bind(id)
             .execute(&self.pool)
             .await?;
 
-        Ok(result.rows_affected() > 0)
+        Ok(if result.rows_affected() > 0 {
+            Some(())
+        } else {
+            None
+        })
     }
 
     // Team member management
@@ -180,14 +184,18 @@ impl TeamRepository {
         Ok(team_members)
     }
 
-    pub async fn remove_team_member(&self, team_id: Uuid, user_id: Uuid) -> Result<bool> {
+    pub async fn remove_team_member(&self, team_id: Uuid, user_id: Uuid) -> Result<Option<()>> {
         let result = sqlx::query("DELETE FROM team_members WHERE team_id = $1 AND user_id = $2")
             .bind(team_id)
             .bind(user_id)
             .execute(&self.pool)
             .await?;
 
-        Ok(result.rows_affected() > 0)
+        Ok(if result.rows_affected() > 0 {
+            Some(())
+        } else {
+            None
+        })
     }
 
     pub async fn get_user_teams(&self, user_id: Uuid) -> Result<Vec<Team>> {

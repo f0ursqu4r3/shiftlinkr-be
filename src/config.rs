@@ -4,6 +4,7 @@ use std::env;
 #[derive(Debug, Clone)]
 pub struct Config {
     pub database_url: String,
+    pub run_migrations: bool,
     pub jwt_secret: String,
     pub jwt_expiration_days: i64,
     pub host: String,
@@ -20,6 +21,10 @@ impl Config {
         Ok(Config {
             database_url: env::var("DATABASE_URL")
                 .unwrap_or_else(|_| "postgres://@localhost:5432/shiftlinkr".to_string()),
+            run_migrations: env::var("RUN_MIGRATIONS")
+                .unwrap_or_else(|_| "false".to_string())
+                .parse()
+                .unwrap_or(false),
             jwt_secret: env::var("JWT_SECRET").unwrap_or_else(|_| {
                 "your-super-secret-jwt-key-change-this-in-production-12345".to_string()
             }),
@@ -44,6 +49,10 @@ impl Config {
         Ok(Config {
             database_url: env::var("DATABASE_URL")
                 .unwrap_or_else(|_| "postgres://@localhost:5432/shiftlinkr".to_string()),
+            run_migrations: env::var("RUN_MIGRATIONS")
+                .unwrap_or_else(|_| "false".to_string())
+                .parse()
+                .unwrap_or(false),
             jwt_secret: env::var("JWT_SECRET").unwrap_or_else(|_| {
                 "your-super-secret-jwt-key-change-this-in-production-12345".to_string()
             }),

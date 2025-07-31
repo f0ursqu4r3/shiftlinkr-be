@@ -222,13 +222,17 @@ impl ScheduleRepository {
         Ok(schedule)
     }
 
-    pub async fn delete_user_schedule(&self, user_id: Uuid) -> Result<bool> {
+    pub async fn delete_user_schedule(&self, user_id: Uuid) -> Result<Option<()>> {
         let result = sqlx::query("DELETE FROM user_shift_schedules WHERE user_id = $1")
             .bind(user_id)
             .execute(&self.pool)
             .await?;
 
-        Ok(result.rows_affected() > 0)
+        if result.rows_affected() > 0 {
+            Ok(Some(()))
+        } else {
+            Ok(None)
+        }
     }
 
     // Shift Assignments

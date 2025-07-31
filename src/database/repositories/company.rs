@@ -88,7 +88,10 @@ impl CompanyRepository {
                 c.logo_url,
                 c.timezone,
                 uc.role,
-                uc.is_primary
+                uc.is_primary,
+                uc.hire_date,
+                uc.created_at,
+                uc.updated_at
             FROM
                 companies c
             JOIN
@@ -264,14 +267,18 @@ impl CompanyRepository {
         &self,
         company_id: Uuid,
         user_id: Uuid,
-    ) -> Result<bool> {
+    ) -> Result<Option<()>> {
         let result = sqlx::query("DELETE FROM user_company WHERE company_id = $1 AND user_id = $2")
             .bind(company_id)
             .bind(user_id)
             .execute(&self.pool)
             .await?;
 
-        Ok(result.rows_affected() > 0)
+        if result.rows_affected() == 0 {
+            return Ok(None);
+        }
+
+        Ok(Some(()))
     }
 
     pub async fn update_employee_role(
@@ -279,7 +286,7 @@ impl CompanyRepository {
         company_id: Uuid,
         user_id: Uuid,
         role: &CompanyRole,
-    ) -> Result<bool> {
+    ) -> Result<Option<()>> {
         let result = sqlx::query(
             "UPDATE user_company SET role = $1, updated_at = CURRENT_TIMESTAMP WHERE company_id = $2 AND user_id = $3",
         )
@@ -289,7 +296,11 @@ impl CompanyRepository {
         .execute(&self.pool)
         .await?;
 
-        Ok(result.rows_affected() > 0)
+        if result.rows_affected() == 0 {
+            return Ok(None);
+        }
+
+        Ok(Some(()))
     }
 
     pub async fn check_user_company_access(

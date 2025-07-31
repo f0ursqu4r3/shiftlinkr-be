@@ -1,3 +1,4 @@
+// TODO: refactor
 use actix_web::{web, HttpRequest, HttpResponse, Result};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -11,6 +12,7 @@ use crate::database::repositories::company::CompanyRepository;
 use crate::database::repositories::schedule::ScheduleRepository;
 use crate::database::repositories::shift::ShiftRepository;
 use crate::database::repositories::shift_claim::ShiftClaimRepository;
+use crate::error::AppError;
 use crate::handlers::shared::ApiResponse;
 use crate::services::activity_logger::ActivityLogger;
 use crate::services::user_context::AsyncUserContext;
@@ -108,8 +110,7 @@ pub async fn get_shifts(
     } else {
         // For general queries, only admin/manager can see all shifts
         if !has_manager_permissions {
-            return Ok(HttpResponse::Forbidden()
-                .json(ApiResponse::<()>::error("Insufficient permissions")));
+            return Err(AppError::Forbidden("Insufficient permissions".to_string()).into());
         }
 
         // Get shifts for user's company if they have one
@@ -121,7 +122,7 @@ pub async fn get_shifts(
     };
 
     match shifts {
-        Ok(shifts) => Ok(HttpResponse::Ok().json(ApiResponse::success(shifts))),
+        Ok(shifts) => Ok(ApiResponse::success(shifts)),
         Err(err) => {
             log::error!(
                 "Error fetching shifts for user {}: {}",
@@ -149,7 +150,7 @@ pub async fn get_shift(
                 // For now, we'll be permissive for regular employees
                 // In future, could add check if user has assignment for this shift
             }
-            Ok(HttpResponse::Ok().json(ApiResponse::success(shift)))
+            Ok(ApiResponse::success(shift))
         }
         Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("Shift not found"))),
         Err(err) => {
@@ -176,7 +177,7 @@ pub async fn update_shift(
     let shift_id = path.into_inner();
 
     match shift_repo.update_shift(shift_id, input.into_inner()).await {
-        Ok(Some(shift)) => Ok(HttpResponse::Ok().json(ApiResponse::success(shift))),
+        Ok(Some(shift)) => Ok(ApiResponse::success(shift)),
         Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("Shift not found"))),
         Err(err) => {
             log::error!("Error updating shift {}: {}", shift_id, err);
@@ -267,10 +268,10 @@ pub async fn assign_shift(
                         }
                     }
 
-                    Ok(HttpResponse::Ok().json(ApiResponse::success(json!({
+                    Ok(ApiResponse::success(json!({
                         "shift": shift,
                         "assignment": assignment
-                    }))))
+                    })))
                 }
                 Ok(None) => {
                     Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("Shift not found")))
@@ -349,7 +350,7 @@ pub async fn unassign_shift(
                 }
             }
 
-            Ok(HttpResponse::Ok().json(ApiResponse::success(shift)))
+            Ok(ApiResponse::success(shift))
         }
         Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("Shift not found"))),
         Err(err) => {
@@ -385,7 +386,7 @@ pub async fn update_shift_status(
     };
 
     match shift_repo.update_shift_status(shift_id, status).await {
-        Ok(Some(shift)) => Ok(HttpResponse::Ok().json(ApiResponse::success(shift))),
+        Ok(Some(shift)) => Ok(ApiResponse::success(shift)),
         Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("Shift not found"))),
         Err(err) => {
             log::error!("Error updating shift status {}: {}", shift_id, err);
@@ -436,7 +437,7 @@ pub async fn get_shift_assignments(
     }
 
     match schedule_repo.get_shift_assignments_by_shift(shift_id).await {
-        Ok(assignments) => Ok(HttpResponse::Ok().json(ApiResponse::success(assignments))),
+        Ok(assignments) => Ok(ApiResponse::success(assignments)),
         Err(err) => {
             log::error!("Error fetching assignments for shift {}: {}", shift_id, err);
             Ok(HttpResponse::InternalServerError()
@@ -456,7 +457,7 @@ pub async fn get_my_pending_assignments(
         .get_pending_assignments_for_user(user_id)
         .await
     {
-        Ok(assignments) => Ok(HttpResponse::Ok().json(ApiResponse::success(assignments))),
+        Ok(assignments) => Ok(ApiResponse::success(assignments)),
         Err(err) => {
             log::error!(
                 "Error fetching pending assignments for user {}: {}",
@@ -520,7 +521,7 @@ pub async fn respond_to_assignment(
                 }
             }
 
-            Ok(HttpResponse::Ok().json(ApiResponse::success(assignment)))
+            Ok(ApiResponse::success(assignment))
         }
         Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error(
             "Assignment not found or not yours to respond to",
@@ -683,7 +684,7 @@ pub async fn claim_shift(
                 }
             }
 
-            Ok(HttpResponse::Created().json(ApiResponse::success(claim)))
+            Ok(ApiResponse::created(claim))
         }
         Err(err) => {
             log::error!(
@@ -714,7 +715,7 @@ pub async fn get_shift_claims(
     }
 
     match shift_claim_repo.get_claims_by_shift(shift_id).await {
-        Ok(claims) => Ok(HttpResponse::Ok().json(ApiResponse::success(claims))),
+        Ok(claims) => Ok(ApiResponse::success(claims)),
         Err(err) => {
             log::error!("Error fetching claims for shift {}: {}", shift_id, err);
             Ok(HttpResponse::InternalServerError()
@@ -731,7 +732,7 @@ pub async fn get_my_claims(
     let user_id = user_context.user_id();
 
     match shift_claim_repo.get_claims_by_user(user_id).await {
-        Ok(claims) => Ok(HttpResponse::Ok().json(ApiResponse::success(claims))),
+        Ok(claims) => Ok(ApiResponse::success(claims)),
         Err(err) => {
             log::error!("Error fetching claims for user {}: {}", user_id, err);
             Ok(HttpResponse::InternalServerError()
@@ -791,12 +792,10 @@ pub async fn approve_shift_claim(
                         claim.shift_id,
                         approver_id
                     );
-                    Ok(
-                        HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-                            "claim": approved_claim,
-                            "shift": assigned_shift
-                        }))),
-                    )
+                    Ok(ApiResponse::success(serde_json::json!({
+                        "claim": approved_claim,
+                        "shift": assigned_shift
+                    })))
                 }
                 Ok(None) => {
                     log::error!(
@@ -853,7 +852,7 @@ pub async fn reject_shift_claim(
     {
         Ok(Some(rejected_claim)) => {
             log::info!("Rejected claim {} by user {}", claim_id, approver_id);
-            Ok(HttpResponse::Ok().json(ApiResponse::success(rejected_claim)))
+            Ok(ApiResponse::success(rejected_claim))
         }
         Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error(
             "Claim not found or already processed",
@@ -878,7 +877,7 @@ pub async fn cancel_shift_claim(
     match shift_claim_repo.cancel_claim(claim_id, user_id).await {
         Ok(Some(cancelled_claim)) => {
             log::info!("User {} cancelled claim {}", user_id, claim_id);
-            Ok(HttpResponse::Ok().json(ApiResponse::success(cancelled_claim)))
+            Ok(ApiResponse::success(cancelled_claim))
         }
         Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error(
             "Claim not found or not cancellable",
@@ -912,7 +911,7 @@ pub async fn get_pending_claims(
         .get_pending_claims_by_company(user_context.company_id().unwrap_or_default())
         .await
     {
-        Ok(claims) => Ok(HttpResponse::Ok().json(ApiResponse::success(claims))),
+        Ok(claims) => Ok(ApiResponse::success(claims)),
         Err(err) => {
             log::error!("Error fetching pending claims: {}", err);
             Ok(HttpResponse::InternalServerError()

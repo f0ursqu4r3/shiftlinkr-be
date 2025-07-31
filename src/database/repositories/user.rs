@@ -1,4 +1,4 @@
-use crate::database::models::User;
+use crate::database::{models::User, utils::sql};
 use anyhow::Result;
 use chrono::Utc;
 use sqlx::PgPool;
@@ -86,24 +86,31 @@ impl UserRepository {
         Ok(users)
     }
 
-    pub async fn update_user(&self, id: Uuid, name: &str, email: &str) -> Result<()> {
+    pub async fn update_user(&self, id: Uuid, name: &str, email: &str) -> Result<User> {
         let updated_at = Utc::now().naive_utc();
 
-        sqlx::query(
-            r#"
+        let user = sqlx::query_as::<_, User>(&sql(r#"
             UPDATE users
-            SET name = $1, email = $2, updated_at = $3
-            WHERE id = $4
-            "#,
-        )
+            SET
+                name = ?,
+                email = ?,
+                updated_at = ?
+            WHERE
+                id = ?
+            RETURNING
+                id,
+                email,
+                name,
+                updated_at
+        "#))
         .bind(name)
         .bind(email)
         .bind(updated_at)
         .bind(id)
-        .execute(&self.pool)
+        .fetch_one(&self.pool)
         .await?;
 
-        Ok(())
+        Ok(user)
     }
 
     pub async fn delete_user(&self, id: Uuid) -> Result<()> {

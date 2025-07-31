@@ -1,3 +1,4 @@
+// TODO: refactor
 use actix_web::{web, HttpRequest, HttpResponse, Result};
 use chrono::NaiveDateTime;
 use serde::Deserialize;
@@ -98,7 +99,7 @@ pub async fn create_time_off_request(
                 }
             }
 
-            Ok(HttpResponse::Created().json(ApiResponse::success(request)))
+            Ok(ApiResponse::created(request))
         }
         Err(err) => {
             log::error!("Error creating time-off request: {}", err);
@@ -146,7 +147,7 @@ pub async fn get_time_off_requests(
         .get_requests(user_id, status_filter, None, None)
         .await
     {
-        Ok(requests) => Ok(HttpResponse::Ok().json(ApiResponse::success(requests))),
+        Ok(requests) => Ok(ApiResponse::success(requests)),
         Err(err) => {
             log::error!("Error fetching time-off requests: {}", err);
             Ok(
@@ -175,7 +176,7 @@ pub async fn get_time_off_request(
                 )));
             }
 
-            Ok(HttpResponse::Ok().json(ApiResponse::success(request)))
+            Ok(ApiResponse::success(request))
         }
         Ok(None) => {
             Ok(HttpResponse::NotFound()
@@ -294,7 +295,7 @@ pub async fn update_time_off_request(
                         }
                     }
 
-                    Ok(HttpResponse::Ok().json(ApiResponse::success(updated_request)))
+                    Ok(ApiResponse::success(updated_request))
                 }
                 Err(err) => {
                     log::error!("Error updating time-off request: {}", err);
@@ -527,7 +528,7 @@ pub async fn approve_time_off_request(
                         log::warn!("Failed to log time-off request approval activity: {}", e);
                     }
 
-                    Ok(HttpResponse::Ok().json(ApiResponse::success(approved_request)))
+                    Ok(ApiResponse::success(approved_request))
                 }
                 Err(err) => {
                     log::error!("Error deducting PTO balance: {}", err);
@@ -631,7 +632,7 @@ pub async fn deny_time_off_request(
                 log::warn!("Failed to log time-off request denial activity: {}", e);
             }
 
-            Ok(HttpResponse::Ok().json(ApiResponse::success(denied_request)))
+            Ok(ApiResponse::success(denied_request))
         }
         Err(err) => {
             log::error!("Error denying time-off request: {}", err);

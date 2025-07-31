@@ -1,3 +1,4 @@
+// TODO: refactor
 use actix_web::{web, HttpRequest, HttpResponse, Result};
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -104,7 +105,7 @@ pub async fn create_swap_request(
                 }
             }
 
-            Ok(HttpResponse::Created().json(ApiResponse::success(swap_request)))
+            Ok(ApiResponse::created(swap_request))
         }
         Err(err) => {
             log::error!("Error creating swap request: {}", err);
@@ -159,7 +160,7 @@ pub async fn get_swap_requests(
         )
         .await
     {
-        Ok(requests) => Ok(HttpResponse::Ok().json(ApiResponse::success(requests))),
+        Ok(requests) => Ok(ApiResponse::success(requests)),
         Err(err) => {
             log::error!("Error fetching swap requests: {}", err);
             Ok(HttpResponse::InternalServerError()
@@ -194,7 +195,7 @@ pub async fn get_swap_request(
                 }
             }
 
-            Ok(HttpResponse::Ok().json(ApiResponse::success(swap_request)))
+            Ok(ApiResponse::success(swap_request))
         }
         Ok(None) => {
             Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("Swap request not found")))
@@ -307,7 +308,7 @@ pub async fn respond_to_swap(
                         }
                     }
 
-                    Ok(HttpResponse::Ok().json(ApiResponse::success(updated_swap)))
+                    Ok(ApiResponse::success(updated_swap))
                 }
                 Err(err) => {
                     log::error!("Error responding to swap request: {}", err);
@@ -424,7 +425,7 @@ pub async fn approve_swap_request(
                 }
             }
 
-            Ok(HttpResponse::Ok().json(ApiResponse::success(approved_swap)))
+            Ok(ApiResponse::success(approved_swap))
         }
         Err(err) => {
             log::error!("Error approving swap request: {}", err);
@@ -528,7 +529,7 @@ pub async fn deny_swap_request(
                 }
             }
 
-            Ok(HttpResponse::Ok().json(ApiResponse::success(denied_swap)))
+            Ok(ApiResponse::success(denied_swap))
         }
         Err(err) => {
             log::error!("Error denying swap request: {}", err);

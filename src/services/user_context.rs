@@ -8,12 +8,15 @@ use std::future::Future;
 use std::pin::Pin;
 use uuid::Uuid;
 
-use crate::database::models::{
-    company::{CompanyInfo, CompanyRole},
-    user::User,
-};
 use crate::database::repositories::{company::CompanyRepository, user::UserRepository};
 use crate::services::auth::Claims;
+use crate::{
+    database::models::{
+        company::{CompanyInfo, CompanyRole},
+        user::User,
+    },
+    error::AppError,
+};
 
 /// User context that contains the current user and their company information
 /// This is created per-request and contains the authenticated user's information
@@ -60,18 +63,12 @@ impl UserContext {
 
     /// Get the company ID if available
     pub fn company_id(&self) -> Option<Uuid> {
-        match self.company {
-            Some(ref company) => Some(company.id),
-            None => None,
-        }
+        self.company.as_ref().map(|c| c.id)
     }
 
     /// Get the user's role in the current company
     pub fn role(&self) -> Option<&CompanyRole> {
-        match self.company {
-            Some(ref company) => Some(&company.role),
-            None => None,
-        }
+        self.company.as_ref().map(|c| &c.role)
     }
 
     /// Check if user is admin in current company
@@ -132,6 +129,55 @@ impl UserContext {
 
         // Only admins can manage other users
         self.is_admin()
+    }
+
+    pub fn strict_company_id(&self) -> Result<Uuid, AppError> {
+        self.company_id().ok_or_else(|| {
+            AppError::PermissionDenied("User does not belong to a company".to_string())
+        })
+    }
+
+    pub fn requires_admin(&self) -> Result<(), AppError> {
+        if !self.is_admin() {
+            return Err(AppError::PermissionDenied(
+                "Admin access required".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn requires_manager(&self) -> Result<(), AppError> {
+        if !self.is_manager_or_admin() {
+            return Err(AppError::PermissionDenied(
+                "Manager access required".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn requires_same_user(&self, target_user_id: Uuid) -> Result<(), AppError> {
+        if !self.is_manager_or_admin() || self.user_id() != target_user_id {
+            return Err(AppError::PermissionDenied(
+                "Access denied: you can only access your own resources".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn requires_company(&self) -> Result<(), AppError> {
+        self.company.as_ref().ok_or_else(|| {
+            AppError::PermissionDenied("Access denied: you must belong to a company".to_string())
+        })?;
+        Ok(())
+    }
+
+    pub fn requires_same_company(&self, target_company_id: Uuid) -> Result<(), AppError> {
+        if self.company_id() != Some(target_company_id) {
+            return Err(AppError::PermissionDenied(
+                "Access denied: you can only access resources in your own company".to_string(),
+            ));
+        }
+        Ok(())
     }
 }
 

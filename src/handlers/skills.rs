@@ -1,3 +1,4 @@
+// TODO: refactor
 use actix_web::{web, HttpRequest, HttpResponse, Result};
 use serde::Deserialize;
 use uuid::Uuid;
@@ -48,7 +49,7 @@ pub async fn create_skill(
         .create_skill(company_id, input.into_inner())
         .await
     {
-        Ok(skill) => Ok(HttpResponse::Created().json(ApiResponse::success(skill))),
+        Ok(skill) => Ok(ApiResponse::success(skill)),
         Err(e) => {
             log::error!("Failed to create skill: {}", e);
             Ok(HttpResponse::InternalServerError()
@@ -71,7 +72,7 @@ pub async fn get_all_skills(
         }
     };
     match skill_repo.get_all_skills(company_id).await {
-        Ok(skills) => Ok(HttpResponse::Ok().json(ApiResponse::success(skills))),
+        Ok(skills) => Ok(ApiResponse::success(skills)),
         Err(e) => {
             log::error!("Failed to get skills: {}", e);
             Ok(HttpResponse::InternalServerError()
@@ -88,7 +89,7 @@ pub async fn get_skill(
     let skill_id = path.into_inner();
 
     match skill_repo.get_skill_by_id(skill_id).await {
-        Ok(Some(skill)) => Ok(HttpResponse::Ok().json(ApiResponse::success(skill))),
+        Ok(Some(skill)) => Ok(ApiResponse::success(skill)),
         Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("Skill not found"))),
         Err(e) => {
             log::error!("Failed to get skill: {}", e);
@@ -122,7 +123,7 @@ pub async fn update_skill(
     let skill_id = path.into_inner();
 
     match skill_repo.update_skill(skill_id, input.into_inner()).await {
-        Ok(Some(skill)) => Ok(HttpResponse::Ok().json(ApiResponse::success(skill))),
+        Ok(Some(skill)) => Ok(ApiResponse::success(skill)),
         Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("Skill not found"))),
         Err(e) => {
             log::error!("Failed to update skill: {}", e);
@@ -189,7 +190,7 @@ pub async fn add_user_skill(
     }
 
     match skill_repo.add_user_skill(input.into_inner()).await {
-        Ok(user_skill) => Ok(HttpResponse::Created().json(ApiResponse::success(user_skill))),
+        Ok(user_skill) => Ok(ApiResponse::success(user_skill)),
         Err(e) => {
             log::error!("Failed to add user skill: {}", e);
             Ok(HttpResponse::InternalServerError()
@@ -213,7 +214,7 @@ pub async fn get_user_skills(
     }
 
     match skill_repo.get_user_skills(&user_id).await {
-        Ok(user_skills) => Ok(HttpResponse::Ok().json(ApiResponse::success(user_skills))),
+        Ok(user_skills) => Ok(ApiResponse::success(user_skills)),
         Err(e) => {
             log::error!("Failed to get user skills: {}", e);
             Ok(HttpResponse::InternalServerError()
@@ -242,7 +243,7 @@ pub async fn update_user_skill(
                 return Ok(HttpResponse::Forbidden()
                     .json(ApiResponse::<()>::error("Can only update your own skills")));
             }
-            Ok(HttpResponse::Ok().json(ApiResponse::success(user_skill)))
+            Ok(ApiResponse::success(user_skill))
         }
         Ok(None) => {
             Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("User skill not found")))
@@ -270,9 +271,9 @@ pub async fn remove_user_skill(
     }
 
     match skill_repo.remove_user_skill(&user_id, skill_id).await {
-        Ok(true) => {
-            Ok(HttpResponse::Ok().json(ApiResponse::success("User skill removed successfully")))
-        }
+        Ok(true) => Ok(ApiResponse::success_message(
+            "User skill removed successfully",
+        )),
         Ok(false) => {
             Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("User skill not found")))
         }
@@ -302,7 +303,7 @@ pub async fn add_shift_required_skill(
         .add_shift_required_skill(input.into_inner())
         .await
     {
-        Ok(shift_skill) => Ok(HttpResponse::Created().json(ApiResponse::success(shift_skill))),
+        Ok(shift_skill) => Ok(ApiResponse::created(shift_skill)),
         Err(e) => {
             log::error!("Failed to add shift required skill: {}", e);
             Ok(
@@ -322,7 +323,7 @@ pub async fn get_shift_required_skills(
     let shift_id = path.into_inner();
 
     match skill_repo.get_shift_required_skills(shift_id).await {
-        Ok(shift_skills) => Ok(HttpResponse::Ok().json(ApiResponse::success(shift_skills))),
+        Ok(shift_skills) => Ok(ApiResponse::success(shift_skills)),
         Err(e) => {
             log::error!("Failed to get shift required skills: {}", e);
             Ok(
@@ -353,9 +354,9 @@ pub async fn remove_shift_required_skill(
         .remove_shift_required_skill(shift_id, skill_id)
         .await
     {
-        Ok(true) => Ok(HttpResponse::Ok().json(ApiResponse::success(
+        Ok(true) => Ok(ApiResponse::success_message(
             "Shift required skill removed successfully",
-        ))),
+        )),
         Ok(false) => Ok(HttpResponse::NotFound()
             .json(ApiResponse::<()>::error("Shift required skill not found"))),
         Err(e) => {

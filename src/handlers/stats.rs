@@ -1,3 +1,4 @@
+// TODO: refactor
 use actix_web::{web, HttpResponse, Result};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -37,7 +38,7 @@ pub async fn get_dashboard_stats(
         .get_dashboard_stats(user_id, query.start_date, query.end_date)
         .await
     {
-        Ok(stats) => Ok(HttpResponse::Ok().json(ApiResponse::success(stats))),
+        Ok(stats) => Ok(ApiResponse::success(stats)),
         Err(err) => {
             log::error!("Error fetching dashboard stats: {}", err);
             Ok(
@@ -71,7 +72,7 @@ pub async fn get_shift_stats(
         .get_shift_stats(user_id, query.start_date, query.end_date)
         .await
     {
-        Ok(stats) => Ok(HttpResponse::Ok().json(ApiResponse::success(stats))),
+        Ok(stats) => Ok(ApiResponse::success(stats)),
         Err(err) => {
             log::error!("Error fetching shift stats: {}", err);
             Ok(HttpResponse::InternalServerError()
@@ -102,7 +103,7 @@ pub async fn get_time_off_stats(
         .get_time_off_stats(user_id, query.start_date, query.end_date)
         .await
     {
-        Ok(stats) => Ok(HttpResponse::Ok().json(ApiResponse::success(stats))),
+        Ok(stats) => Ok(ApiResponse::success(stats)),
         Err(err) => {
             log::error!("Error fetching time-off stats: {}", err);
             Ok(

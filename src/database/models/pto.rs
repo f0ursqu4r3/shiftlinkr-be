@@ -10,6 +10,7 @@ use super::macros::string_enum;
 pub struct PtoBalanceHistory {
     pub id: Uuid,
     pub user_id: Uuid,
+    pub company_id: Uuid,
     pub balance_type: PtoBalanceType,
     pub change_type: PtoChangeType,
     pub hours_changed: i32,
@@ -52,7 +53,7 @@ pub struct PtoBalance {
     pub last_accrual_date: Option<NaiveDate>, // DATE type
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PtoBalanceUpdateInput {
     pub pto_balance_hours: Option<i32>,
@@ -62,11 +63,23 @@ pub struct PtoBalanceUpdateInput {
     pub hire_date: Option<NaiveDate>,         // DATE type
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PtoBalanceAdjustmentInput {
     pub change_type: PtoChangeType,
     pub balance_type: PtoBalanceType,
     pub hours_changed: i32,
     pub description: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PtoBalanceAccrualResult {
+    pub user_id: Uuid,
+    pub company_id: Uuid,
+    pub hire_date: Option<NaiveDate>,
+    pub last_accrual_date: Option<NaiveDate>,
+    pub months_since_last_accrual: i32,
+    pub hours_to_accrue: i32,
+    pub new_balance: i32,
 }

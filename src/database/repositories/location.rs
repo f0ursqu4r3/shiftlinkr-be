@@ -166,12 +166,16 @@ impl LocationRepository {
         Ok(location)
     }
 
-    pub async fn delete_location(&self, id: Uuid) -> Result<bool> {
+    pub async fn delete_location(&self, id: Uuid) -> Result<Option<()>> {
         let result = sqlx::query("DELETE FROM locations WHERE id = $1")
             .bind(id)
             .execute(&self.pool)
             .await?;
 
-        Ok(result.rows_affected() > 0)
+        Ok(if result.rows_affected() > 0 {
+            Some(())
+        } else {
+            None
+        })
     }
 }

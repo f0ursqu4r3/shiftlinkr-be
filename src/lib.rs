@@ -1,7 +1,9 @@
 pub mod config;
 pub mod database;
+pub mod error;
 pub mod handlers;
 pub mod middleware;
+pub mod routes;
 pub mod services;
 
 // Re-export commonly used types

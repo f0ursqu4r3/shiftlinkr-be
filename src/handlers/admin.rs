@@ -1,6 +1,5 @@
 use actix_web::{web, HttpRequest, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::database::models::{
@@ -9,6 +8,7 @@ use crate::database::models::{
 use crate::database::repositories::company::CompanyRepository;
 use crate::database::repositories::location::LocationRepository;
 use crate::database::repositories::user::UserRepository;
+use crate::error::AppError;
 use crate::handlers::shared::ApiResponse;
 use crate::repositories::TeamRepository;
 use crate::services::user_context::AsyncUserContext;
@@ -19,8 +19,7 @@ use crate::services::ActivityLogger;
 pub struct UpdateUserRequest {
     pub name: String,
     pub email: String,
-    pub role: Option<String>, // Company-specific role updates through company_employees table
-    pub company_id: Option<Uuid>, // Required for role updates
+    pub role: Option<CompanyRole>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -29,7 +28,7 @@ pub struct UserResponse {
     pub id: Uuid,
     pub email: String,
     pub name: String,
-    pub role: String,
+    pub role: CompanyRole,
     pub company_id: Uuid,
     pub hire_date: Option<String>,
     pub is_primary: bool,
@@ -45,29 +44,19 @@ pub async fn create_location(
     input: web::Json<CreateUpdateLocationInput>,
     req: HttpRequest,
 ) -> Result<HttpResponse> {
-    // Check if user is admin or manager for the specified company
     let user_id = user_context.user_id();
 
-    if !user_context.is_manager_or_admin() {
-        return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
-            "Insufficient permissions to create location",
-        )));
-    }
+    user_context.requires_manager()?;
 
-    let company_id = match user_context.company_id() {
-        Some(company_id) => company_id,
-        None => {
-            return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-                "User does not belong to any company",
-            )));
-        }
-    };
+    let company_id = user_context
+        .company_id()
+        .ok_or_else(|| AppError::BadRequest("User does not belong to any company".to_string()))?;
 
     let location_input = input.into_inner();
 
     let location_name = location_input.name.clone();
 
-    match location_repo
+    let location = location_repo
         .create_location(LocationInput {
             name: location_input.name,
             address: location_input.address,
@@ -76,42 +65,33 @@ pub async fn create_location(
             company_id,
         })
         .await
-    {
-        Ok(location) => {
-            // Log location creation activity
-            let mut metadata = HashMap::new();
-            metadata.insert(
-                "location_name".to_string(),
-                serde_json::Value::String(location_name),
-            );
-            metadata.insert(
-                "location_id".to_string(),
-                serde_json::Value::String(location.id.to_string()),
-            );
-
-            if let Err(e) = activity_logger
-                .log_location_activity(
-                    company_id,
-                    Some(user_id),
-                    location.id,
-                    Action::CREATED,
-                    format!("Location '{}' created", location.name),
-                    Some(metadata),
-                    &req,
-                )
-                .await
-            {
-                log::warn!("Failed to log location creation activity: {}", e);
-            }
-
-            Ok(HttpResponse::Created().json(ApiResponse::success(location)))
-        }
-        Err(err) => {
+        .map_err(|err| {
             log::error!("Error creating location: {}", err);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::error("Failed to create location")))
-        }
+            AppError::DatabaseError(err)
+        })?;
+
+    // Log location creation activity
+    let metadata = ActivityLogger::metadata(vec![
+        ("location_name", location_name),
+        ("location_id", location.id.to_string()),
+    ]);
+
+    if let Err(e) = activity_logger
+        .log_location_activity(
+            company_id,
+            Some(user_id),
+            location.id,
+            Action::CREATED,
+            format!("Location '{}' created", location.name),
+            Some(metadata),
+            &req,
+        )
+        .await
+    {
+        log::warn!("Failed to log location creation activity: {}", e);
     }
+
+    Ok(ApiResponse::success(location))
 }
 
 pub async fn get_locations(
@@ -121,35 +101,29 @@ pub async fn get_locations(
 ) -> Result<HttpResponse> {
     let user_id = user_context.user_id();
 
-    match company_repo.get_companies_for_user(user_id).await {
-        Ok(companies) => {
-            if companies.is_empty() {
-                return Ok(
-                    HttpResponse::Ok().json(ApiResponse::success(Vec::<LocationInput>::new()))
-                );
-            }
-            let company_ids: Vec<Uuid> = companies.iter().map(|c| c.id).collect();
+    let companies = company_repo
+        .get_companies_for_user(user_id)
+        .await
+        .map_err(|e| {
+            log::error!("Error fetching user companies: {}", e);
+            AppError::DatabaseError(e)
+        })?;
 
-            match location_repo
-                .get_locations_by_company_ids(company_ids)
-                .await
-            {
-                Ok(all_locations) => {
-                    Ok(HttpResponse::Ok().json(ApiResponse::success(all_locations)))
-                }
-                Err(err) => {
-                    log::error!("Error fetching locations for user {}: {}", user_id, err);
-                    Ok(HttpResponse::InternalServerError()
-                        .json(ApiResponse::error("Failed to fetch locations")))
-                }
-            }
-        }
-        Err(err) => {
-            log::error!("Error fetching user companies: {}", err);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::error("Failed to fetch locations")))
-        }
+    if companies.is_empty() {
+        return Ok(ApiResponse::success(Vec::<LocationInput>::new()));
     }
+
+    let company_ids: Vec<Uuid> = companies.iter().map(|c| c.id).collect();
+
+    let all_locations = location_repo
+        .get_locations_by_company_ids(company_ids)
+        .await
+        .map_err(|e| {
+            log::error!("Error fetching locations: {}", e);
+            AppError::DatabaseError(e)
+        })?;
+
+    Ok(ApiResponse::success(all_locations))
 }
 
 pub async fn get_location(
@@ -161,42 +135,41 @@ pub async fn get_location(
     let location_id = path.into_inner();
     let user_id = user_context.user_id();
 
-    match location_repo.find_by_id(location_id).await {
-        Ok(Some(location)) => {
-            // Check if user has access to this location's company
-            match company_repo
-                .check_user_company_access(user_id, location.company_id)
-                .await
-            {
-                Ok(Some(_)) => {
-                    // User has access, proceed
-                    Ok(HttpResponse::Ok().json(ApiResponse::success(location)))
-                }
-                Ok(None) => {
-                    // User does not have access
-                    Ok(HttpResponse::Forbidden().json(ApiResponse::error(
-                        "Insufficient permissions to access location",
-                    )))
-                }
-                Err(err) => {
-                    log::error!(
-                        "Error checking company access for user {} and location {}: {}",
-                        user_id,
-                        location_id,
-                        err
-                    );
-                    Ok(HttpResponse::InternalServerError()
-                        .json(ApiResponse::error("Failed to verify permissions")))
-                }
-            }
-        }
-        Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::error("Location not found"))),
-        Err(err) => {
-            log::error!("Error fetching location {}: {}", location_id, err);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::error("Failed to fetch location")))
-        }
-    }
+    let location = location_repo
+        .find_by_id(location_id)
+        .await
+        .map_err(|e| {
+            log::error!("Error fetching location {}: {}", location_id, e);
+            AppError::DatabaseError(e)
+        })?
+        .ok_or_else(|| {
+            log::warn!("Location {} not found", location_id);
+            AppError::NotFound("Location not found".to_string())
+        })?;
+
+    // Check if user has access to this location's company
+    company_repo
+        .check_user_company_access(user_id, location.company_id)
+        .await
+        .map_err(|e| {
+            log::error!(
+                "Error checking company access for user {} and location {}: {}",
+                user_id,
+                location_id,
+                e
+            );
+            AppError::DatabaseError(e)
+        })?
+        .ok_or_else(|| {
+            log::warn!(
+                "User {} does not have access to location {}",
+                user_id,
+                location_id
+            );
+            AppError::PermissionDenied("Insufficient permissions to access location".to_string())
+        })?;
+
+    Ok(ApiResponse::success(location))
 }
 
 pub async fn update_location(
@@ -206,24 +179,15 @@ pub async fn update_location(
     input: web::Json<CreateUpdateLocationInput>,
 ) -> Result<HttpResponse> {
     // Check if user is admin or manager
-    let company_id = match user_context.company_id() {
-        Some(company_id) => company_id,
-        None => {
-            return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-                "User does not belong to any company",
-            )));
-        }
-    };
+    let company_id = user_context
+        .company_id()
+        .ok_or_else(|| AppError::BadRequest("User does not belong to any company".to_string()))?;
 
-    if !user_context.is_manager_or_admin() {
-        return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
-            "Insufficient permissions to update location",
-        )));
-    }
+    user_context.requires_manager()?;
 
     let location_id = path.into_inner();
 
-    match location_repo
+    let location = location_repo
         .update_location(
             location_id,
             LocationInput {
@@ -235,15 +199,16 @@ pub async fn update_location(
             },
         )
         .await
-    {
-        Ok(Some(location)) => Ok(HttpResponse::Ok().json(ApiResponse::success(location))),
-        Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::error("Location not found"))),
-        Err(err) => {
+        .map_err(|err| {
             log::error!("Error updating location {}: {}", location_id, err);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::error("Failed to update location")))
-        }
-    }
+            AppError::DatabaseError(err)
+        })?
+        .ok_or_else(|| {
+            log::warn!("Location {} not found", location_id);
+            AppError::NotFound("Location not found".to_string())
+        })?;
+
+    Ok(ApiResponse::success(location))
 }
 
 pub async fn delete_location(
@@ -254,38 +219,36 @@ pub async fn delete_location(
     let location_id = path.into_inner();
 
     // Get the location to check permissions
-    let location = match location_repo.find_by_id(location_id).await {
-        Ok(Some(location)) => location,
-        Ok(None) => {
-            return Ok(HttpResponse::NotFound().json(ApiResponse::error("Location not found")));
-        }
-        Err(err) => {
-            log::error!("Error fetching location {}: {}", location_id, err);
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::error("Failed to fetch location")));
-        }
-    };
+    let location = location_repo
+        .find_by_id(location_id)
+        .await
+        .map_err(|e| {
+            log::error!("Error fetching location {}: {}", location_id, e);
+            AppError::DatabaseError(e)
+        })?
+        .ok_or_else(|| {
+            log::warn!("Location {} not found", location_id);
+            AppError::NotFound("Location not found".to_string())
+        })?;
 
-    // Check if user is admin
-    if !user_context.is_manager_or_admin() || user_context.company_id() != Some(location.company_id)
-    {
-        return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
-            "Insufficient permissions to update location",
-        )));
-    }
+    user_context.requires_same_company(location.company_id)?;
 
     // Proceed with deletion
-    match location_repo.delete_location(location_id).await {
-        Ok(true) => {
-            Ok(HttpResponse::Ok().json(ApiResponse::success("Location deleted successfully")))
-        }
-        Ok(false) => Ok(HttpResponse::NotFound().json(ApiResponse::error("Location not found"))),
-        Err(err) => {
-            log::error!("Error deleting location {}: {}", location_id, err);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::error("Failed to delete location")))
-        }
-    }
+    location_repo
+        .delete_location(location_id)
+        .await
+        .map_err(|e| {
+            log::error!("Error deleting location {}: {}", location_id, e);
+            AppError::DatabaseError(e)
+        })?
+        .ok_or_else(|| {
+            log::warn!("Location {} not found for deletion", location_id);
+            AppError::NotFound("Location not found".to_string())
+        })?;
+
+    Ok(ApiResponse::success_message(
+        "Location deleted successfully",
+    ))
 }
 
 // Team handlers
@@ -303,68 +266,47 @@ pub async fn create_team(
     let team_name = team_input.name.clone();
     let user_id = user_context.user_id();
 
-    let company_id = match location_repo.find_by_id(location_id).await {
-        Ok(Some(location)) => {
-            // Check if user is admin or manager for the location's company
-            if !user_context.is_manager_or_admin()
-                || user_context.company_id() != Some(location.company_id)
-            {
-                return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
-                    "Insufficient permissions to update location",
-                )));
-            }
-            location.company_id
-        }
-        Ok(None) => {
-            return Ok(HttpResponse::NotFound().json(ApiResponse::error("Location not found")));
-        }
-        Err(err) => {
-            log::error!("Error fetching location {}: {}", location_id, err);
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::error("Failed to verify location")));
-        }
-    };
+    let location = location_repo
+        .find_by_id(location_id)
+        .await
+        .map_err(|e| {
+            log::error!("Error fetching location {}: {}", location_id, e);
+            AppError::DatabaseError(e)
+        })?
+        .ok_or_else(|| {
+            log::warn!("Location {} not found", location_id);
+            AppError::NotFound("Location not found".to_string())
+        })?;
 
-    match team_repo.create_team(team_input).await {
-        Ok(team) => {
-            // Log team creation activity
-            let mut metadata = HashMap::new();
-            metadata.insert(
-                "team_name".to_string(),
-                serde_json::Value::String(team_name),
-            );
-            metadata.insert(
-                "team_id".to_string(),
-                serde_json::Value::String(team.id.to_string()),
-            );
-            metadata.insert(
-                "location_id".to_string(),
-                serde_json::Value::String(location_id.to_string()),
-            );
+    user_context.requires_same_company(location.company_id)?;
 
-            if let Err(e) = activity_logger
-                .log_team_activity(
-                    company_id,
-                    Some(user_id),
-                    team.id,
-                    Action::CREATED,
-                    format!("Team '{}' created in location {}", team.name, location_id),
-                    Some(metadata),
-                    &req,
-                )
-                .await
-            {
-                log::warn!("Failed to log team creation activity: {}", e);
-            }
+    let team = team_repo.create_team(team_input).await.map_err(|e| {
+        log::error!("Error creating team: {}", e);
+        AppError::DatabaseError(e)
+    })?;
 
-            Ok(HttpResponse::Created().json(ApiResponse::success(team)))
-        }
-        Err(err) => {
-            log::error!("Error creating team: {}", err);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::error("Failed to create team")))
-        }
+    let metadata = ActivityLogger::metadata(vec![
+        ("team_name", team_name),
+        ("team_id", team.id.to_string()),
+        ("location_id", location_id.to_string()),
+    ]);
+
+    if let Err(e) = activity_logger
+        .log_team_activity(
+            location.company_id,
+            Some(user_id),
+            team.id,
+            Action::CREATED,
+            format!("Team '{}' created in location {}", team.name, location_id),
+            Some(metadata),
+            &req,
+        )
+        .await
+    {
+        log::warn!("Failed to log team creation activity: {}", e);
     }
+
+    Ok(ApiResponse::success(team))
 }
 
 pub async fn get_teams(
@@ -374,50 +316,41 @@ pub async fn get_teams(
     query: web::Query<TeamQuery>,
 ) -> Result<HttpResponse> {
     let teams = if let Some(location_id) = query.location_id {
-        // If location_id is provided, get the location
-        // then verify the location is accessible by the user
-        match location_repo.find_by_id(location_id).await {
-            Ok(Some(location)) => {
-                // Check if user has access to this location
-                if user_context.company_id() != Some(location.company_id) {
-                    return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
-                        "Insufficient permissions to access location",
-                    )));
-                }
-            }
-            Ok(None) => {
-                return Ok(HttpResponse::NotFound().json(ApiResponse::error("Location not found")));
-            }
-            Err(err) => {
-                log::error!("Error fetching location {}: {}", location_id, err);
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::error("Failed to fetch location")));
-            }
-        }
-        team_repo.get_teams_by_location(location_id).await
-    } else if user_context.company_id().is_some() {
-        if !user_context.is_manager_or_admin() {
-            return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
-                "Insufficient permissions to update location",
-            )));
-        }
+        let location = location_repo
+            .find_by_id(location_id)
+            .await
+            .map_err(|e| {
+                log::error!("Error fetching location {}: {}", location_id, e);
+                AppError::DatabaseError(e)
+            })?
+            .ok_or_else(|| {
+                log::warn!("Location {} not found", location_id);
+                AppError::NotFound("Location not found".to_string())
+            })?;
+
+        user_context.requires_same_company(location.company_id)?;
+
+        team_repo
+            .get_teams_by_location(location_id)
+            .await
+            .map_err(|e| {
+                log::error!("Error fetching teams for location {}: {}", location_id, e);
+                AppError::DatabaseError(e)
+            })?
+    } else {
+        user_context.requires_manager()?;
+        user_context.requires_company()?;
+
         team_repo
             .get_all_teams_for_company(user_context.company_id().unwrap())
             .await
-    } else {
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::error(
-            "Location ID or company ID must be provided",
-        )));
+            .map_err(|e| {
+                log::error!("Error fetching teams for company: {}", e);
+                AppError::DatabaseError(e)
+            })?
     };
 
-    match teams {
-        Ok(teams) => Ok(HttpResponse::Ok().json(ApiResponse::success(teams))),
-        Err(err) => {
-            log::error!("Error fetching teams: {}", err);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::error("Failed to fetch teams")))
-        }
-    }
+    Ok(ApiResponse::success(teams))
 }
 
 pub async fn get_team(
@@ -428,35 +361,25 @@ pub async fn get_team(
 ) -> Result<HttpResponse> {
     let team_id = path.into_inner();
 
-    match location_repo.find_by_team_id(team_id).await {
-        Ok(Some(location)) => {
-            if user_context.company_id() != Some(location.company_id) {
-                return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
-                    "Insufficient permissions to access team",
-                )));
-            }
-        }
-        Ok(None) => {
-            return Ok(HttpResponse::NotFound().json(ApiResponse::error("Team not found")));
-        }
-        Err(err) => {
-            log::error!("Error fetching team {}: {}", team_id, err);
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::error("Failed to fetch team")));
-        }
-    };
+    user_context.requires_manager()?;
 
-    match team_repo.get_team_by_id(team_id).await {
-        Ok(Some(team)) => Ok(HttpResponse::Ok().json(ApiResponse::success(team))),
-        Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::error("Team not found"))),
-        Err(err) => {
-            log::error!("Error fetching team {}: {}", team_id, err);
-            Ok(
-                HttpResponse::InternalServerError()
-                    .json(ApiResponse::error("Failed to fetch team")),
-            )
-        }
-    }
+    let location = get_location_for_team(&location_repo, team_id).await?;
+
+    user_context.requires_same_company(location.company_id)?;
+
+    let team = team_repo
+        .get_team_by_id(team_id)
+        .await
+        .map_err(|e| {
+            log::error!("Error fetching team {}: {}", team_id, e);
+            AppError::DatabaseError(e)
+        })?
+        .ok_or_else(|| {
+            log::warn!("Team {} not found", team_id);
+            AppError::NotFound("Team not found".to_string())
+        })?;
+
+    Ok(ApiResponse::success(team))
 }
 
 pub async fn update_team(
@@ -468,38 +391,35 @@ pub async fn update_team(
 ) -> Result<HttpResponse> {
     let team_id = path.into_inner();
 
-    // Get the location to verify permissions
-    match location_repo.find_by_team_id(team_id).await {
-        Ok(Some(location)) => {
-            // Check if user has access to this location
-            if user_context.company_id() != Some(location.company_id)
-                || !user_context.is_manager_or_admin()
-            {
-                return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
-                    "Insufficient permissions to access location",
-                )));
-            }
-            location
-        }
-        Ok(None) => {
-            return Ok(HttpResponse::NotFound().json(ApiResponse::error("Location not found")));
-        }
-        Err(err) => {
-            log::error!("Error fetching location {}: {}", input.location_id, err);
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::error("Failed to fetch location")));
-        }
-    };
+    user_context.requires_manager()?;
 
-    match team_repo.update_team(team_id, input.into_inner()).await {
-        Ok(Some(team)) => Ok(HttpResponse::Ok().json(ApiResponse::success(team))),
-        Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::error("Team not found"))),
-        Err(err) => {
-            log::error!("Error updating team {}: {}", team_id, err);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::error("Failed to update team")))
-        }
-    }
+    let location = location_repo
+        .find_by_team_id(team_id)
+        .await
+        .map_err(|e| {
+            log::error!("Error fetching location by team {}: {}", team_id, e);
+            AppError::DatabaseError(e)
+        })?
+        .ok_or_else(|| {
+            log::warn!("Location for team {} not found", team_id);
+            AppError::NotFound("Location not found".to_string())
+        })?;
+
+    user_context.requires_same_company(location.company_id)?;
+
+    let team = team_repo
+        .update_team(team_id, input.into_inner())
+        .await
+        .map_err(|e| {
+            log::error!("Error fetching team {}: {}", team_id, e);
+            AppError::DatabaseError(e)
+        })?
+        .ok_or_else(|| {
+            log::warn!("Team {} not found", team_id);
+            AppError::NotFound("Team not found".to_string())
+        })?;
+
+    Ok(ApiResponse::success(team))
 }
 
 pub async fn delete_team(
@@ -510,38 +430,25 @@ pub async fn delete_team(
 ) -> Result<HttpResponse> {
     let team_id = path.into_inner();
 
-    // Get the location to verify permissions
-    match location_repo.find_by_team_id(team_id).await {
-        Ok(Some(location)) => {
-            // Check if user has access to this location
-            if user_context.company_id() != Some(location.company_id)
-                || !user_context.is_manager_or_admin()
-            {
-                return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
-                    "Insufficient permissions to access location",
-                )));
-            }
-            location
-        }
-        Ok(None) => {
-            return Ok(HttpResponse::NotFound().json(ApiResponse::error("Location not found")));
-        }
-        Err(err) => {
-            log::error!("Error fetching location by team {}: {}", team_id, err);
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::error("Failed to fetch location")));
-        }
-    };
+    user_context.requires_manager()?;
 
-    match team_repo.delete_team(team_id).await {
-        Ok(true) => Ok(HttpResponse::Ok().json(ApiResponse::success("Team deleted successfully"))),
-        Ok(false) => Ok(HttpResponse::NotFound().json(ApiResponse::error("Team not found"))),
-        Err(err) => {
-            log::error!("Error deleting team {}: {}", team_id, err);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::error("Failed to delete team")))
-        }
-    }
+    let location = get_location_for_team(&location_repo, team_id).await?;
+
+    user_context.requires_same_company(location.company_id)?;
+
+    team_repo
+        .delete_team(team_id)
+        .await
+        .map_err(|e| {
+            log::error!("Error deleting team {}: {}", team_id, e);
+            AppError::DatabaseError(e)
+        })?
+        .ok_or_else(|| {
+            log::warn!("Team {} not found for deletion", team_id);
+            AppError::NotFound("Team not found".to_string())
+        })?;
+
+    Ok(ApiResponse::success_message("Team deleted successfully"))
 }
 
 // Team member handlers
@@ -553,37 +460,21 @@ pub async fn add_team_member(
 ) -> Result<HttpResponse> {
     let (team_id, user_id) = path.into_inner();
 
-    // Get the location to verify permissions
-    match location_repo.find_by_team_id(team_id).await {
-        Ok(Some(location)) => {
-            // Check if user has access to this location
-            if user_context.company_id() != Some(location.company_id)
-                || !user_context.is_manager_or_admin()
-            {
-                return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
-                    "Insufficient permissions to access location",
-                )));
-            }
-            location
-        }
-        Ok(None) => {
-            return Ok(HttpResponse::NotFound().json(ApiResponse::error("Location not found")));
-        }
-        Err(err) => {
-            log::error!("Error fetching location by team {}: {}", team_id, err);
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::error("Failed to fetch location")));
-        }
-    };
+    user_context.requires_manager()?;
 
-    match team_repo.add_team_member(team_id, user_id).await {
-        Ok(team_member) => Ok(HttpResponse::Created().json(ApiResponse::success(team_member))),
-        Err(err) => {
-            log::error!("Error adding team member: {}", err);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::error("Failed to add team member")))
-        }
-    }
+    let location = get_location_for_team(&location_repo, team_id).await?;
+
+    user_context.requires_same_company(location.company_id)?;
+
+    let team_member = team_repo
+        .add_team_member(team_id, user_id)
+        .await
+        .map_err(|e| {
+            log::error!("Error adding team member to team {}: {}", team_id, e);
+            AppError::DatabaseError(e)
+        })?;
+
+    Ok(ApiResponse::success(team_member))
 }
 
 pub async fn get_team_members(
@@ -594,38 +485,18 @@ pub async fn get_team_members(
 ) -> Result<HttpResponse> {
     let team_id = path.into_inner();
 
-    // Get the location to verify permissions
-    match location_repo.find_by_team_id(team_id).await {
-        Ok(Some(location)) => {
-            // Check if user has access to this location
-            if user_context.company_id() != Some(location.company_id)
-                || !user_context.is_manager_or_admin()
-            {
-                return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
-                    "Insufficient permissions to access location",
-                )));
-            }
-            location
-        }
-        Ok(None) => {
-            return Ok(HttpResponse::NotFound().json(ApiResponse::error("Location not found")));
-        }
-        Err(err) => {
-            log::error!("Error fetching location by team {}: {}", team_id, err);
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::error("Failed to fetch location")));
-        }
-    };
+    user_context.requires_manager()?;
 
-    // Fetch team members
-    match team_repo.get_team_members(team_id).await {
-        Ok(members) => Ok(HttpResponse::Ok().json(ApiResponse::success(members))),
-        Err(err) => {
-            log::error!("Error fetching team members for team {}: {}", team_id, err);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::error("Failed to fetch team members")))
-        }
-    }
+    let location = get_location_for_team(&location_repo, team_id).await?;
+
+    user_context.requires_same_company(location.company_id)?;
+
+    let members = team_repo.get_team_members(team_id).await.map_err(|e| {
+        log::error!("Error fetching team members for team {}: {}", team_id, e);
+        AppError::DatabaseError(e)
+    })?;
+
+    Ok(ApiResponse::success(members))
 }
 
 pub async fn remove_team_member(
@@ -636,40 +507,27 @@ pub async fn remove_team_member(
 ) -> Result<HttpResponse> {
     let (team_id, user_id) = path.into_inner();
 
-    // Get the location to verify permissions
-    match location_repo.find_by_team_id(team_id).await {
-        Ok(Some(location)) => {
-            // Check if user has access to this location
-            if user_context.company_id() != Some(location.company_id)
-                || !user_context.is_manager_or_admin()
-            {
-                return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
-                    "Insufficient permissions to access location",
-                )));
-            }
-            location
-        }
-        Ok(None) => {
-            return Ok(HttpResponse::NotFound().json(ApiResponse::error("Location not found")));
-        }
-        Err(err) => {
-            log::error!("Error fetching location by team {}: {}", team_id, err);
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::error("Failed to fetch location")));
-        }
-    };
+    user_context.requires_manager()?;
 
-    match team_repo.remove_team_member(team_id, user_id).await {
-        Ok(true) => {
-            Ok(HttpResponse::Ok().json(ApiResponse::success("Team member removed successfully")))
-        }
-        Ok(false) => Ok(HttpResponse::NotFound().json(ApiResponse::error("Team member not found"))),
-        Err(err) => {
-            log::error!("Error removing team member: {}", err);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::error("Failed to remove team member")))
-        }
-    }
+    let location = get_location_for_team(&location_repo, team_id).await?;
+
+    user_context.requires_same_company(location.company_id)?;
+
+    team_repo
+        .remove_team_member(team_id, user_id)
+        .await
+        .map_err(|e| {
+            log::error!("Error removing team member: {}", e);
+            AppError::DatabaseError(e)
+        })?
+        .ok_or_else(|| {
+            log::warn!("Team member not found in team {}", team_id);
+            AppError::NotFound("Team member not found".to_string())
+        })?;
+
+    Ok(ApiResponse::success_message(
+        "Team member removed successfully",
+    ))
 }
 
 #[derive(Debug, Deserialize)]
@@ -683,57 +541,40 @@ pub async fn get_users(
     AsyncUserContext(user_context): AsyncUserContext,
     company_repo: web::Data<CompanyRepository>,
 ) -> Result<HttpResponse> {
-    // Check if user is admin or manager
-    if !user_context.is_manager_or_admin() {
-        return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
-            "Insufficient permissions to access users",
-        )));
-    }
+    user_context.requires_manager()?;
 
-    // Get the company ID from user context
-    let company_id = match user_context.company_id() {
-        Some(id) => id,
-        None => {
-            return Ok(HttpResponse::BadRequest()
-                .json(ApiResponse::error("User does not belong to any company")));
-        }
-    };
+    let company_id = user_context.company_id().ok_or_else(|| {
+        return AppError::BadRequest("User does not belong to any company".to_string());
+    })?;
 
-    match company_repo.get_company_employees(company_id).await {
-        Ok(employees) => {
-            let user_responses: Vec<UserResponse> = employees
-                .into_iter()
-                .map(|employee| UserResponse {
-                    id: employee.id,
-                    email: employee.email,
-                    name: employee.name,
-                    role: employee.role.to_string(),
-                    company_id,
-                    hire_date: employee.hire_date.map(|d| d.format("%Y-%m-%d").to_string()),
-                    is_primary: employee.is_primary,
-                    created_at: employee
-                        .created_at
-                        .map(|dt| dt.format("%Y-%m-%dT%H:%M:%SZ").to_string())
-                        .unwrap_or_else(|| {
-                            chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
-                        }),
-                    updated_at: employee
-                        .updated_at
-                        .map(|dt| dt.format("%Y-%m-%dT%H:%M:%SZ").to_string())
-                        .unwrap_or_else(|| {
-                            chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
-                        }),
-                })
-                .collect();
+    let employees: Vec<UserResponse> = company_repo
+        .get_company_employees(company_id)
+        .await
+        .map_err(|e| {
+            log::error!("Error fetching company employees: {}", e);
+            AppError::DatabaseError(e)
+        })?
+        .into_iter()
+        .map(|employee| UserResponse {
+            id: employee.id,
+            email: employee.email,
+            name: employee.name,
+            role: employee.role,
+            company_id,
+            hire_date: employee.hire_date.map(|d| d.format("%Y-%m-%d").to_string()),
+            is_primary: employee.is_primary,
+            created_at: employee
+                .created_at
+                .map(|dt| dt.format("%Y-%m-%dT%H:%M:%SZ").to_string())
+                .unwrap_or_else(|| chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()),
+            updated_at: employee
+                .updated_at
+                .map(|dt| dt.format("%Y-%m-%dT%H:%M:%SZ").to_string())
+                .unwrap_or_else(|| chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()),
+        })
+        .collect();
 
-            Ok(HttpResponse::Ok().json(ApiResponse::success(user_responses)))
-        }
-        Err(err) => {
-            log::error!("Error fetching company employees: {}", err);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::error("Failed to fetch users")))
-        }
-    }
+    Ok(ApiResponse::success(employees))
 }
 
 pub async fn update_user(
@@ -742,177 +583,83 @@ pub async fn update_user(
     company_repo: web::Data<CompanyRepository>,
     path: web::Path<String>,
     input: web::Json<UpdateUserRequest>,
-) -> Result<HttpResponse> {
-    let user_id_to_update = match path.into_inner().parse::<Uuid>() {
-        Ok(id) => id,
-        Err(_) => {
-            return Ok(HttpResponse::BadRequest().json(ApiResponse::error("Invalid user ID")));
-        }
-    };
+) -> Result<HttpResponse, AppError> {
+    let user_id_to_update = path
+        .into_inner()
+        .parse::<Uuid>()
+        .map_err(|_| AppError::BadRequest("Invalid user ID".to_string()))?;
     let user_id = user_context.user_id();
     let update_request = input.into_inner();
 
-    // Get company_id for permission check
-    let company_id = if let Some(company_id) = update_request.company_id {
-        company_id
+    // Check permissions based on whether role is being updated
+    if update_request.role.is_some() {
+        user_context.requires_manager()?;
     } else {
-        // Get user's primary company
-        match company_repo.get_primary_company_for_user(user_id).await {
-            Ok(Some(company_info)) => company_info.id,
-            Ok(None) => {
-                return Ok(
-                    HttpResponse::BadRequest().json(ApiResponse::error("No primary company found"))
-                );
-            }
-            Err(err) => {
-                log::error!(
-                    "Error fetching primary company for user {}: {}",
-                    user_context.user_id(),
-                    err
-                );
-                return Ok(HttpResponse::InternalServerError()
-                    .json(ApiResponse::error("Failed to fetch primary company")));
-            }
-        }
-    };
-
-    // Check if user is admin or manager for this specific company
-    match company_repo
-        .check_user_company_manager_or_admin(user_id, company_id)
-        .await
-    {
-        Ok(true) => {
-            // User has permissions, proceed
-        }
-        Ok(false) => {
-            return Ok(
-                HttpResponse::Forbidden().json(ApiResponse::error("Insufficient permissions"))
-            );
-        }
-        Err(err) => {
-            log::error!(
-                "Error checking user permissions for company {}: {}",
-                company_id,
-                err
-            );
-            return Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::error("Failed to verify permissions")));
-        }
+        user_context.requires_same_user(user_id_to_update)?;
     }
 
+    // Get the company ID from user context
+    let company_id = user_context
+        .company_id()
+        .ok_or_else(|| AppError::BadRequest("User does not belong to any company".to_string()))?;
+
+    // Check if the user to update belongs to requesting user's company
+    let user_company_info = company_repo
+        .find_company_info_by_id(user_id_to_update, company_id)
+        .await?
+        .ok_or_else(|| {
+            AppError::PermissionDenied("User does not belong to the same company".to_string())
+        })?;
+
     // Update basic user information
-    match user_repo
+    let updated_user = user_repo
         .update_user(
             user_id_to_update,
             &update_request.name,
             &update_request.email,
         )
-        .await
-    {
-        Ok(()) => {
-            // If role is provided, update company-specific role
-            if let (Some(role), Some(company_id)) =
-                (&update_request.role, update_request.company_id)
-            {
-                // Only admins can change roles
-                match company_repo
-                    .check_user_company_admin(user_id, company_id)
-                    .await
-                {
-                    Ok(true) => {
-                        // User is admin, can proceed
-                    }
-                    Ok(false) => {
-                        return Ok(HttpResponse::Forbidden()
-                            .json(ApiResponse::error("Only admins can change user roles")));
-                    }
-                    Err(err) => {
-                        log::error!(
-                            "Error checking admin permissions for user {}: {}",
-                            user_context.user_id(),
-                            err
-                        );
-                        return Ok(HttpResponse::InternalServerError()
-                            .json(ApiResponse::error("Failed to verify admin permissions")));
-                    }
-                }
+        .await?;
 
-                // Parse the role
-                let company_role = match role.parse::<CompanyRole>() {
-                    Ok(role) => role,
-                    Err(_) => {
-                        return Ok(HttpResponse::BadRequest()
-                            .json(ApiResponse::error("Invalid role specified")));
-                    }
-                };
-
-                // Check if we're trying to modify an admin user (only admins can modify other admins)
-                match company_repo.get_company_employees(company_id).await {
-                    Ok(employees) => {
-                        if let Some(existing_employee) = employees.iter().find(|e| e.id == user_id)
-                        {
-                            if existing_employee.role == CompanyRole::Admin {
-                                // Trying to modify admin - need to be admin
-                                match company_repo
-                                    .check_user_company_admin(user_id, company_id)
-                                    .await
-                                {
-                                    Ok(true) => {
-                                        // User is admin, can proceed
-                                    }
-                                    Ok(false) => {
-                                        return Ok(HttpResponse::Forbidden().json(
-                                            ApiResponse::error("Cannot modify admin users"),
-                                        ));
-                                    }
-                                    Err(err) => {
-                                        log::error!("Error verifying admin status: {}", err);
-                                        return Ok(HttpResponse::InternalServerError().json(
-                                            ApiResponse::error("Failed to verify user role"),
-                                        ));
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Err(err) => {
-                        log::error!("Error checking existing user role: {}", err);
-                        return Ok(HttpResponse::InternalServerError()
-                            .json(ApiResponse::error("Failed to verify user role")));
-                    }
-                }
-
-                // Update the role in company_employees table
-                match company_repo
-                    .update_employee_role(company_id, user_id, &company_role)
-                    .await
-                {
-                    Ok(true) => Ok(HttpResponse::Ok().json(
-                        ApiResponse::<()>::success_with_message(None, "User updated successfully"),
-                    )),
-                    Ok(false) => Ok(HttpResponse::NotFound()
-                        .json(ApiResponse::error("User not found in company"))),
-                    Err(err) => {
-                        log::error!("Error updating user role {}: {}", user_id, err);
-                        Ok(HttpResponse::InternalServerError()
-                            .json(ApiResponse::error("Failed to update user role")))
-                    }
-                }
-            } else {
-                Ok(
-                    HttpResponse::Ok().json(ApiResponse::<()>::success_with_message(
-                        None,
-                        "User updated successfully",
-                    )),
-                )
-            }
+    let final_role = if let Some(new_role) = update_request.role {
+        // If the user is trying to change their own role, ensure they are not demoting themselves from admin
+        if user_id == user_id_to_update
+            && user_company_info.role == CompanyRole::Admin
+            && new_role != CompanyRole::Admin
+        {
+            return Err(AppError::PermissionDenied(
+                "You cannot demote yourself from admin role".to_string(),
+            ));
         }
-        Err(err) => {
-            log::error!("Error updating user {}: {}", user_id, err);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::error("Failed to update user")))
-        }
-    }
+
+        // Update the user's role in the company
+        company_repo
+            .update_employee_role(company_id, user_id_to_update, &new_role)
+            .await?;
+
+        new_role
+    } else {
+        user_company_info.role
+    };
+
+    Ok(ApiResponse::success(UserResponse {
+        id: updated_user.id,
+        email: updated_user.email,
+        name: updated_user.name,
+        role: final_role,
+        company_id,
+        hire_date: user_company_info
+            .hire_date
+            .map(|d| d.format("%Y-%m-%d").to_string()),
+        is_primary: user_company_info.is_primary,
+        created_at: updated_user
+            .created_at
+            .format("%Y-%m-%dT%H:%M:%SZ")
+            .to_string(),
+        updated_at: updated_user
+            .updated_at
+            .format("%Y-%m-%dT%H:%M:%SZ")
+            .to_string(),
+    }))
 }
 
 pub async fn delete_user(
@@ -924,11 +671,7 @@ pub async fn delete_user(
     let user_id_to_delete = path.into_inner();
 
     // Only admins can delete users - check company-specific admin role
-    if !user_context.is_manager_or_admin() {
-        return Ok(HttpResponse::Forbidden().json(ApiResponse::error(
-            "Insufficient permissions to delete user",
-        )));
-    }
+    user_context.requires_manager()?;
 
     // Get the company ID from user context
     let company_id = match user_context.company_id() {
@@ -961,16 +704,31 @@ pub async fn delete_user(
     }
 
     match user_repo.delete_user(user_id_to_delete).await {
-        Ok(()) => Ok(
-            HttpResponse::Ok().json(ApiResponse::<()>::success_with_message(
-                None,
-                "User deleted successfully",
-            )),
-        ),
+        Ok(()) => Ok(ApiResponse::<()>::success_message(
+            "User deleted successfully",
+        )),
         Err(err) => {
             log::error!("Error deleting user {}: {}", user_id_to_delete, err);
             Ok(HttpResponse::InternalServerError()
                 .json(ApiResponse::error("Failed to delete user")))
         }
     }
+}
+
+// Utilities
+async fn get_location_for_team(
+    location_repo: &LocationRepository,
+    team_id: Uuid,
+) -> Result<crate::database::models::Location, AppError> {
+    location_repo
+        .find_by_team_id(team_id)
+        .await
+        .map_err(|e| {
+            log::error!("Error fetching location by team {}: {}", team_id, e);
+            AppError::DatabaseError(e)
+        })?
+        .ok_or_else(|| {
+            log::warn!("Location for team {} not found", team_id);
+            AppError::NotFound("Location not found".to_string())
+        })
 }

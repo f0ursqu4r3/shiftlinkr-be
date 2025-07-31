@@ -428,6 +428,7 @@ dependencies = [
  "serial_test",
  "sqlx",
  "tempfile",
+ "thiserror",
  "tokio",
  "tokio-test",
  "uuid",

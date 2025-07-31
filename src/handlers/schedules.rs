@@ -1,9 +1,10 @@
-use actix_web::{web, HttpRequest, HttpResponse, Result};
+use actix_web::{web, HttpResponse, Result};
 use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::database::models::{AssignmentResponse, ShiftAssignmentInput, UserShiftScheduleInput};
 use crate::database::repositories::schedule::ScheduleRepository;
+use crate::error::AppError;
 use crate::handlers::shared::ApiResponse;
 use crate::user_context::AsyncUserContext;
 
@@ -19,50 +20,43 @@ pub async fn create_user_schedule(
     AsyncUserContext(user_context): AsyncUserContext,
     schedule_repo: web::Data<ScheduleRepository>,
     input: web::Json<UserShiftScheduleInput>,
-    _req: HttpRequest,
 ) -> Result<HttpResponse> {
-    // Users can only create their own schedule, admins can create any
-    if !user_context.is_admin() && user_context.user_id() != input.user_id {
-        return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
-            "Can only manage your own schedule",
-        )));
-    }
+    let user_id = input.user_id;
 
-    match schedule_repo.create_user_schedule(input.into_inner()).await {
-        Ok(schedule) => Ok(HttpResponse::Created().json(ApiResponse::success(schedule))),
-        Err(e) => {
+    user_context.requires_same_user(user_id)?;
+
+    let schedule = schedule_repo
+        .create_user_schedule(input.into_inner())
+        .await
+        .map_err(|e| {
             log::error!("Failed to create user schedule: {}", e);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error("Failed to create user schedule")))
-        }
-    }
+            AppError::DatabaseError(e)
+        })?;
+
+    Ok(ApiResponse::success(schedule))
 }
 
 pub async fn get_user_schedule(
     AsyncUserContext(user_context): AsyncUserContext,
     schedule_repo: web::Data<ScheduleRepository>,
     path: web::Path<Uuid>,
-    _req: HttpRequest,
 ) -> Result<HttpResponse> {
     let user_id = path.into_inner();
 
-    // Users can only view their own schedule, admins/managers can view any
-    if !user_context.is_manager_or_admin() && user_context.user_id() != user_id {
-        return Ok(HttpResponse::Forbidden()
-            .json(ApiResponse::<()>::error("Can only view your own schedule")));
-    }
+    user_context.requires_same_user(user_id)?;
 
-    match schedule_repo.get_user_schedule(user_id).await {
-        Ok(Some(schedule)) => Ok(HttpResponse::Ok().json(ApiResponse::success(schedule))),
-        Ok(None) => {
-            Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("User schedule not found")))
-        }
-        Err(e) => {
+    let schedule = schedule_repo
+        .get_user_schedule(user_id)
+        .await
+        .map_err(|e| {
             log::error!("Failed to get user schedule: {}", e);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error("Failed to get user schedule")))
-        }
-    }
+            AppError::DatabaseError(e)
+        })?
+        .ok_or_else(|| {
+            AppError::NotFound(format!("User schedule not found for user ID: {}", user_id))
+        })?;
+
+    Ok(ApiResponse::success(schedule))
 }
 
 pub async fn update_user_schedule(
@@ -70,61 +64,48 @@ pub async fn update_user_schedule(
     schedule_repo: web::Data<ScheduleRepository>,
     path: web::Path<Uuid>,
     input: web::Json<UserShiftScheduleInput>,
-    _req: HttpRequest,
 ) -> Result<HttpResponse> {
     let user_id = path.into_inner();
 
-    // Users can only update their own schedule, admins can update any
-    if !user_context.is_admin() && user_context.user_id() != user_id {
-        return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
-            "Can only manage your own schedule",
-        )));
-    }
+    user_context.requires_same_user(user_id)?;
 
-    match schedule_repo
+    let schedule = schedule_repo
         .update_user_schedule(user_id, input.into_inner())
         .await
-    {
-        Ok(Some(schedule)) => Ok(HttpResponse::Ok().json(ApiResponse::success(schedule))),
-        Ok(None) => {
-            Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("User schedule not found")))
-        }
-        Err(e) => {
+        .map_err(|e| {
             log::error!("Failed to update user schedule: {}", e);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error("Failed to update user schedule")))
-        }
-    }
+            AppError::DatabaseError(e)
+        })?
+        .ok_or_else(|| {
+            AppError::NotFound(format!("User schedule not found for user ID: {}", user_id))
+        })?;
+
+    Ok(ApiResponse::success(schedule))
 }
 
 pub async fn delete_user_schedule(
     AsyncUserContext(user_context): AsyncUserContext,
     schedule_repo: web::Data<ScheduleRepository>,
     path: web::Path<Uuid>,
-    _req: HttpRequest,
 ) -> Result<HttpResponse> {
     let user_id = path.into_inner();
 
-    // Users can only delete their own schedule, admins can delete any
-    if !user_context.is_admin() && user_context.user_id() != user_id {
-        return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
-            "Can only manage your own schedule",
-        )));
-    }
+    user_context.requires_manager()?;
 
-    match schedule_repo.delete_user_schedule(user_id).await {
-        Ok(true) => {
-            Ok(HttpResponse::Ok().json(ApiResponse::success("User schedule deleted successfully")))
-        }
-        Ok(false) => {
-            Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("User schedule not found")))
-        }
-        Err(e) => {
+    schedule_repo
+        .delete_user_schedule(user_id)
+        .await
+        .map_err(|e| {
             log::error!("Failed to delete user schedule: {}", e);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error("Failed to delete user schedule")))
-        }
-    }
+            AppError::DatabaseError(e)
+        })?
+        .ok_or_else(|| {
+            AppError::NotFound(format!("User schedule not found for user ID: {}", user_id))
+        })?;
+
+    Ok(ApiResponse::success_message(
+        "User schedule deleted successfully",
+    ))
 }
 
 // Shift Assignments
@@ -132,140 +113,100 @@ pub async fn create_shift_assignment(
     AsyncUserContext(user_context): AsyncUserContext,
     schedule_repo: web::Data<ScheduleRepository>,
     input: web::Json<ShiftAssignmentInput>,
-    _req: HttpRequest,
 ) -> Result<HttpResponse> {
-    // Check if user is admin or manager
-    if !user_context.is_manager_or_admin() {
-        return Ok(
-            HttpResponse::Forbidden().json(ApiResponse::<()>::error("Manager access required"))
-        );
-    }
+    user_context.requires_manager()?;
 
-    match schedule_repo
+    let assignment = schedule_repo
         .create_shift_assignment(user_context.user_id(), input.into_inner())
         .await
-    {
-        Ok(assignment) => Ok(HttpResponse::Created().json(ApiResponse::success(assignment))),
-        Err(e) => {
+        .map_err(|e| {
             log::error!("Failed to create shift assignment: {}", e);
-            Ok(
-                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    "Failed to create shift assignment",
-                )),
-            )
-        }
-    }
+            AppError::DatabaseError(e)
+        })?;
+
+    Ok(ApiResponse::success(assignment))
 }
 
 pub async fn get_shift_assignment(
     AsyncUserContext(user_context): AsyncUserContext,
     schedule_repo: web::Data<ScheduleRepository>,
     path: web::Path<Uuid>,
-    _req: HttpRequest,
 ) -> Result<HttpResponse> {
     let assignment_id = path.into_inner();
 
-    match schedule_repo.get_shift_assignment(assignment_id).await {
-        Ok(Some(assignment)) => {
-            // Users can only view their own assignments, admins/managers can view any
-            if !user_context.is_manager_or_admin() && user_context.user_id() != assignment.user_id {
-                return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
-                    "Can only view your own assignments",
-                )));
-            }
-            Ok(HttpResponse::Ok().json(ApiResponse::success(assignment)))
-        }
-        Ok(None) => {
-            Ok(HttpResponse::NotFound()
-                .json(ApiResponse::<()>::error("Shift assignment not found")))
-        }
-        Err(e) => {
+    let assignment = schedule_repo
+        .get_shift_assignment(assignment_id)
+        .await
+        .map_err(|e| {
             log::error!("Failed to get shift assignment: {}", e);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error("Failed to get shift assignment")))
-        }
-    }
+            AppError::DatabaseError(e)
+        })?
+        .ok_or_else(|| AppError::NotFound("Shift assignment not found".to_string()))
+        .unwrap();
+
+    user_context.requires_same_user(assignment.user_id)?;
+
+    Ok(ApiResponse::success(assignment))
 }
 
 pub async fn get_shift_assignments_by_shift(
     AsyncUserContext(user_context): AsyncUserContext,
     schedule_repo: web::Data<ScheduleRepository>,
     path: web::Path<Uuid>,
-    _req: HttpRequest,
 ) -> Result<HttpResponse> {
-    // Check if user is admin or manager
-    if !user_context.is_manager_or_admin() {
-        return Ok(
-            HttpResponse::Forbidden().json(ApiResponse::<()>::error("Manager access required"))
-        );
-    }
+    user_context.requires_manager()?;
 
     let shift_id = path.into_inner();
 
-    match schedule_repo.get_shift_assignments_by_shift(shift_id).await {
-        Ok(assignments) => Ok(HttpResponse::Ok().json(ApiResponse::success(assignments))),
-        Err(e) => {
+    let assignments = schedule_repo
+        .get_shift_assignments_by_shift(shift_id)
+        .await
+        .map_err(|e| {
             log::error!("Failed to get shift assignments: {}", e);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error("Failed to get shift assignments")))
-        }
-    }
+            AppError::DatabaseError(e)
+        })?;
+
+    Ok(ApiResponse::success(assignments))
 }
 
 pub async fn get_shift_assignments_by_user(
     AsyncUserContext(user_context): AsyncUserContext,
     schedule_repo: web::Data<ScheduleRepository>,
     path: web::Path<Uuid>,
-    _req: HttpRequest,
 ) -> Result<HttpResponse> {
     let user_id = path.into_inner();
 
-    // Users can only view their own assignments, admins/managers can view any
-    if !user_context.is_manager_or_admin() && user_context.user_id() != user_id {
-        return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
-            "Can only view your own assignments",
-        )));
-    }
+    user_context.requires_same_user(user_id)?;
 
-    match schedule_repo.get_shift_assignments_by_user(user_id).await {
-        Ok(assignments) => Ok(HttpResponse::Ok().json(ApiResponse::success(assignments))),
-        Err(e) => {
+    let assignments = schedule_repo
+        .get_shift_assignments_by_user(user_id)
+        .await
+        .map_err(|e| {
             log::error!("Failed to get user assignments: {}", e);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error("Failed to get user assignments")))
-        }
-    }
+            AppError::DatabaseError(e)
+        })?;
+
+    Ok(ApiResponse::success(assignments))
 }
 
 pub async fn get_pending_assignments_for_user(
     AsyncUserContext(user_context): AsyncUserContext,
     schedule_repo: web::Data<ScheduleRepository>,
     path: web::Path<Uuid>,
-    _req: HttpRequest,
 ) -> Result<HttpResponse> {
     let user_id = path.into_inner();
 
-    // Users can only view their own pending assignments, admins/managers can view any
-    if !user_context.is_manager_or_admin() && user_context.user_id() != user_id {
-        return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
-            "Can only view your own assignments",
-        )));
-    }
+    user_context.requires_same_user(user_id)?;
 
-    match schedule_repo
+    let assignments = schedule_repo
         .get_pending_assignments_for_user(user_id)
         .await
-    {
-        Ok(assignments) => Ok(HttpResponse::Ok().json(ApiResponse::success(assignments))),
-        Err(e) => {
+        .map_err(|e| {
             log::error!("Failed to get pending assignments: {}", e);
-            Ok(
-                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    "Failed to get pending assignments",
-                )),
-            )
-        }
-    }
+            AppError::DatabaseError(e)
+        })?;
+
+    Ok(ApiResponse::success(assignments))
 }
 
 pub async fn respond_to_assignment(
@@ -273,124 +214,89 @@ pub async fn respond_to_assignment(
     schedule_repo: web::Data<ScheduleRepository>,
     path: web::Path<Uuid>,
     input: web::Json<AssignmentResponseRequest>,
-    _req: HttpRequest,
 ) -> Result<HttpResponse> {
     let assignment_id = path.into_inner();
 
-    // First get the assignment to check ownership
-    match schedule_repo.get_shift_assignment(assignment_id).await {
-        Ok(Some(assignment)) => {
-            // Users can only respond to their own assignments
-            if user_context.user_id() != assignment.user_id {
-                return Ok(HttpResponse::Forbidden().json(ApiResponse::<()>::error(
-                    "Can only respond to your own assignments",
-                )));
-            }
-
-            match schedule_repo
-                .respond_to_assignment(
-                    assignment_id,
-                    input.response.clone(),
-                    input.response_notes.clone(),
-                )
-                .await
-            {
-                Ok(Some(updated_assignment)) => {
-                    Ok(HttpResponse::Ok().json(ApiResponse::success(updated_assignment)))
-                }
-                Ok(None) => {
-                    Ok(HttpResponse::NotFound()
-                        .json(ApiResponse::<()>::error("Assignment not found")))
-                }
-                Err(e) => {
-                    log::error!("Failed to respond to assignment: {}", e);
-                    Ok(HttpResponse::InternalServerError()
-                        .json(ApiResponse::<()>::error("Failed to respond to assignment")))
-                }
-            }
-        }
-        Ok(None) => {
-            Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("Assignment not found")))
-        }
-        Err(e) => {
+    // get the assignment first to check ownership
+    let assignment = schedule_repo
+        .get_shift_assignment(assignment_id)
+        .await
+        .map_err(|e| {
             log::error!("Failed to get assignment: {}", e);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error("Failed to get assignment")))
-        }
-    }
+            AppError::DatabaseError(e)
+        })?
+        .ok_or_else(|| AppError::NotFound("Shift assignment not found".to_string()))
+        .unwrap();
+
+    user_context.requires_same_user(assignment.user_id)?;
+
+    let updated_assignment = schedule_repo
+        .respond_to_assignment(
+            assignment_id,
+            input.response.clone(),
+            input.response_notes.clone(),
+        )
+        .await
+        .map_err(|e| {
+            log::error!("Failed to respond to assignment: {}", e);
+            AppError::DatabaseError(e)
+        })?
+        .ok_or_else(|| AppError::NotFound("Shift assignment not found".to_string()))?;
+
+    Ok(ApiResponse::success(updated_assignment))
 }
 
 pub async fn cancel_assignment(
     AsyncUserContext(user_context): AsyncUserContext,
     schedule_repo: web::Data<ScheduleRepository>,
     path: web::Path<Uuid>,
-    _req: HttpRequest,
 ) -> Result<HttpResponse> {
-    // Check if user is admin or manager
-    if !user_context.is_manager_or_admin() {
-        return Ok(
-            HttpResponse::Forbidden().json(ApiResponse::<()>::error("Manager access required"))
-        );
-    }
+    user_context.requires_manager()?;
 
     let assignment_id = path.into_inner();
 
-    match schedule_repo.cancel_assignment(assignment_id).await {
-        Ok(Some(assignment)) => Ok(HttpResponse::Ok().json(ApiResponse::success(assignment))),
-        Ok(None) => {
-            Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error("Assignment not found")))
-        }
-        Err(e) => {
+    let assignment = schedule_repo
+        .cancel_assignment(assignment_id)
+        .await
+        .map_err(|e| {
             log::error!("Failed to cancel assignment: {}", e);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error("Failed to cancel assignment")))
-        }
-    }
+            AppError::DatabaseError(e)
+        })?
+        .ok_or_else(|| AppError::NotFound("Shift assignment not found".to_string()))?;
+
+    Ok(ApiResponse::success(assignment))
 }
 
 pub async fn expire_overdue_assignments(
     AsyncUserContext(user_context): AsyncUserContext,
     schedule_repo: web::Data<ScheduleRepository>,
-    _req: HttpRequest,
 ) -> Result<HttpResponse> {
-    // Check if user is admin
-    if !user_context.is_admin() {
-        return Ok(
-            HttpResponse::Forbidden().json(ApiResponse::<()>::error("Admin access required"))
-        );
-    }
+    user_context.requires_admin()?;
 
-    match schedule_repo.expire_overdue_assignments().await {
-        Ok(expired_assignments) => {
-            Ok(HttpResponse::Ok().json(ApiResponse::success(expired_assignments)))
-        }
-        Err(e) => {
+    let expired_assignments = schedule_repo
+        .expire_overdue_assignments()
+        .await
+        .map_err(|e| {
             log::error!("Failed to expire overdue assignments: {}", e);
-            Ok(
-                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    "Failed to expire overdue assignments",
-                )),
-            )
-        }
-    }
+            AppError::DatabaseError(e)
+        })?;
+
+    Ok(ApiResponse::success(expired_assignments))
 }
 
 pub async fn get_user_shift_suggestions(
     AsyncUserContext(user_context): AsyncUserContext,
     schedule_repo: web::Data<ScheduleRepository>,
-    _req: HttpRequest,
 ) -> Result<HttpResponse> {
     let user_id = user_context.user_id();
 
-    match schedule_repo.get_user_shift_suggestions(user_id).await {
-        Ok(suggestions) => Ok(HttpResponse::Ok().json(ApiResponse::success(suggestions))),
-        Err(e) => {
+    let suggestions = schedule_repo
+        .get_user_shift_suggestions(user_id)
+        .await
+        .map_err(|e| {
             log::error!("Failed to get user shift suggestions: {}", e);
-            Ok(
-                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    "Failed to get user shift suggestions",
-                )),
-            )
-        }
-    }
+            AppError::DatabaseError(e)
+        })?;
+
+    Ok(ApiResponse::success(suggestions))
 }

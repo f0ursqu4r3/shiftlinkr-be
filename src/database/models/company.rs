@@ -82,6 +82,9 @@ pub struct CompanyInfo {
     pub timezone: String,
     pub role: CompanyRole,
     pub is_primary: bool,
+    pub hire_date: Option<NaiveDate>, // DATE type for hire dates
+    pub created_at: DateTime<Utc>,    // TIMESTAMPTZ
+    pub updated_at: DateTime<Utc>,    // TIMESTAMPTZ
 }
 
 #[derive(Debug, Deserialize)]

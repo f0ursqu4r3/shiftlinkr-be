@@ -6,8 +6,8 @@ use uuid::Uuid;
 
 use crate::database::{
     models::{
-        PtoBalance, PtoBalanceAdjustmentInput, PtoBalanceHistory, PtoBalanceType,
-        PtoBalanceUpdateInput, PtoChangeType,
+        PtoBalance, PtoBalanceAccrualResult, PtoBalanceAdjustmentInput, PtoBalanceHistory,
+        PtoBalanceType, PtoBalanceUpdateInput, PtoChangeType,
     },
     utils::sql,
 };
@@ -246,12 +246,12 @@ impl PtoBalanceRepository {
     pub async fn get_balance_history(
         &self,
         user_id: Uuid,
+        company_id: Uuid,
         limit: Option<i32>,
     ) -> Result<Vec<PtoBalanceHistory>> {
         let limit = limit.unwrap_or(50);
 
-        let history = sqlx::query_as::<_, PtoBalanceHistory>(
-            r#"
+        let history = sqlx::query_as::<_, PtoBalanceHistory>(&sql(r#"
             SELECT 
                 id,
                 user_id,
@@ -266,14 +266,15 @@ impl PtoBalanceRepository {
             FROM
                 pto_balance_history
             WHERE
-                user_id = $1
+                user_id = ?
+                AND company_id = ?
             ORDER BY
                 created_at DESC
             LIMIT
                 ?
-            "#,
-        )
+        "#))
         .bind(user_id)
+        .bind(company_id)
         .bind(limit as i64)
         .fetch_all(&self.pool)
         .await?;
@@ -286,7 +287,7 @@ impl PtoBalanceRepository {
         &self,
         user_id: Uuid,
         company_id: Uuid,
-    ) -> Result<Option<PtoBalanceHistory>> {
+    ) -> Result<Option<PtoBalanceAccrualResult>> {
         let current_balance = self.get_balance_for_company(user_id, company_id).await?;
         if current_balance.is_none() {
             return Err(anyhow::anyhow!("User balance not found for company"));
@@ -343,7 +344,7 @@ impl PtoBalanceRepository {
         let change_type_str = PtoChangeType::Accrual.to_string();
         let description = format!("Monthly accrual of {} hours", hours_to_accrue);
 
-        let history_row = sqlx::query_as::<_, PtoBalanceHistory>(
+        sqlx::query(
             r#"
             INSERT INTO
                 pto_balance_history (
@@ -358,17 +359,6 @@ impl PtoBalanceRepository {
                 )
             VALUES
                 ($1, $2, $3, $4, $5, $6, $7, $8)
-            RETURNING
-                id,
-                user_id,
-                balance_type,
-                change_type,
-                hours_changed,
-                previous_balance,
-                new_balance,
-                description,
-                related_time_off_id,
-                created_at
             "#,
         )
         .bind(user_id)
@@ -379,10 +369,18 @@ impl PtoBalanceRepository {
         .bind(new_balance)
         .bind(description)
         .bind(now)
-        .fetch_one(&self.pool)
+        .execute(&self.pool)
         .await?;
 
-        Ok(Some(history_row))
+        Ok(Some(PtoBalanceAccrualResult {
+            user_id,
+            company_id,
+            hire_date: Some(hire_date),
+            last_accrual_date: Some(last_accrual),
+            months_since_last_accrual,
+            hours_to_accrue,
+            new_balance,
+        }))
     }
 
     /// Use PTO balance for a time-off request in a specific company

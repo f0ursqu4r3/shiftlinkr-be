@@ -90,10 +90,10 @@ pub struct AuthService {
 
 impl AuthService {
     pub fn new(
+        config: Config,
         user_repository: UserRepository,
         company_repository: CompanyRepository,
         password_reset_repository: PasswordResetTokenRepository,
-        config: Config,
     ) -> Self {
         Self {
             user_repository,

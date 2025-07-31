@@ -34,6 +34,38 @@ impl ActivityLogger {
         (ip_address, user_agent)
     }
 
+    /// Generic activity logging for custom cases
+    pub async fn log_activity(
+        &self,
+        company_id: Uuid,
+        user_id: Option<Uuid>,
+        activity_type: String,
+        entity_type: String,
+        entity_id: Uuid,
+        action: String,
+        description: String,
+        metadata: Option<HashMap<String, serde_json::Value>>,
+        req: &HttpRequest,
+    ) -> Result<(), sqlx::Error> {
+        let (ip_address, user_agent) = self.extract_client_info(req);
+
+        let request = CreateActivityInput {
+            company_id,
+            user_id,
+            activity_type,
+            entity_type,
+            entity_id,
+            action,
+            description,
+            metadata,
+            ip_address,
+            user_agent,
+        };
+
+        self.repository.log_activity(request).await?;
+        Ok(())
+    }
+
     /// Log user management activity
     pub async fn log_user_activity(
         &self,
@@ -83,38 +115,6 @@ impl ActivityLogger {
             entity_type: EntityType::USER.to_string(),
             entity_id: user_id.unwrap_or(Uuid::nil()), // Use nil UUID for failed logins where user_id is unknown
             action: action.to_string(),
-            description,
-            metadata,
-            ip_address,
-            user_agent,
-        };
-
-        self.repository.log_activity(request).await?;
-        Ok(())
-    }
-
-    /// Generic activity logging for custom cases
-    pub async fn log_activity(
-        &self,
-        company_id: Uuid,
-        user_id: Option<Uuid>,
-        activity_type: String,
-        entity_type: String,
-        entity_id: Uuid,
-        action: String,
-        description: String,
-        metadata: Option<HashMap<String, serde_json::Value>>,
-        req: &HttpRequest,
-    ) -> Result<(), sqlx::Error> {
-        let (ip_address, user_agent) = self.extract_client_info(req);
-
-        let request = CreateActivityInput {
-            company_id,
-            user_id,
-            activity_type,
-            entity_type,
-            entity_id,
-            action,
             description,
             metadata,
             ip_address,
@@ -273,5 +273,12 @@ impl ActivityLogger {
 
         self.repository.log_activity(request).await?;
         Ok(())
+    }
+
+    pub fn metadata(pairs: Vec<(&str, String)>) -> HashMap<String, serde_json::Value> {
+        pairs
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), serde_json::Value::String(v)))
+            .collect()
     }
 }
