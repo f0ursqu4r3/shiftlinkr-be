@@ -2,9 +2,12 @@ use anyhow::Result;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::database::models::{
-    AddEmployeeToCompanyInput, Company, CompanyEmployee, CompanyEmployeeInfo, CompanyInfo,
-    CompanyRole, CreateCompanyInput,
+use crate::database::{
+    models::{
+        AddEmployeeToCompanyInput, Company, CompanyEmployee, CompanyEmployeeInfo, CompanyInfo,
+        CompanyRole, CreateCompanyInput,
+    },
+    utils::sql,
 };
 
 #[derive(Clone)]
@@ -70,13 +73,12 @@ impl CompanyRepository {
         Ok(company)
     }
 
-    pub async fn find_company_info_by_id(
+    pub async fn find_user_company_info_by_id(
         &self,
         user_id: Uuid,
         company_id: Uuid,
     ) -> Result<Option<CompanyInfo>> {
-        let company_info = sqlx::query_as::<_, CompanyInfo>(
-            r#"
+        let company_info = sqlx::query_as::<_, CompanyInfo>(&sql(r#"
             SELECT
                 c.id,
                 c.name,
@@ -97,10 +99,9 @@ impl CompanyRepository {
             JOIN
                 user_company uc ON c.id = uc.company_id
             WHERE
-                uc.user_id = $1
-                AND c.id = $2
-            "#,
-        )
+                uc.user_id = ?
+                AND c.id = ?
+        "#))
         .bind(user_id)
         .bind(company_id)
         .fetch_optional(&self.pool)
@@ -110,8 +111,7 @@ impl CompanyRepository {
     }
 
     pub async fn get_companies_for_user(&self, user_id: Uuid) -> Result<Vec<CompanyInfo>> {
-        let company_infos = sqlx::query_as::<_, CompanyInfo>(
-            r#"
+        let company_infos = sqlx::query_as::<_, CompanyInfo>(&sql(r#"
             SELECT
                 c.id,
                 c.name,
@@ -123,7 +123,10 @@ impl CompanyRepository {
                 c.logo_url,
                 c.timezone,
                 uc.role,
-                uc.is_primary
+                uc.is_primary,
+                uc.hire_date,
+                uc.created_at,
+                uc.updated_at
             FROM
                 companies c
                 JOIN user_company uc ON c.id = uc.company_id
@@ -132,8 +135,7 @@ impl CompanyRepository {
             ORDER BY
                 uc.is_primary DESC,
                 c.name ASC
-            "#,
-        )
+        "#))
         .bind(user_id)
         .fetch_all(&self.pool)
         .await?;
@@ -250,15 +252,7 @@ impl CompanyRepository {
         )
         .bind(company_id)
         .fetch_all(&self.pool)
-        .await
-        .map_err(|e| {
-            log::error!(
-                "Failed to fetch employees for company {}: {}",
-                company_id,
-                e
-            );
-            e
-        })?;
+        .await?;
 
         Ok(employess_infos)
     }

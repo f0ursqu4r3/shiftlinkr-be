@@ -605,7 +605,7 @@ pub async fn update_user(
 
     // Check if the user to update belongs to requesting user's company
     let user_company_info = company_repo
-        .find_company_info_by_id(user_id_to_update, company_id)
+        .find_user_company_info_by_id(user_id_to_update, company_id)
         .await?
         .ok_or_else(|| {
             AppError::PermissionDenied("User does not belong to the same company".to_string())

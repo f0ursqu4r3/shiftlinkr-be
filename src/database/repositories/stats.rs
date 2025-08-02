@@ -7,6 +7,7 @@ use crate::database::{
     Result,
 };
 
+#[derive(Clone)]
 pub struct StatsRepository {
     pool: PgPool,
 }

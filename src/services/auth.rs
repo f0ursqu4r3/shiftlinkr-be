@@ -334,7 +334,7 @@ impl AuthService {
 
         let company = self
             .company_repository
-            .find_company_info_by_id(user_id, new_company_id)
+            .find_user_company_info_by_id(user_id, new_company_id)
             .await?
             .ok_or_else(|| anyhow!("Company not found"))?;
 

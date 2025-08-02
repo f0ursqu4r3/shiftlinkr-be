@@ -10,6 +10,7 @@ use crate::database::{
     Result,
 };
 
+#[derive(Clone)]
 pub struct ShiftSwapRepository {
     pool: PgPool,
 }

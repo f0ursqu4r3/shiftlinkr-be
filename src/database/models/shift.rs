@@ -7,7 +7,8 @@ use super::macros::string_enum;
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct Shift {
-    pub id: Uuid, // UUID primary key
+    pub id: Uuid,         // UUID primary key
+    pub company_id: Uuid, // UUID for company references
     pub title: String,
     pub description: Option<String>,
     pub location_id: Uuid,                 // UUID for location references
@@ -25,6 +26,7 @@ pub struct Shift {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftInput {
+    pub company_id: Uuid, // UUID for company references
     pub title: String,
     pub description: Option<String>,
     pub location_id: Uuid,                 // UUID for location references
@@ -76,59 +78,13 @@ pub struct ShiftClaimInput {
     pub user_id: Uuid,  // UUID for user references
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ShiftClaimStatus {
-    Pending,
-    Approved,
-    Rejected,
-    Cancelled,
-}
-
-impl std::fmt::Display for ShiftClaimStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ShiftClaimStatus::Pending => write!(f, "pending"),
-            ShiftClaimStatus::Approved => write!(f, "approved"),
-            ShiftClaimStatus::Rejected => write!(f, "rejected"),
-            ShiftClaimStatus::Cancelled => write!(f, "cancelled"),
-        }
-    }
-}
-
-impl std::str::FromStr for ShiftClaimStatus {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "pending" => Ok(ShiftClaimStatus::Pending),
-            "approved" => Ok(ShiftClaimStatus::Approved),
-            "rejected" => Ok(ShiftClaimStatus::Rejected),
-            "cancelled" => Ok(ShiftClaimStatus::Cancelled),
-            _ => Err(format!("Invalid shift claim status: {}", s)),
-        }
-    }
-}
-
-impl sqlx::Type<sqlx::Postgres> for ShiftClaimStatus {
-    fn type_info() -> sqlx::postgres::PgTypeInfo {
-        sqlx::postgres::PgTypeInfo::with_name("VARCHAR")
-    }
-}
-
-impl<'q> sqlx::Encode<'q, sqlx::Postgres> for ShiftClaimStatus {
-    fn encode_by_ref(
-        &self,
-        buf: &mut sqlx::postgres::PgArgumentBuffer,
-    ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
-        let s = self.to_string();
-        <String as sqlx::Encode<'q, sqlx::Postgres>>::encode_by_ref(&s, buf)
-    }
-}
-
-impl<'r> sqlx::Decode<'r, sqlx::Postgres> for ShiftClaimStatus {
-    fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
-        let s = <String as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
-        s.parse::<ShiftClaimStatus>().map_err(|e| e.into())
+string_enum! {
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub enum ShiftClaimStatus {
+        Pending => "pending",
+        Approved => "approved",
+        Rejected => "rejected",
+        Cancelled => "cancelled",
     }
 }
 
@@ -136,4 +92,24 @@ impl Default for ShiftClaimStatus {
     fn default() -> Self {
         ShiftClaimStatus::Pending
     }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftQuery {
+    #[serde(flatten)]
+    pub query_type: ShiftQueryType,
+    pub start_date: Option<DateTime<Utc>>,
+    pub end_date: Option<DateTime<Utc>>,
+    pub status: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type", content = "id")]
+#[serde(rename_all = "camelCase")]
+pub enum ShiftQueryType {
+    Location(Uuid),
+    Team(Uuid),
+    User(Uuid),
+    Company(Uuid),
 }

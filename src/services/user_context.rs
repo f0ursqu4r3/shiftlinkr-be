@@ -42,7 +42,7 @@ impl UserContext {
         // Get the company if company_id is present in claims
         let company = if let Some(company_id) = claims.company_id {
             company_repo
-                .find_company_info_by_id(user.id, company_id)
+                .find_user_company_info_by_id(user.id, company_id)
                 .await?
         } else {
             None
@@ -291,7 +291,7 @@ impl UserContextService {
 
         let company = if let Some(company_id) = company_id {
             self.company_repository
-                .find_company_info_by_id(user.id, company_id)
+                .find_user_company_info_by_id(user.id, company_id)
                 .await?
         } else {
             None

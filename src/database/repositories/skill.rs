@@ -8,6 +8,7 @@ use crate::database::models::{
     UserSkillInput,
 };
 
+#[derive(Clone)]
 pub struct SkillRepository {
     pool: PgPool,
 }

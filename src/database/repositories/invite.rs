@@ -9,6 +9,7 @@ use crate::database::{
     utils::sql,
 };
 
+#[derive(Clone)]
 pub struct InviteRepository {
     pool: PgPool,
 }

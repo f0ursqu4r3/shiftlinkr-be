@@ -18,26 +18,6 @@ use be::{
     services::{ActivityLogger, AuthService, UserContextService},
 };
 
-pub struct AppState {
-    pub config: Config,
-    pub activity_logger: ActivityLogger,
-    pub auth_service: AuthService,
-    pub company_repository: CompanyRepository,
-    pub invite_repository: InviteRepository,
-    pub location_repository: LocationRepository,
-    pub pto_balance_repository: PtoBalanceRepository,
-    pub schedule_repository: ScheduleRepository,
-    pub shift_claim_repository: ShiftClaimRepository,
-    pub shift_repository: ShiftRepository,
-    pub shift_swap_repository: ShiftSwapRepository,
-    pub skill_repository: SkillRepository,
-    pub stats_repository: StatsRepository,
-    pub team_repository: TeamRepository,
-    pub time_off_repository: TimeOffRepository,
-    pub user_context_service: UserContextService,
-    pub user_repository: UserRepository,
-}
-
 #[get("/")]
 async fn hello() -> impl Responder {
     HttpResponse::Ok().body("ShiftLinkr API v1.0")
@@ -104,33 +84,29 @@ async fn main() -> Result<()> {
     let activity_repository = ActivityRepository::new(pool.clone());
     let activity_logger = ActivityLogger::new(activity_repository.clone());
 
-    let app_state = web::Data::new(AppState {
-        activity_logger,
-        auth_service,
-        company_repository,
-        config: config.clone(),
-        invite_repository,
-        location_repository,
-        pto_balance_repository,
-        schedule_repository,
-        shift_claim_repository,
-        shift_repository,
-        shift_swap_repository,
-        skill_repository,
-        stats_repository,
-        team_repository,
-        time_off_repository,
-        user_context_service,
-        user_repository,
-    });
-
     let server_address = config.server_address();
     println!("🌐 Server starting on http://{}", server_address);
 
     // Start HTTP server
     HttpServer::new(move || {
         App::new()
-            .app_data(app_state.clone())
+            .app_data(web::Data::new(activity_logger.clone()))
+            .app_data(web::Data::new(auth_service.clone()))
+            .app_data(web::Data::new(company_repository.clone()))
+            .app_data(web::Data::new(config.clone()))
+            .app_data(web::Data::new(invite_repository.clone()))
+            .app_data(web::Data::new(location_repository.clone()))
+            .app_data(web::Data::new(pto_balance_repository.clone()))
+            .app_data(web::Data::new(schedule_repository.clone()))
+            .app_data(web::Data::new(shift_claim_repository.clone()))
+            .app_data(web::Data::new(shift_repository.clone()))
+            .app_data(web::Data::new(shift_swap_repository.clone()))
+            .app_data(web::Data::new(skill_repository.clone()))
+            .app_data(web::Data::new(stats_repository.clone()))
+            .app_data(web::Data::new(team_repository.clone()))
+            .app_data(web::Data::new(time_off_repository.clone()))
+            .app_data(web::Data::new(user_context_service.clone()))
+            .app_data(web::Data::new(user_repository.clone()))
             .wrap(
                 Cors::default()
                     .allowed_origin(&config.client_base_url.clone())

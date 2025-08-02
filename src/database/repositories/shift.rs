@@ -3,10 +3,23 @@ use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::database::models::{Shift, ShiftInput, ShiftStatus};
+use crate::database::{
+    models::{Shift, ShiftInput, ShiftQuery, ShiftQueryType, ShiftStatus},
+    utils::sql,
+};
 
+#[derive(Clone)]
 pub struct ShiftRepository {
     pool: PgPool,
+}
+
+pub struct ShiftFindByFilter {
+    pub location_id: Option<Uuid>,
+    pub team_id: Option<Uuid>,
+    pub user_id: Option<Uuid>,
+    pub company_id: Option<Uuid>,
+    pub start_date: DateTime<Utc>,
+    pub end_date: DateTime<Utc>,
 }
 
 impl ShiftRepository {
@@ -16,10 +29,10 @@ impl ShiftRepository {
 
     pub async fn create_shift(&self, input: ShiftInput) -> Result<Shift> {
         let now = Utc::now();
-        let row = sqlx::query_as::<_, Shift>(
-            r#"
+        let row = sqlx::query_as::<_, Shift>(&sql(r#"
             INSERT INTO
                 shifts (
+                    company_id,
                     title,
                     description,
                     location_id,
@@ -34,9 +47,10 @@ impl ShiftRepository {
                     updated_at
                 )
             VALUES
-                ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING
                 id,
+                company_id,
                 title,
                 description,
                 location_id,
@@ -49,8 +63,7 @@ impl ShiftRepository {
                 status,
                 created_at,
                 updated_at
-            "#,
-        )
+        "#))
         .bind(input.title)
         .bind(input.description)
         .bind(input.location_id)
@@ -70,10 +83,10 @@ impl ShiftRepository {
     }
 
     pub async fn find_by_id(&self, id: Uuid) -> Result<Option<Shift>> {
-        let row = sqlx::query_as::<_, Shift>(
-            r#"
+        let row = sqlx::query_as::<_, Shift>(&sql(r#"
             SELECT
                 id,
+                company_id,
                 title,
                 description,
                 location_id,
@@ -89,9 +102,8 @@ impl ShiftRepository {
             FROM
                 shifts
             WHERE
-                id = $1
-            "#,
-        )
+                id = ?
+        "#))
         .bind(id)
         .fetch_optional(&self.pool)
         .await?;
@@ -100,10 +112,10 @@ impl ShiftRepository {
     }
 
     pub async fn find_by_company_id(&self, company_id: Uuid) -> Result<Vec<Shift>> {
-        let rows = sqlx::query_as::<_, Shift>(
-            r#"
+        let rows = sqlx::query_as::<_, Shift>(&sql(r#"
             SELECT
                 s.id,
+                s.company_id,
                 s.title,
                 s.description,
                 s.location_id,
@@ -120,11 +132,10 @@ impl ShiftRepository {
                 shifts s
                 JOIN locations l ON s.location_id = l.id
             WHERE
-                l.company_id = $1
+                l.company_id = ?
             ORDER BY
                 s.start_time
-            "#,
-        )
+        "#))
         .bind(company_id)
         .fetch_all(&self.pool)
         .await?;
@@ -133,10 +144,10 @@ impl ShiftRepository {
     }
 
     pub async fn find_by_location_id(&self, location_id: Uuid) -> Result<Vec<Shift>> {
-        let rows = sqlx::query_as::<_, Shift>(
-            r#"
+        let rows = sqlx::query_as::<_, Shift>(&sql(r#"
             SELECT
                 id,
+                company_id,
                 title,
                 description,
                 location_id,
@@ -152,11 +163,10 @@ impl ShiftRepository {
             FROM
                 shifts
             WHERE
-                location_id = $1
+                location_id = ?
             ORDER BY
                 start_time
-            "#,
-        )
+        "#))
         .bind(location_id)
         .fetch_all(&self.pool)
         .await?;
@@ -165,10 +175,10 @@ impl ShiftRepository {
     }
 
     pub async fn find_by_team_id(&self, team_id: Uuid) -> Result<Vec<Shift>> {
-        let rows = sqlx::query_as::<_, Shift>(
-            r#"
+        let rows = sqlx::query_as::<_, Shift>(&sql(r#"
             SELECT
                 id,
+                company_id,
                 title,
                 description,
                 location_id,
@@ -184,11 +194,10 @@ impl ShiftRepository {
             FROM
                 shifts
             WHERE
-                team_id = $1
+                team_id = ?
             ORDER BY
                 start_time
-            "#,
-        )
+        "#))
         .bind(team_id)
         .fetch_all(&self.pool)
         .await?;
@@ -203,10 +212,10 @@ impl ShiftRepository {
         location_id: Option<Uuid>,
     ) -> Result<Vec<Shift>> {
         let rows = if let Some(location_id) = location_id {
-            sqlx::query_as::<_, Shift>(
-                r#"
+            sqlx::query_as::<_, Shift>(&sql(r#"
                 SELECT
                     id,
+                    company_id,
                     title,
                     description,
                     location_id,
@@ -222,23 +231,22 @@ impl ShiftRepository {
                 FROM
                     shifts
                 WHERE
-                    start_time >= $1
-                    AND end_time <= $2
-                    AND location_id = $3
+                    start_time >= ?
+                    AND end_time <= ?
+                    AND location_id = ?
                 ORDER BY
                     start_time
-                "#,
-            )
+            "#))
             .bind(start_date)
             .bind(end_date)
             .bind(location_id)
             .fetch_all(&self.pool)
             .await?
         } else {
-            sqlx::query_as::<_, Shift>(
-                r#"
+            sqlx::query_as::<_, Shift>(&sql(r#"
                 SELECT
                     id,
+                    company_id,
                     title,
                     description,
                     location_id,
@@ -254,12 +262,11 @@ impl ShiftRepository {
                 FROM
                     shifts
                 WHERE
-                    start_time >= $1
-                    AND end_time <= $2
+                    start_time >= ?
+                    AND end_time <= ?
                 ORDER BY
                     start_time
-                "#,
-            )
+            "#))
             .bind(start_date)
             .bind(end_date)
             .fetch_all(&self.pool)
@@ -270,8 +277,7 @@ impl ShiftRepository {
     }
 
     pub async fn find_open_shifts_by_location(&self, location_id: Uuid) -> Result<Vec<Shift>> {
-        let rows = sqlx::query_as::<_, Shift>(
-            r#"
+        let rows = sqlx::query_as::<_, Shift>(&sql(r#"
             SELECT
                 id,
                 title,
@@ -289,12 +295,11 @@ impl ShiftRepository {
             FROM
                 shifts
             WHERE
-                location_id = $1
-                AND status = $2
+                location_id = ?
+                AND status = ?
             ORDER BY
                 start_time
-            "#,
-        )
+        "#))
         .bind(location_id)
         .bind(ShiftStatus::Open.to_string())
         .fetch_all(&self.pool)
@@ -304,8 +309,7 @@ impl ShiftRepository {
     }
 
     pub async fn find_open_shifts(&self) -> Result<Vec<Shift>> {
-        let rows = sqlx::query_as::<_, Shift>(
-            r#"
+        let rows = sqlx::query_as::<_, Shift>(&sql(r#"
             SELECT
                 id,
                 title,
@@ -323,11 +327,10 @@ impl ShiftRepository {
             FROM
                 shifts
             WHERE
-                status = $1
+                status = ?
             ORDER BY
                 start_time
-            "#,
-        )
+        "#))
         .bind(ShiftStatus::Open.to_string())
         .fetch_all(&self.pool)
         .await?;
@@ -337,26 +340,27 @@ impl ShiftRepository {
 
     pub async fn update_shift(&self, id: Uuid, input: ShiftInput) -> Result<Option<Shift>> {
         let now = Utc::now();
-        let row = sqlx::query_as::<_, Shift>(
-            r#"
+        let row = sqlx::query_as::<_, Shift>(&sql(r#"
             UPDATE
                 shifts
             SET
-                title = $1,
-                description = $2,
-                location_id = $3,
-                team_id = $4,
-                start_time = $5,
-                end_time = $6,
-                min_duration_minutes = $7,
-                max_duration_minutes = $8,
-                max_people = $9,
-                status = $10,
-                updated_at = $11
+                title = ?,
+                company_id = ?
+                description = ?,
+                location_id = ?,
+                team_id = ?,
+                start_time = ?,
+                end_time = ?,
+                min_duration_minutes = ?,
+                max_duration_minutes = ?,
+                max_people = ?,
+                status = ?,
+                updated_at = ?
             WHERE
-                id = $12
+                id = ?
             RETURNING
                 id,
+                company_id,
                 title,
                 description,
                 location_id,
@@ -369,8 +373,7 @@ impl ShiftRepository {
                 status,
                 created_at,
                 updated_at
-            "#,
-        )
+        "#))
         .bind(input.title)
         .bind(input.description)
         .bind(input.location_id)
@@ -395,17 +398,17 @@ impl ShiftRepository {
         status: ShiftStatus,
     ) -> Result<Option<Shift>> {
         let now = Utc::now();
-        let row = sqlx::query_as::<_, Shift>(
-            r#"
+        let row = sqlx::query_as::<_, Shift>(&sql(r#"
             UPDATE
                 shifts
             SET
-                status = $1,
-                updated_at = $2
+                status = ?,
+                updated_at = ?
             WHERE
-                id = $3
+                id = ?
             RETURNING
                 id,
+                company_id,
                 title,
                 description,
                 location_id,
@@ -418,8 +421,7 @@ impl ShiftRepository {
                 status,
                 created_at,
                 updated_at
-            "#,
-        )
+        "#))
         .bind(status.to_string())
         .bind(now)
         .bind(id)
@@ -429,21 +431,25 @@ impl ShiftRepository {
         Ok(row.map(|r| r.into()))
     }
 
-    pub async fn delete_shift(&self, id: Uuid) -> Result<bool> {
-        let result = sqlx::query("DELETE FROM shifts WHERE id = $1")
+    pub async fn delete_shift(&self, id: Uuid) -> Result<Option<()>> {
+        let result = sqlx::query(&sql("DELETE FROM shifts WHERE id = ?"))
             .bind(id)
             .execute(&self.pool)
             .await?;
 
-        Ok(result.rows_affected() > 0)
+        Ok(if result.rows_affected() > 0 {
+            Some(())
+        } else {
+            None
+        })
     }
 
     // Get shifts assigned to a specific user through the assignment system
     pub async fn find_shifts_by_user(&self, user_id: Uuid) -> Result<Vec<Shift>> {
-        let rows = sqlx::query_as::<_, Shift>(
-            r#"
+        let rows = sqlx::query_as::<_, Shift>(&sql(r#"
             SELECT DISTINCT
                 s.id,
+                s.company_id,
                 s.title,
                 s.description,
                 s.location_id,
@@ -460,12 +466,11 @@ impl ShiftRepository {
                 shifts s
                 INNER JOIN shift_proposal_assignments spa ON s.id = spa.shift_id
             WHERE
-                spa.user_id = $1
+                spa.user_id = ?
                 AND spa.assignment_status = 'accepted'
             ORDER BY
                 s.start_time
-            "#,
-        )
+        "#))
         .bind(user_id)
         .fetch_all(&self.pool)
         .await?;
@@ -495,5 +500,79 @@ impl ShiftRepository {
             Ok(shift) => Ok(shift),
             Err(e) => Err(e),
         }
+    }
+
+    pub async fn find_by_query(&self, filter_query: ShiftQuery) -> Result<Vec<Shift>> {
+        let mut query = r#"
+            SELECT
+                id,
+                company_id,
+                title,
+                description,
+                location_id,
+                team_id,
+                start_time,
+                end_time,
+                min_duration_minutes,
+                max_duration_minutes,
+                max_people,
+                status,
+                created_at,
+                updated_at
+            FROM
+                shifts
+            WHERE
+        "#
+        .to_string();
+        let mut conditions = Vec::new();
+        let mut params = Vec::new();
+        match filter_query.query_type {
+            ShiftQueryType::User(user_id) => {
+                conditions.push(
+                    "id IN (SELECT shift_id FROM shift_proposal_assignments WHERE user_id = ?)",
+                );
+                params.push(user_id.to_string());
+            }
+            ShiftQueryType::Location(location_id) => {
+                conditions.push("location_id = ?");
+                params.push(location_id.to_string());
+            }
+            ShiftQueryType::Team(team_id) => {
+                conditions.push("team_id = ?");
+                params.push(team_id.to_string());
+            }
+            ShiftQueryType::Company(company_id) => {
+                conditions.push("company_id = ?");
+                params.push(company_id.to_string());
+            }
+        };
+
+        if let Some(start_date) = filter_query.start_date {
+            conditions.push("start_time >= ?");
+            params.push(start_date.to_string());
+        }
+        if let Some(end_date) = filter_query.end_date {
+            conditions.push("end_time <= ?");
+            params.push(end_date.to_string());
+        }
+        if let Some(status) = filter_query.status {
+            conditions.push("status = ?");
+            params.push(status.to_string());
+        }
+
+        query.push_str(" WHERE ");
+        query.push_str(&conditions.join(" AND "));
+
+        query.push_str(" ORDER BY created_at DESC");
+
+        let converted = sql(&query);
+        let mut prepared = sqlx::query_as::<_, Shift>(&converted);
+
+        for param in params.into_iter() {
+            prepared = prepared.bind(param);
+        }
+        let shifts = prepared.fetch_all(&self.pool).await?;
+
+        Ok(shifts)
     }
 }

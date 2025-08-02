@@ -11,6 +11,7 @@ use crate::database::{
     utils::sql,
 };
 
+#[derive(Clone)]
 pub struct ScheduleRepository {
     pool: PgPool,
 }

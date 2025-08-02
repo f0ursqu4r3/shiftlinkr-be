@@ -8,6 +8,7 @@ use crate::database::{
     utils::sql,
 };
 
+#[derive(Clone)]
 pub struct LocationRepository {
     pool: PgPool,
 }
