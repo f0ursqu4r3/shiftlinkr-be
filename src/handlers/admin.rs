@@ -31,7 +31,6 @@ pub struct UserResponse {
     pub role: CompanyRole,
     pub company_id: Uuid,
     pub hire_date: Option<String>,
-    pub is_primary: bool,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -562,7 +561,6 @@ pub async fn get_users(
             role: employee.role,
             company_id,
             hire_date: employee.hire_date.map(|d| d.format("%Y-%m-%d").to_string()),
-            is_primary: employee.is_primary,
             created_at: employee
                 .created_at
                 .map(|dt| dt.format("%Y-%m-%dT%H:%M:%SZ").to_string())
@@ -650,7 +648,6 @@ pub async fn update_user(
         hire_date: user_company_info
             .hire_date
             .map(|d| d.format("%Y-%m-%d").to_string()),
-        is_primary: user_company_info.is_primary,
         created_at: updated_user
             .created_at
             .format("%Y-%m-%dT%H:%M:%SZ")

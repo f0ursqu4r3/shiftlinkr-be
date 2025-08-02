@@ -275,6 +275,35 @@ impl ActivityLogger {
         Ok(())
     }
 
+    pub async fn log_skill_activity(
+        &self,
+        company_id: Uuid,
+        user_id: Option<Uuid>,
+        skill_id: Uuid,
+        action: &str,
+        description: String,
+        metadata: Option<HashMap<String, serde_json::Value>>,
+        req: &HttpRequest,
+    ) -> Result<(), sqlx::Error> {
+        let (ip_address, user_agent) = self.extract_client_info(req);
+
+        let request = CreateActivityInput {
+            company_id,
+            user_id,
+            activity_type: ActivityType::SKILL_MANAGEMENT.to_string(),
+            entity_type: EntityType::SKILL.to_string(),
+            entity_id: skill_id,
+            action: action.to_string(),
+            description,
+            metadata,
+            ip_address,
+            user_agent,
+        };
+
+        self.repository.log_activity(request).await?;
+        Ok(())
+    }
+
     pub fn metadata(pairs: Vec<(&str, String)>) -> HashMap<String, serde_json::Value> {
         pairs
             .into_iter()

@@ -15,7 +15,10 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         web::scope("/user-skills")
             .route("", web::post().to(skills::add_user_skill))
             .route("/{user_id}", web::get().to(skills::get_user_skills))
-            .route("/{id}", web::put().to(skills::update_user_skill))
+            .route(
+                "/{user_id}/{skill_id}",
+                web::put().to(skills::update_user_skill),
+            )
             .route(
                 "/{user_id}/{skill_id}",
                 web::delete().to(skills::remove_user_skill),

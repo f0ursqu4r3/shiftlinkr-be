@@ -236,7 +236,6 @@ impl CompanyRepository {
                 u.email,
                 u.name,
                 uc.role,
-                uc.is_primary,
                 uc.hire_date,
                 u.created_at,
                 u.updated_at

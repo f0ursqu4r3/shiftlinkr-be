@@ -82,7 +82,7 @@ impl ShiftRepository {
         Ok(row.into())
     }
 
-    pub async fn find_by_id(&self, id: Uuid) -> Result<Option<Shift>> {
+    pub async fn find_by_id(&self, shift_id: Uuid, company_id: Uuid) -> Result<Option<Shift>> {
         let row = sqlx::query_as::<_, Shift>(&sql(r#"
             SELECT
                 id,
@@ -103,8 +103,10 @@ impl ShiftRepository {
                 shifts
             WHERE
                 id = ?
+                AND company_id = ?
         "#))
-        .bind(id)
+        .bind(shift_id)
+        .bind(company_id)
         .fetch_optional(&self.pool)
         .await?;
 

@@ -59,6 +59,8 @@ pub mod ActivityType {
     pub const SCHEDULE_MANAGEMENT: &str = "schedule_management";
     pub const AUTHENTICATION: &str = "authentication";
     pub const SYSTEM: &str = "system";
+    pub const SKILL_MANAGEMENT: &str = "skill_management";
+    pub const SHIFT_SWAP: &str = "shift_swap";
 }
 
 // Common entity types
@@ -71,6 +73,8 @@ pub mod EntityType {
     pub const TIME_OFF: &str = "time_off";
     pub const SHIFT_SWAP: &str = "shift_swap";
     pub const COMPANY: &str = "company";
+    pub const SKILL: &str = "skill";
+    pub const SCHEDULE: &str = "schedule";
 }
 
 // Common actions

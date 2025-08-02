@@ -2,6 +2,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::database::models::CompanyRole;
+
 use super::macros::string_enum;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
@@ -74,4 +76,18 @@ impl Default for ProficiencyLevel {
     fn default() -> Self {
         ProficiencyLevel::Beginner
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct UserWithSkillResponse {
+    pub id: Uuid, // UUID for user ID
+    pub email: String,
+    pub name: String,
+    pub role: CompanyRole,
+    pub created_at: Option<DateTime<Utc>>, // TIMESTAMPTZ
+    pub updated_at: Option<DateTime<Utc>>, // TIMESTAMPTZ
+    pub skill_id: Uuid,                    // UUID for skill references
+    pub skill_name: String,
+    pub proficiency_level: ProficiencyLevel,
 }

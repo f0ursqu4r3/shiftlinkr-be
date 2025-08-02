@@ -103,7 +103,6 @@ pub struct CompanyEmployeeInfo {
     pub email: String,
     pub name: String,
     pub role: CompanyRole,
-    pub is_primary: bool,
     pub hire_date: Option<NaiveDate>,      // DATE type
     pub created_at: Option<DateTime<Utc>>, // TIMESTAMPTZ
     pub updated_at: Option<DateTime<Utc>>, // TIMESTAMPTZ

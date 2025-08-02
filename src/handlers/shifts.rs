@@ -108,10 +108,11 @@ pub async fn get_shift(
     shift_repo: web::Data<ShiftRepository>,
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse> {
+    let company_id = user_context.strict_company_id()?;
     let shift_id = path.into_inner();
 
     let shift = shift_repo
-        .find_by_id(shift_id)
+        .find_by_id(shift_id, company_id)
         .await
         .map_err(|e| {
             log::error!("Failed to fetch shift {}: {}", shift_id, e);
@@ -139,9 +140,10 @@ pub async fn update_shift(
     user_context.requires_same_company(input.company_id)?;
 
     let shift_id = path.into_inner();
+    let company_id = user_context.strict_company_id()?;
 
     let shift = shift_repo
-        .find_by_id(shift_id)
+        .find_by_id(shift_id, company_id)
         .await
         .map_err(|e| {
             log::error!("Failed to fetch shift {}: {}", shift_id, e);
@@ -508,12 +510,13 @@ pub async fn claim_shift(
     path: web::Path<Uuid>,
     req: HttpRequest,
 ) -> Result<HttpResponse> {
+    let company_id = user_context.strict_company_id()?;
     let shift_id = path.into_inner();
     let user_id = user_context.user_id();
 
     // Get shift information for validation
     let shift_info = shift_repo
-        .find_by_id(shift_id)
+        .find_by_id(shift_id, company_id)
         .await
         .map_err(|e| {
             log::error!("Failed to fetch shift {}: {}", shift_id, e);
