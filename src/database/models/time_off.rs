@@ -9,6 +9,7 @@ use super::macros::string_enum;
 pub struct TimeOffRequest {
     pub id: Uuid,                  // UUID primary key
     pub user_id: Uuid,             // UUID for user references
+    pub company_id: Uuid,          // UUID for company references
     pub start_date: DateTime<Utc>, // TIMESTAMPTZ
     pub end_date: DateTime<Utc>,   // TIMESTAMPTZ
     pub reason: Option<String>,
@@ -24,6 +25,7 @@ pub struct TimeOffRequest {
 #[serde(rename_all = "camelCase")]
 pub struct TimeOffRequestInput {
     pub user_id: Uuid,             // UUID for user references
+    pub company_id: Uuid,          // UUID for company references
     pub start_date: DateTime<Utc>, // DATE type
     pub end_date: DateTime<Utc>,   // DATE type
     pub reason: String,

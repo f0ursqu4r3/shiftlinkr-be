@@ -3,7 +3,10 @@ use chrono::{NaiveDate, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::database::models::{TimeOffRequest, TimeOffRequestInput, TimeOffStatus};
+use crate::database::{
+    models::{TimeOffRequest, TimeOffRequestInput, TimeOffStatus},
+    utils::sql,
+};
 
 #[derive(Clone)]
 pub struct TimeOffRepository {
@@ -20,11 +23,11 @@ impl TimeOffRepository {
         let request_type_str = input.request_type.to_string();
         let status_str = TimeOffStatus::Pending.to_string();
 
-        let time_off_request = sqlx::query_as::<_, TimeOffRequest>(
-            r#"
+        let time_off_request = sqlx::query_as::<_, TimeOffRequest>(&sql(r#"
             INSERT INTO
                 time_off_requests (
                     user_id,
+                    company_id,
                     start_date,
                     end_date,
                     reason,
@@ -34,10 +37,11 @@ impl TimeOffRepository {
                     updated_at
                 )
             VALUES
-                ($1, $2, $3, $4, $5, $6, $7, $8)
+                (?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING
                 id,
                 user_id,
+                company_id,
                 start_date,
                 end_date,
                 reason,
@@ -47,9 +51,9 @@ impl TimeOffRepository {
                 approval_notes,
                 created_at,
                 updated_at
-            "#,
-        )
+        "#))
         .bind(input.user_id)
+        .bind(input.company_id)
         .bind(input.start_date)
         .bind(input.end_date)
         .bind(input.reason)

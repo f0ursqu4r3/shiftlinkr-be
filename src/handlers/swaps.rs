@@ -99,9 +99,7 @@ pub async fn get_swap_requests(
     let status_filter = query.status.clone();
 
     if requesting_user_id.is_none() {
-        user_context.requires_manager_or(Some(
-            "Manager access required to view all swap requests".to_string(),
-        ))?;
+        user_context.requires_manager_or("Manager access required to view all swap requests")?;
     } else {
         user_context.requires_same_user(requesting_user_id.unwrap_or(user_id))?;
     }
