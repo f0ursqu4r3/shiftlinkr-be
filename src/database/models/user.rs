@@ -41,7 +41,7 @@ pub struct CreateUserInput {
     pub name: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UserInfo {
     /// User's unique identifier
     pub id: Uuid, // UUID type

@@ -35,7 +35,7 @@ pub async fn get_dashboard_stats(
     };
 
     match repo
-        .get_dashboard_stats(user_id, query.start_date, query.end_date)
+        .get_dashboard_stats_for_user(user_id, query.start_date, query.end_date)
         .await
     {
         Ok(stats) => Ok(ApiResponse::success(stats)),

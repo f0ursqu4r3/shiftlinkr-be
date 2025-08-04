@@ -65,8 +65,8 @@ pub struct ShiftClaim {
     pub shift_id: Uuid, // UUID for shift references
     pub user_id: Uuid,  // UUID for user references
     pub status: ShiftClaimStatus,
-    pub approved_by: Option<Uuid>, // UUID for user references
-    pub approval_notes: Option<String>,
+    pub actioned_by: Option<Uuid>, // UUID for user references
+    pub action_notes: Option<String>,
     pub created_at: DateTime<Utc>, // TIMESTAMPTZ
     pub updated_at: DateTime<Utc>, // TIMESTAMPTZ
 }

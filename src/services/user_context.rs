@@ -146,10 +146,28 @@ impl UserContext {
         Ok(())
     }
 
+    pub fn requires_admin_or(&self, message: Option<String>) -> Result<(), AppError> {
+        if !self.is_manager_or_admin() {
+            return Err(AppError::PermissionDenied(
+                message.unwrap_or_else(|| "Admin or manager access required".to_string()),
+            ));
+        }
+        Ok(())
+    }
+
     pub fn requires_manager(&self) -> Result<(), AppError> {
         if !self.is_manager_or_admin() {
             return Err(AppError::PermissionDenied(
                 "Manager access required".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn requires_manager_or(&self, message: Option<String>) -> Result<(), AppError> {
+        if !self.is_manager_or_admin() {
+            return Err(AppError::PermissionDenied(
+                message.unwrap_or_else(|| "Manager access required".to_string()),
             ));
         }
         Ok(())
@@ -164,10 +182,16 @@ impl UserContext {
         Ok(())
     }
 
-    pub fn requires_company(&self) -> Result<(), AppError> {
-        self.company.as_ref().ok_or_else(|| {
-            AppError::PermissionDenied("Access denied: you must belong to a company".to_string())
-        })?;
+    pub fn requires_same_user_or(
+        &self,
+        target_user_id: Uuid,
+        message: Option<String>,
+    ) -> Result<(), AppError> {
+        if !self.is_manager_or_admin() || self.user_id() != target_user_id {
+            return Err(AppError::PermissionDenied(message.unwrap_or_else(|| {
+                "Access denied: you can only access your own resources".to_string()
+            })));
+        }
         Ok(())
     }
 
@@ -176,6 +200,18 @@ impl UserContext {
             return Err(AppError::PermissionDenied(
                 "Access denied: you can only access resources in your own company".to_string(),
             ));
+        }
+        Ok(())
+    }
+    pub fn requires_same_company_or(
+        &self,
+        target_company_id: Uuid,
+        message: Option<String>,
+    ) -> Result<(), AppError> {
+        if self.company_id() != Some(target_company_id) {
+            return Err(AppError::PermissionDenied(message.unwrap_or_else(|| {
+                "Access denied: you can only access resources in your own company".to_string()
+            })));
         }
         Ok(())
     }

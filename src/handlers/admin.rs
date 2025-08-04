@@ -338,10 +338,10 @@ pub async fn get_teams(
             })?
     } else {
         user_context.requires_manager()?;
-        user_context.requires_company()?;
+        let company_id = user_context.strict_company_id()?;
 
         team_repo
-            .get_all_teams_for_company(user_context.company_id().unwrap())
+            .get_all_teams_for_company(company_id)
             .await
             .map_err(|e| {
                 log::error!("Error fetching teams for company: {}", e);

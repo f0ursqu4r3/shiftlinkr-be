@@ -1,12 +1,14 @@
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::database::{
     models::{
-        ShiftSwap, ShiftSwapInput, ShiftSwapResponse, ShiftSwapResponseStatus, ShiftSwapStatus,
-        ShiftSwapType, SwapResponse, SwapShift, SwapUser,
+        Shift, ShiftSwap, ShiftSwapInput, ShiftSwapResponse, ShiftSwapResponseStatus,
+        ShiftSwapStatus, ShiftSwapType, UserInfo,
     },
+    utils::sql,
     Result,
 };
 
@@ -16,23 +18,44 @@ pub struct ShiftSwapRepository {
 }
 
 #[derive(sqlx::FromRow)]
-struct ShiftSwapResponseRow {
+struct ShiftSwapDetailRaw {
     id: Uuid,
+    swap_type: ShiftSwapType,
     requesting_user_id: Uuid,
     original_shift_id: Uuid,
-    target_user_id: Option<Uuid>,
-    target_shift_id: Option<Uuid>,
-    notes: Option<String>,
-    swap_type: ShiftSwapType,
     status: ShiftSwapStatus,
-    approved_by: Option<Uuid>,
-    approval_notes: Option<String>,
+    notes: Option<String>,
     created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
+    // Additional fields for shift details
+    shift_id: Uuid,
+    shift_company_id: Uuid,
+    shift_title: String,
+    shift_description: Option<String>,
+    shift_location_id: Option<Uuid>,
+    shift_team_id: Option<Uuid>,
+    shift_start_time: DateTime<Utc>,
+    shift_end_time: DateTime<Utc>,
+    shift_min_duration_minutes: Option<i32>,
+    shift_max_duration_minutes: Option<i32>,
+    shift_max_people: Option<i32>,
+    shift_status: String,
+    shift_created_at: DateTime<Utc>,
+    shift_updated_at: DateTime<Utc>,
+    // Additional fields for user details
+    requesting_user_email: String,
     requesting_user_name: String,
-    start_time: DateTime<Utc>,
-    end_time: DateTime<Utc>,
-    department: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, sqlx::FromRow)]
+pub struct ShiftSwapDetail {
+    pub id: Uuid,
+    pub swap_type: ShiftSwapType,
+    pub requested_by: UserInfo,
+    pub original_shift: Shift,
+    pub status: ShiftSwapStatus,
+    pub reason: String,
+    pub request_date: DateTime<Utc>,
+    pub responses: Vec<ShiftSwapResponse>,
 }
 
 impl ShiftSwapRepository {
@@ -163,7 +186,7 @@ impl ShiftSwapRepository {
     }
 
     /// Get a swap request by ID
-    pub async fn get_swap_by_id(&self, id: Uuid) -> Result<Option<ShiftSwap>> {
+    pub async fn find_swap_request_by_id(&self, id: Uuid) -> Result<Option<ShiftSwap>> {
         let shift_swap = sqlx::query_as::<_, ShiftSwap>(
             r#"
             SELECT
@@ -190,68 +213,6 @@ impl ShiftSwapRepository {
         .await?;
 
         Ok(shift_swap)
-    }
-
-    /// Respond to a swap request (accept/decline)
-    pub async fn respond_to_swap(
-        &self,
-        id: Uuid,
-        responding_user_id: Uuid,
-        accept: bool,
-        notes: Option<String>,
-    ) -> Result<ShiftSwap> {
-        let now = Utc::now();
-        let new_status = if accept {
-            ShiftSwapStatus::Pending
-        } else {
-            ShiftSwapStatus::Open
-        };
-        let status_str = new_status.to_string();
-
-        // Update the swap
-        if accept {
-            sqlx::query(
-                r#"
-                UPDATE
-                    shift_swaps
-                SET
-                    target_user_id = $1,
-                    status = $2,
-                    notes = $3,
-                    updated_at = $4
-                WHERE
-                    id = $5
-                "#,
-            )
-            .bind(responding_user_id)
-            .bind(status_str)
-            .bind(notes)
-            .bind(now)
-            .bind(id)
-            .execute(&self.pool)
-            .await?;
-        } else {
-            sqlx::query(
-                r#"
-                UPDATE
-                    shift_swaps
-                SET
-                    updated_at = $1
-                WHERE
-                    id = $2
-                "#,
-            )
-            .bind(now)
-            .bind(id)
-            .execute(&self.pool)
-            .await?;
-        }
-
-        // Fetch the updated swap
-        match self.get_swap_by_id(id).await? {
-            Some(swap) => Ok(swap),
-            None => Err(anyhow::anyhow!("Swap not found after update")),
-        }
     }
 
     /// Approve a swap request (managers/admins only)
@@ -426,64 +387,71 @@ impl ShiftSwapRepository {
         company_id: Uuid,
         status: Option<ShiftSwapStatus>,
         swap_type: Option<ShiftSwapType>,
-    ) -> Result<Vec<ShiftSwapResponse>> {
+    ) -> Result<Vec<ShiftSwapDetail>> {
         let mut query = r#"
             SELECT
                 ss.id,
+                ss.swap_type,
                 ss.requesting_user_id,
                 ss.original_shift_id,
-                ss.target_user_id,
-                ss.target_shift_id,
-                ss.notes,
-                ss.swap_type,
                 ss.status,
-                ss.approved_by,
-                ss.approval_notes,
+                ss.notes,
                 ss.created_at,
-                ss.updated_at,
-                u.name AS requesting_user_name,
-                s.start_time,
-                s.end_time,
-                t.name AS department
+                -- Additional fields for shift details
+                s.id AS shift_id,
+                s.company_id AS shift_company_id,
+                s.title AS shift_title,
+                s.description AS shift_description,
+                s.location_id AS shift_location_id,
+                s.team_id AS shift_team_id,
+                s.start_time AS shift_start_time,
+                s.end_time AS shift_end_time,
+                s.min_duration_minutes AS shift_min_duration_minutes,
+                s.max_duration_minutes AS shift_max_duration_minutes,
+                s.max_people AS shift_max_people,
+                s.status AS shift_status,
+                s.created_at AS shift_created_at,
+                s.updated_at AS shift_updated_at,
+                -- Additional fields for user details
+                u.id AS requesting_user_id,
+                u.email AS requesting_user_email,
+                u.name AS requesting_user_name
+
             FROM
                 shift_swaps ss
-                JOIN users u ON ss.requesting_user_id = u.id
-                JOIN shifts s ON ss.original_shift_id = s.id
-                JOIN teams t ON s.team_id = t.id
+                JOIN users u ON u.id = ss.requesting_user_id
+                JOIN shifts s ON s.id = ss.original_shift_id
         "#
         .to_string();
 
+        let mut conditions = vec!["s.company_id = ?"];
         let mut params = vec![company_id.to_string()];
-        let mut conditions = vec![format!("ss.company_id = ${}", params.len() + 1)];
 
+        if let Some(status_val) = status {
+            conditions.push("ss.status = ?");
+            params.push(status_val.to_string());
+        }
+        if let Some(swap_type_val) = swap_type {
+            conditions.push("ss.swap_type = ?");
+            params.push(swap_type_val.to_string());
+        }
         if let Some(uid) = user_id {
-            conditions.push(format!(
-                "(ss.requesting_user_id = ${} OR ss.target_user_id = ${})",
-                params.len() + 1,
-                params.len() + 2
-            ));
+            conditions.push("(ss.requesting_user_id = ? OR ss.target_user_id = ?)");
             params.push(uid.to_string());
             params.push(uid.to_string());
         }
 
-        if let Some(ref s) = status {
-            conditions.push(format!("ss.status = ${}", params.len() + 1));
-            params.push(s.to_string());
+        if !conditions.is_empty() {
+            query.push_str(" WHERE ");
+            query.push_str(&conditions.join(" AND "));
         }
 
-        if let Some(ref st) = swap_type {
-            conditions.push(format!("ss.swap_type = ${}", params.len() + 1));
-            params.push(st.to_string());
-        }
-
-        query.push_str(" WHERE ");
-        query.push_str(&conditions.join(" AND "));
-
+        // Build base query with company filter
         query.push_str(" ORDER BY ss.created_at DESC");
 
-        let mut prepared = sqlx::query_as::<_, ShiftSwapResponseRow>(&query);
-
-        for param in params.into_iter() {
+        let sql_query = sql(&query);
+        let mut prepared = sqlx::query_as::<_, ShiftSwapDetailRaw>(&sql_query);
+        for param in params {
             prepared = prepared.bind(param);
         }
 
@@ -491,26 +459,34 @@ impl ShiftSwapRepository {
 
         let shift_swap_response = rows
             .into_iter()
-            .map(|row| {
-                ShiftSwapResponse {
-                    id: row.id,
-                    swap_type: row.swap_type.to_string(),
-                    requested_by: SwapUser {
-                        id: row.requesting_user_id,
-                        name: row.requesting_user_name,
-                        avatar: "".to_string(), // Will be filled by join query
-                    },
-                    original_shift: SwapShift {
-                        id: row.original_shift_id,
-                        start_time: row.start_time,
-                        end_time: row.end_time,
-                        department: row.department,
-                    },
-                    status: row.status.to_string(),
-                    reason: row.notes.unwrap_or_default(),
-                    request_date: row.created_at,
-                    responses: None, // Will be filled by separate query if needed
-                }
+            .map(|row| ShiftSwapDetail {
+                id: row.id,
+                swap_type: row.swap_type,
+                requested_by: UserInfo {
+                    id: row.requesting_user_id,
+                    name: row.requesting_user_name,
+                    email: "".to_string(), // Will be filled by join query
+                },
+                original_shift: Shift {
+                    id: row.shift_id,
+                    company_id: row.shift_company_id,
+                    title: row.shift_title,
+                    description: row.shift_description,
+                    location_id: row.shift_location_id.unwrap_or_default(),
+                    team_id: row.shift_team_id,
+                    start_time: row.shift_start_time,
+                    end_time: row.shift_end_time,
+                    min_duration_minutes: row.shift_min_duration_minutes,
+                    max_duration_minutes: row.shift_max_duration_minutes,
+                    max_people: row.shift_max_people,
+                    status: row.shift_status.parse().unwrap_or_default(),
+                    created_at: row.shift_created_at,
+                    updated_at: row.shift_updated_at,
+                },
+                status: row.status,
+                reason: row.notes.unwrap_or_default(),
+                request_date: row.created_at,
+                responses: vec![],
             })
             .collect();
 
@@ -518,115 +494,204 @@ impl ShiftSwapRepository {
     }
 
     /// Get a swap request by ID with full details
-    pub async fn get_swap_by_id_with_details(&self, id: Uuid) -> Result<Option<ShiftSwapResponse>> {
-        let row = sqlx::query_as::<_, ShiftSwapResponseRow>(
-            r#"
+    pub async fn get_swap_by_id_with_details(&self, id: Uuid) -> Result<ShiftSwapDetail> {
+        let row = sqlx::query_as::<_, ShiftSwapDetailRaw>(&sql(r#"
             SELECT
                 ss.id,
+                ss.swap_type,
                 ss.requesting_user_id,
                 ss.original_shift_id,
-                ss.target_user_id,
-                ss.target_shift_id,
-                ss.notes,
-                ss.swap_type,
                 ss.status,
-                ss.approved_by,
-                ss.approval_notes,
+                ss.notes,
                 ss.created_at,
-                ss.updated_at,
-                u.name AS requesting_user_name,
-                s.start_time,
-                s.end_time,
-                t.name AS department
+                -- Additional fields for shift details
+                s.id AS shift_id,
+                s.company_id AS shift_company_id,
+                s.title AS shift_title,
+                s.description AS shift_description,
+                s.location_id AS shift_location_id,
+                s.team_id AS shift_team_id,
+                s.start_time AS shift_start_time,
+                s.end_time AS shift_end_time,
+                s.min_duration_minutes AS shift_min_duration_minutes,
+                s.max_duration_minutes AS shift_max_duration_minutes,
+                s.max_people AS shift_max_people,
+                s.status AS shift_status,
+                s.created_at AS shift_created_at,
+                s.updated_at AS shift_updated_at,
+                -- Additional fields for user details
+                u.id AS requesting_user_id,
+                u.email AS requesting_user_email,
+                u.name AS requesting_user_name
+
             FROM
                 shift_swaps ss
-                JOIN users u ON ss.requesting_user_id = u.id
-                JOIN shifts s ON ss.original_shift_id = s.id
-                JOIN teams t ON s.team_id = t.id
+                JOIN users u ON u.id = ss.requesting_user_id
+                JOIN shifts s ON s.id = ss.original_shift_id
             WHERE
                 ss.id = $1
-            "#,
-        )
+        "#))
         .bind(id)
-        .fetch_optional(&self.pool)
+        .fetch_one(&self.pool)
         .await?;
 
-        match row {
-            Some(row) => {
-                Ok(Some(ShiftSwapResponse {
-                    id: row.id,
-                    swap_type: row.swap_type.to_string(),
-                    requested_by: SwapUser {
-                        id: row.requesting_user_id,
-                        name: row.requesting_user_name,
-                        avatar: "".to_string(), // Will be filled by join query
-                    },
-                    original_shift: SwapShift {
-                        id: row.original_shift_id,
-                        start_time: row.start_time,
-                        end_time: row.end_time,
-                        department: row.department,
-                    },
-                    status: row.status.to_string(),
-                    reason: row.notes.unwrap_or_default(),
-                    request_date: row.created_at,
-                    responses: None, // Will be filled by separate query if needed
-                }))
-            }
-            None => Ok(None),
-        }
+        let mut shift_swap_detail = ShiftSwapDetail {
+            id: row.id,
+            swap_type: row.swap_type,
+            requested_by: UserInfo {
+                id: row.requesting_user_id,
+                name: row.requesting_user_name,
+                email: "".to_string(), // Will be filled by join query
+            },
+            original_shift: Shift {
+                id: row.shift_id,
+                company_id: row.shift_company_id,
+                title: row.shift_title,
+                description: row.shift_description,
+                location_id: row.shift_location_id.unwrap_or_default(),
+                team_id: row.shift_team_id,
+                start_time: row.shift_start_time,
+                end_time: row.shift_end_time,
+                min_duration_minutes: row.shift_min_duration_minutes,
+                max_duration_minutes: row.shift_max_duration_minutes,
+                max_people: row.shift_max_people,
+                status: row.shift_status.parse().unwrap_or_default(),
+                created_at: row.shift_created_at,
+                updated_at: row.shift_updated_at,
+            },
+            status: row.status,
+            reason: row.notes.unwrap_or_default(),
+            request_date: row.created_at,
+            responses: vec![],
+        };
+        let responses = self.get_swap_responses(row.id).await?;
+        shift_swap_detail.responses = responses;
+        Ok(shift_swap_detail)
     }
 
     /// Get all responses for a specific swap request
-    pub async fn get_swap_responses(&self, _swap_id: Uuid) -> Result<Vec<SwapResponse>> {
-        // Note: This method needs to be updated when shift_swap_responses table schema is available
-        // For now, return empty vec to avoid database errors
-        Ok(Vec::new())
+    pub async fn get_swap_responses(&self, swap_id: Uuid) -> Result<Vec<ShiftSwapResponse>> {
+        let responses = sqlx::query_as::<_, ShiftSwapResponse>(&sql(r#"
+            SELECT
+                id,
+                swap_id,
+                responding_user_id,
+                response_type,
+                notes,
+                created_at
+            FROM
+                shift_swap_responses
+            WHERE
+                swap_id = ?
+        "#))
+        .bind(swap_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(responses)
     }
 
-    /// Create a response to a swap request
+    pub async fn get_swap_response_for_user(
+        &self,
+        swap_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<Option<ShiftSwapResponse>> {
+        let response = sqlx::query_as::<_, ShiftSwapResponse>(&sql(r#"
+            SELECT
+                id,
+                swap_id,
+                responding_user_id,
+                response_type,
+                notes,
+                created_at
+            FROM
+                shift_swap_responses
+            WHERE
+                swap_id = ? AND responding_user_id = ?
+        "#))
+        .bind(swap_id)
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(response)
+    }
+
     pub async fn create_swap_response(
         &self,
-        _swap_id: Uuid,
-        responding_user_id: Uuid,
-        status: ShiftSwapResponseStatus,
-        _notes: Option<String>,
-    ) -> Result<SwapResponse> {
-        let _now = Utc::now();
-        let status_str = status.to_string();
+        swap_id: Uuid,
+        user_id: Uuid,
+        response_type: ShiftSwapResponseStatus,
+        notes: Option<String>,
+    ) -> Result<ShiftSwapResponse> {
+        let now = Utc::now();
 
-        // Note: This method needs to be updated when shift_swap_responses table schema is available
-        // For now, return a placeholder response
-        Ok(SwapResponse {
-            id: Uuid::new_v4(),
-            user: SwapUser {
-                id: responding_user_id,
-                name: "Unknown User".to_string(),
-                avatar: "".to_string(),
-            },
-            status: status_str,
-        })
+        let shift_swap_response = sqlx::query_as::<_, ShiftSwapResponse>(&sql(r#"
+            INSERT INTO
+                shift_swap_responses (swap_id, responding_user_id, response_type, notes, created_at, updated_at)
+            VALUES
+                (?, ?, ?, ?, ?, ?)
+            ON CONFLICT (swap_id, responding_user_id) DO UPDATE
+            SET
+                response_type = ?,
+                notes = ?,
+                updated_at = ?
+            RETURNING
+                id,
+                swap_id,
+                responding_user_id,
+                response_type,
+                notes,
+                created_at
+        "#))
+        .bind(swap_id)
+        .bind(user_id)
+        .bind(response_type.clone())
+        .bind(notes.clone())
+        .bind(now)
+        .bind(now)
+        .bind(response_type)
+        .bind(notes)
+        .bind(now)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(shift_swap_response)
     }
 
     /// Update a swap response status
     pub async fn update_swap_response_status(
         &self,
         response_id: Uuid,
-        status: ShiftSwapResponseStatus,
-    ) -> Result<SwapResponse> {
-        let _now = Utc::now();
-        let status_str = status.to_string();
+        response_type: ShiftSwapResponseStatus,
+        notes: Option<String>,
+    ) -> Result<ShiftSwapResponse> {
+        let now = Utc::now();
 
-        // Note: This method needs to be updated when shift_swap_responses table schema is available
-        // For now, return a placeholder response
-        Ok(SwapResponse {
-            id: response_id,
-            user: SwapUser {
-                id: Uuid::new_v4(),
-                name: "Unknown User".to_string(),
-                avatar: "".to_string(),
-            },
-            status: status_str,
-        })
+        let shift_swap_response = sqlx::query_as::<_, ShiftSwapResponse>(&sql(r#"
+            UPDATE
+                shift_swap_responses
+            SET
+                response_type = ?,
+                notes = ?,
+                updated_at = ?
+            WHERE
+                id = ?
+            RETURNING
+                id,
+                swap_id,
+                responding_user_id,
+                response_type,
+                notes,
+                created_at
+        "#))
+        .bind(response_type)
+        .bind(notes)
+        .bind(now)
+        .bind(response_id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(shift_swap_response)
     }
 }

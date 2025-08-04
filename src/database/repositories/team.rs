@@ -21,8 +21,7 @@ impl TeamRepository {
     // Team management methods
     pub async fn create_team(&self, input: TeamInput) -> Result<Team> {
         let now = Utc::now();
-        let team = sqlx::query_as::<_, Team>(
-            r#"
+        let team = sqlx::query_as::<_, Team>(&sql(r#"
             INSERT INTO
                 teams (
                     name,
@@ -32,7 +31,7 @@ impl TeamRepository {
                     updated_at
                 )
             VALUES
-                ($1, $2, $3, $4, $5)
+                (?, ?, ?, ?, ?)
             RETURNING
                 id,
                 name,
@@ -40,8 +39,7 @@ impl TeamRepository {
                 location_id,
                 created_at,
                 updated_at
-            "#,
-        )
+        "#))
         .bind(input.name)
         .bind(input.description)
         .bind(input.location_id)
@@ -54,9 +52,19 @@ impl TeamRepository {
     }
 
     pub async fn get_team_by_id(&self, id: Uuid) -> Result<Option<Team>> {
-        let team = sqlx::query_as::<_, Team>(
-            "SELECT id, name, description, location_id, created_at, updated_at FROM teams WHERE id = $1",
-        )
+        let team = sqlx::query_as::<_, Team>(&sql(r#"
+            SELECT
+                id,
+                name,
+                description,
+                location_id,
+                created_at,
+                updated_at
+            FROM
+                teams
+            WHERE
+                id = ?
+        "#))
         .bind(id)
         .fetch_optional(&self.pool)
         .await?;
@@ -65,9 +73,21 @@ impl TeamRepository {
     }
 
     pub async fn get_teams_by_location(&self, location_id: Uuid) -> Result<Vec<Team>> {
-        let teams = sqlx::query_as::<_, Team>(
-            "SELECT id, name, description, location_id, created_at, updated_at FROM teams WHERE location_id = $1 ORDER BY name",
-        )
+        let teams = sqlx::query_as::<_, Team>(&sql(r#"
+            SELECT
+                id,
+                name,
+                description,
+                location_id,
+                created_at,
+                updated_at
+            FROM
+                teams
+            WHERE
+                location_id = ?
+            ORDER BY
+                name
+        "#))
         .bind(location_id)
         .fetch_all(&self.pool)
         .await?;
@@ -101,17 +121,16 @@ impl TeamRepository {
 
     pub async fn update_team(&self, id: Uuid, input: TeamInput) -> Result<Option<Team>> {
         let now = Utc::now();
-        let team = sqlx::query_as::<_, Team>(
-            r#"
+        let team = sqlx::query_as::<_, Team>(&sql(r#"
             UPDATE
                 teams 
             SET
-                name = $1,
-                description = $2,
-                location_id = $3,
-                updated_at = $4
+                name = ?,
+                description = ?,
+                location_id = ?,
+                updated_at = ?
             WHERE
-                id = $5
+                id = ?
             RETURNING
                 id,
                 name,
@@ -119,8 +138,7 @@ impl TeamRepository {
                 location_id,
                 created_at,
                 updated_at
-            "#,
-        )
+        "#))
         .bind(input.name)
         .bind(input.description)
         .bind(input.location_id)
@@ -133,7 +151,7 @@ impl TeamRepository {
     }
 
     pub async fn delete_team(&self, id: Uuid) -> Result<Option<()>> {
-        let result = sqlx::query("DELETE FROM teams WHERE id = $1")
+        let result = sqlx::query(&sql("DELETE FROM teams WHERE id = ?"))
             .bind(id)
             .execute(&self.pool)
             .await?;
@@ -148,8 +166,7 @@ impl TeamRepository {
     // Team member management
     pub async fn add_team_member(&self, team_id: Uuid, user_id: Uuid) -> Result<TeamMember> {
         let now = Utc::now();
-        let team_member = sqlx::query_as::<_, TeamMember>(
-            r#"
+        let team_member = sqlx::query_as::<_, TeamMember>(&sql(r#"
             INSERT INTO
                 team_members (
                     team_id,
@@ -157,14 +174,13 @@ impl TeamRepository {
                     created_at
                 )
             VALUES
-                ($1, $2, $3)
+                (?, ?, ?)
             RETURNING
                 id,
                 team_id,
                 user_id,
                 created_at
-            "#,
-        )
+        "#))
         .bind(team_id)
         .bind(user_id)
         .bind(now)
@@ -175,9 +191,17 @@ impl TeamRepository {
     }
 
     pub async fn get_team_members(&self, team_id: Uuid) -> Result<Vec<TeamMember>> {
-        let team_members = sqlx::query_as::<_, TeamMember>(
-            "SELECT id, team_id, user_id, created_at FROM team_members WHERE team_id = $1",
-        )
+        let team_members = sqlx::query_as::<_, TeamMember>(&sql(r#"
+            SELECT
+                id,
+                team_id,
+                user_id,
+                created_at
+            FROM
+                team_members
+            WHERE
+                team_id = ?
+        "#))
         .bind(team_id)
         .fetch_all(&self.pool)
         .await?;
@@ -186,11 +210,16 @@ impl TeamRepository {
     }
 
     pub async fn remove_team_member(&self, team_id: Uuid, user_id: Uuid) -> Result<Option<()>> {
-        let result = sqlx::query("DELETE FROM team_members WHERE team_id = $1 AND user_id = $2")
-            .bind(team_id)
-            .bind(user_id)
-            .execute(&self.pool)
-            .await?;
+        let result = sqlx::query(&sql(r#"
+            DELETE FROM team_members
+            WHERE
+                team_id = ?
+                AND user_id = ?
+            "#))
+        .bind(team_id)
+        .bind(user_id)
+        .execute(&self.pool)
+        .await?;
 
         Ok(if result.rows_affected() > 0 {
             Some(())
@@ -200,8 +229,7 @@ impl TeamRepository {
     }
 
     pub async fn get_user_teams(&self, user_id: Uuid) -> Result<Vec<Team>> {
-        let teams = sqlx::query_as::<_, Team>(
-            r#"
+        let teams = sqlx::query_as::<_, Team>(&sql(r#"
             SELECT
                 t.id,
                 t.name,
@@ -213,11 +241,10 @@ impl TeamRepository {
                 teams t
                 INNER JOIN team_members tm ON t.id = tm.team_id
             WHERE
-                tm.user_id = $1
+                tm.user_id = ?
             ORDER BY
                 t.name
-            "#,
-        )
+        "#))
         .bind(user_id)
         .fetch_all(&self.pool)
         .await?;

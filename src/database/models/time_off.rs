@@ -14,8 +14,8 @@ pub struct TimeOffRequest {
     pub reason: Option<String>,
     pub request_type: TimeOffType,
     pub status: TimeOffStatus,
-    pub approved_by: Option<Uuid>, // UUID for user references
-    pub approval_notes: Option<String>,
+    pub actioned_by: Option<Uuid>, // UUID for user references
+    pub action_notes: Option<String>,
     pub created_at: DateTime<Utc>, // TIMESTAMPTZ
     pub updated_at: DateTime<Utc>, // TIMESTAMPTZ
 }

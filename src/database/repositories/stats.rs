@@ -18,7 +18,7 @@ impl StatsRepository {
     }
 
     // Simple stats that just return basic counts
-    pub async fn get_dashboard_stats(
+    pub async fn get_dashboard_stats_for_user(
         &self,
         _user_id: Option<Uuid>,
         _start_date: Option<DateTime<Utc>>,
@@ -79,6 +79,16 @@ impl StatsRepository {
             total_hours,
             team_coverage,
         })
+    }
+
+    pub async fn get_dashboard_stats_for_company(
+        &self,
+        _company_id: Uuid,
+        _start_date: Option<DateTime<Utc>>,
+        _end_date: Option<DateTime<Utc>>,
+    ) -> Result<DashboardStats> {
+        // Implement the logic to fetch dashboard stats for a specific company
+        todo!()
     }
 
     // Get shift-specific statistics

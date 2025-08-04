@@ -131,8 +131,8 @@ async fn test_shift_claim_repository(pool: SqlitePool) -> Result<(), sqlx::Error
     assert_eq!(claim.shift_id, shift.id);
     assert_eq!(claim.user_id, user.id);
     assert!(matches!(claim.status, ShiftClaimStatus::Pending));
-    assert!(claim.approved_by.is_none());
-    assert!(claim.approval_notes.is_none());
+    assert!(claim.actioned_by.is_none());
+    assert!(claim.action_notes.is_none());
     println!("✅ Shift claim assertions passed");
 
     // Test 2: Get claim by ID
@@ -218,8 +218,8 @@ async fn test_shift_claim_repository(pool: SqlitePool) -> Result<(), sqlx::Error
     assert!(approved_claim.is_some());
     let approved_claim = approved_claim.unwrap();
     assert!(matches!(approved_claim.status, ShiftClaimStatus::Approved));
-    assert_eq!(approved_claim.approved_by, Some("manager_123".to_string()));
-    assert_eq!(approved_claim.approval_notes, Some("Approved!".to_string()));
+    assert_eq!(approved_claim.actioned_by, Some("manager_123".to_string()));
+    assert_eq!(approved_claim.action_notes, Some("Approved!".to_string()));
     println!("✅ Approve claim assertions passed");
 
     // Test 7: Check if shift has approved claim
@@ -331,9 +331,9 @@ async fn test_shift_claim_cancel_and_reject(pool: SqlitePool) -> Result<(), sqlx
     assert!(rejected_claim.is_some());
     let rejected_claim = rejected_claim.unwrap();
     assert!(matches!(rejected_claim.status, ShiftClaimStatus::Rejected));
-    assert_eq!(rejected_claim.approved_by, Some(manager.id.clone()));
+    assert_eq!(rejected_claim.actioned_by, Some(manager.id.clone()));
     assert_eq!(
-        rejected_claim.approval_notes,
+        rejected_claim.action_notes,
         Some("Not qualified".to_string())
     );
 
