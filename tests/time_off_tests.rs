@@ -1,8 +1,8 @@
 use actix_web::{http::StatusCode, test, web, App};
-use be::database::repositories::company::CompanyRepository;
+use be::database::repositories::activity::ActivityRepository;
 use be::database::repositories::time_off::TimeOffRepository;
 use be::handlers::time_off;
-use be::{ActivityLogger, ActivityRepository, AppState};
+use be::services::ActivityLogger;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use serial_test::serial;
@@ -11,23 +11,21 @@ mod common;
 
 // Helper function to create test app state and dependencies
 async fn setup_test_app() -> (
-    web::Data<AppState>,
     web::Data<TimeOffRepository>,
     web::Data<be::Config>,
+    web::Data<ActivityLogger>,
+    common::TestContext,
 ) {
     common::setup_test_env();
     let ctx = common::TestContext::new().await.unwrap();
 
-    let app_state = web::Data::new(AppState {
-        auth_service: ctx.auth_service,
-        company_repository: CompanyRepository::new(ctx.pool.clone()),
-        activity_repository: ActivityRepository::new(ctx.pool.clone()),
-        activity_logger: ActivityLogger::new(ActivityRepository::new(ctx.pool.clone())),
-    });
     let time_off_repo_data = web::Data::new(TimeOffRepository::new(ctx.pool.clone()));
-    let config_data = web::Data::new(ctx.config);
+    let config_data = web::Data::new(ctx.config.clone());
+    let activity_logger_data = web::Data::new(ActivityLogger::new(ActivityRepository::new(
+        ctx.pool.clone(),
+    )));
 
-    (app_state, time_off_repo_data, config_data)
+    (time_off_repo_data, config_data, activity_logger_data, ctx)
 }
 
 // Macro to generate unauthorized access tests
@@ -36,13 +34,14 @@ macro_rules! test_unauthorized {
         #[actix_web::test]
         #[serial]
         async fn $test_name() {
-            let (app_state, time_off_repo_data, config_data) = setup_test_app().await;
+            let (time_off_repo_data, config_data, activity_logger_data, _ctx) =
+                setup_test_app().await;
 
             let app = test::init_service(
                 App::new()
-                    .app_data(app_state)
                     .app_data(time_off_repo_data)
                     .app_data(config_data)
+                    .app_data(activity_logger_data)
                     .service(
                         web::scope("/api/v1").service(
                             web::scope("/time-off")
@@ -73,13 +72,14 @@ macro_rules! test_unauthorized {
         #[actix_web::test]
         #[serial]
         async fn $test_name() {
-            let (app_state, time_off_repo_data, config_data) = setup_test_app().await;
+            let (time_off_repo_data, config_data, activity_logger_data, _ctx) =
+                setup_test_app().await;
 
             let app = test::init_service(
                 App::new()
-                    .app_data(app_state)
                     .app_data(time_off_repo_data)
                     .app_data(config_data)
+                    .app_data(activity_logger_data)
                     .service(
                         web::scope("/api/v1").service(
                             web::scope("/time-off")

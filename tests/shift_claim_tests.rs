@@ -6,10 +6,10 @@ use be::database::repositories::shift::ShiftRepository;
 use be::database::repositories::shift_claim::ShiftClaimRepository;
 use be::database::repositories::user::UserRepository;
 use chrono::Utc;
-use sqlx::SqlitePool;
+use sqlx::PgPool;
 
 #[sqlx::test]
-async fn test_shift_claim_repository(pool: SqlitePool) -> Result<(), sqlx::Error> {
+async fn test_shift_claim_repository(pool: PgPool) -> Result<(), sqlx::Error> {
     // Disable foreign key constraints for testing
     sqlx::query("PRAGMA foreign_keys = OFF")
         .execute(&pool)
@@ -246,7 +246,7 @@ async fn test_shift_claim_repository(pool: SqlitePool) -> Result<(), sqlx::Error
 }
 
 #[sqlx::test]
-async fn test_shift_claim_cancel_and_reject(pool: SqlitePool) -> Result<(), sqlx::Error> {
+async fn test_shift_claim_cancel_and_reject(pool: PgPool) -> Result<(), sqlx::Error> {
     // Disable foreign key constraints for testing
     sqlx::query("PRAGMA foreign_keys = OFF")
         .execute(&pool)
