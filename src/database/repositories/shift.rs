@@ -3,8 +3,8 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::database::{
+    get_pool,
     models::{Shift, ShiftInput, ShiftQuery, ShiftQueryType, ShiftStatus},
-    pool,
     utils::sql,
 };
 
@@ -66,7 +66,7 @@ pub async fn create_shift(input: ShiftInput) -> Result<Shift> {
     .bind(ShiftStatus::Open.to_string())
     .bind(now)
     .bind(now)
-    .fetch_one(pool())
+    .fetch_one(get_pool())
     .await?;
 
     Ok(row.into())
@@ -97,7 +97,7 @@ pub async fn find_by_id(shift_id: Uuid, company_id: Uuid) -> Result<Option<Shift
         "#))
     .bind(shift_id)
     .bind(company_id)
-    .fetch_optional(pool())
+    .fetch_optional(get_pool())
     .await?;
 
     Ok(row.map(|r| r.into()))
@@ -129,7 +129,7 @@ pub async fn find_by_company_id(company_id: Uuid) -> Result<Vec<Shift>> {
                 s.start_time
         "#))
     .bind(company_id)
-    .fetch_all(pool())
+    .fetch_all(get_pool())
     .await?;
 
     Ok(rows.into_iter().map(|row| row.into()).collect())
@@ -160,7 +160,7 @@ pub async fn find_by_location_id(location_id: Uuid) -> Result<Vec<Shift>> {
                 start_time
         "#))
     .bind(location_id)
-    .fetch_all(pool())
+    .fetch_all(get_pool())
     .await?;
 
     Ok(rows.into_iter().map(|row| row.into()).collect())
@@ -191,7 +191,7 @@ pub async fn find_by_team_id(team_id: Uuid) -> Result<Vec<Shift>> {
                 start_time
         "#))
     .bind(team_id)
-    .fetch_all(pool())
+    .fetch_all(get_pool())
     .await?;
 
     Ok(rows.into_iter().map(|row| row.into()).collect())
@@ -231,7 +231,7 @@ pub async fn find_by_date_range(
         .bind(start_date)
         .bind(end_date)
         .bind(location_id)
-        .fetch_all(pool())
+        .fetch_all(get_pool())
         .await?
     } else {
         sqlx::query_as::<_, Shift>(&sql(r#"
@@ -260,7 +260,7 @@ pub async fn find_by_date_range(
             "#))
         .bind(start_date)
         .bind(end_date)
-        .fetch_all(pool())
+        .fetch_all(get_pool())
         .await?
     };
 
@@ -293,7 +293,7 @@ pub async fn find_open_shifts_by_location(location_id: Uuid) -> Result<Vec<Shift
         "#))
     .bind(location_id)
     .bind(ShiftStatus::Open.to_string())
-    .fetch_all(pool())
+    .fetch_all(get_pool())
     .await?;
 
     Ok(rows.into_iter().map(|row| row.into()).collect())
@@ -323,7 +323,7 @@ pub async fn find_open_shifts() -> Result<Vec<Shift>> {
                 start_time
         "#))
     .bind(ShiftStatus::Open.to_string())
-    .fetch_all(pool())
+    .fetch_all(get_pool())
     .await?;
 
     Ok(rows.into_iter().map(|row| row.into()).collect())
@@ -377,7 +377,7 @@ pub async fn update_shift(id: Uuid, input: ShiftInput) -> Result<Option<Shift>> 
     .bind(input.status.to_string())
     .bind(now)
     .bind(id)
-    .fetch_optional(pool())
+    .fetch_optional(get_pool())
     .await?;
 
     Ok(row.map(|r| r.into()))
@@ -412,7 +412,7 @@ pub async fn update_shift_status(id: Uuid, status: ShiftStatus) -> Result<Option
     .bind(status.to_string())
     .bind(now)
     .bind(id)
-    .fetch_optional(pool())
+    .fetch_optional(get_pool())
     .await?;
 
     Ok(row.map(|r| r.into()))
@@ -421,7 +421,7 @@ pub async fn update_shift_status(id: Uuid, status: ShiftStatus) -> Result<Option
 pub async fn delete_shift(id: Uuid) -> Result<Option<()>> {
     let result = sqlx::query(&sql("DELETE FROM shifts WHERE id = ?"))
         .bind(id)
-        .execute(pool())
+        .execute(get_pool())
         .await?;
 
     Ok(if result.rows_affected() > 0 {
@@ -459,7 +459,7 @@ pub async fn find_shifts_by_user(user_id: Uuid) -> Result<Vec<Shift>> {
                 s.start_time
         "#))
     .bind(user_id)
-    .fetch_all(pool())
+    .fetch_all(get_pool())
     .await?;
 
     Ok(rows.into_iter().map(|row| row.into()).collect())
@@ -545,7 +545,7 @@ pub async fn find_by_query(filter_query: ShiftQuery) -> Result<Vec<Shift>> {
     for param in params.into_iter() {
         prepared = prepared.bind(param);
     }
-    let shifts = prepared.fetch_all(pool()).await?;
+    let shifts = prepared.fetch_all(get_pool()).await?;
 
     Ok(shifts)
 }

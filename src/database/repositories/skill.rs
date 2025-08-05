@@ -3,10 +3,10 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use crate::database::{
+    get_pool,
     models::{
         ProficiencyLevel, ShiftRequiredSkill, Skill, SkillInput, UserSkill, UserWithSkillResponse,
     },
-    pool,
     utils::sql,
 };
 
@@ -36,7 +36,7 @@ pub async fn create_skill(company_id: Uuid, input: SkillInput) -> Result<Skill> 
     .bind(input.description)
     .bind(now)
     .bind(now)
-    .fetch_one(pool())
+    .fetch_one(get_pool())
     .await?;
 
     Ok(skill)
@@ -59,7 +59,7 @@ pub async fn find_by_id(skill_id: Uuid, company_id: Uuid) -> Result<Option<Skill
         "#))
     .bind(skill_id)
     .bind(company_id)
-    .fetch_optional(pool())
+    .fetch_optional(get_pool())
     .await?;
 
     Ok(skill)
@@ -82,7 +82,7 @@ pub async fn get_all_skills(company_id: Uuid) -> Result<Vec<Skill>> {
                 name
         "#))
     .bind(company_id)
-    .fetch_all(pool())
+    .fetch_all(get_pool())
     .await?;
 
     Ok(skills)
@@ -111,7 +111,7 @@ pub async fn update_skill(id: Uuid, input: SkillInput) -> Result<Option<Skill>> 
     .bind(input.description)
     .bind(now)
     .bind(id)
-    .fetch_optional(pool())
+    .fetch_optional(get_pool())
     .await?;
 
     Ok(skill)
@@ -120,7 +120,7 @@ pub async fn update_skill(id: Uuid, input: SkillInput) -> Result<Option<Skill>> 
 pub async fn delete_skill(id: Uuid) -> Result<bool> {
     let result = sqlx::query(&sql("DELETE FROM skills WHERE id = ?"))
         .bind(id)
-        .execute(pool())
+        .execute(get_pool())
         .await?;
 
     Ok(result.rows_affected() > 0)
@@ -157,7 +157,7 @@ pub async fn add_skill_to_user(
     .bind(proficiency_level)
     .bind(now)
     .bind(now)
-    .fetch_one(pool())
+    .fetch_one(get_pool())
     .await?;
 
     Ok(user_skill)
@@ -180,7 +180,7 @@ pub async fn get_user_skills(user_id: Uuid, company_id: Uuid) -> Result<Vec<User
         "#))
     .bind(user_id)
     .bind(company_id)
-    .fetch_all(pool())
+    .fetch_all(get_pool())
     .await?;
 
     Ok(user_skills)
@@ -213,7 +213,7 @@ pub async fn update_user_skill(
     .bind(now)
     .bind(user_id)
     .bind(skill_id)
-    .fetch_optional(pool())
+    .fetch_optional(get_pool())
     .await?;
 
     Ok(user_skill)
@@ -229,7 +229,7 @@ pub async fn remove_skill_from_user(skill_id: Uuid, user_id: Uuid) -> Result<Opt
         "#))
     .bind(user_id)
     .bind(skill_id)
-    .execute(pool())
+    .execute(get_pool())
     .await?;
 
     if result.rows_affected() > 0 {
@@ -267,7 +267,7 @@ pub async fn add_shift_required_skill(
     .bind(skill_id)
     .bind(required_level.to_string())
     .bind(now)
-    .fetch_one(pool())
+    .fetch_one(get_pool())
     .await?;
 
     Ok(shift_skill)
@@ -287,7 +287,7 @@ pub async fn get_shift_required_skills(shift_id: Uuid) -> Result<Vec<ShiftRequir
                 shift_id = ?
         "#))
     .bind(shift_id)
-    .fetch_all(pool())
+    .fetch_all(get_pool())
     .await?;
 
     Ok(shift_skills)
@@ -303,7 +303,7 @@ pub async fn remove_shift_required_skill(shift_id: Uuid, skill_id: Uuid) -> Resu
         "#))
     .bind(shift_id)
     .bind(skill_id)
-    .execute(pool())
+    .execute(get_pool())
     .await?;
 
     Ok(result.rows_affected() > 0)
@@ -350,7 +350,7 @@ pub async fn get_users_with_skill(
 
     let user_ids = sqlx::query_as::<_, UserWithSkillResponse>(&sql(query.as_str()))
         .bind(skill_id)
-        .fetch_all(pool())
+        .fetch_all(get_pool())
         .await?;
 
     Ok(user_ids)

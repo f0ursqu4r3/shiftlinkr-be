@@ -4,56 +4,64 @@ use chrono::{Datelike, Utc};
 use uuid::Uuid;
 
 use crate::database::{
+    get_pool,
     models::{
         PtoBalance, PtoBalanceAccrualResult, PtoBalanceAdjustmentInput, PtoBalanceHistory,
         PtoBalanceType, PtoBalanceUpdateInput, PtoChangeType,
     },
-    pool,
     utils::sql,
 };
 
 macro_rules! update_field {
-        ($pool:expr, $field_value:expr, $field_name:literal, $user_id:expr, $company_id:expr, $now:expr) => {
-            if let Some(value) = $field_value {
-                sqlx::query(&format!(
-                    "UPDATE user_company SET {} = $1, updated_at = $2 WHERE user_id = $3 AND company_id = $4",
-                    $field_name
-                ))
+    ($field_value:expr, $field_name:literal, $user_id:expr, $company_id:expr, $now:expr) => {
+        if let Some(value) = $field_value {
+            let query = format!(
+                r#"
+                UPDATE
+                    user_company
+                SET
+                    {} = ?,
+                    updated_at = ?
+                WHERE
+                    user_id = ?
+                    AND company_id = ?
+                "#,
+                $field_name
+            );
+            sqlx::query(&sql(&query))
                 .bind(value)
                 .bind($now)
                 .bind($user_id)
                 .bind($company_id)
-                .execute($pool)
+                .execute(get_pool())
                 .await?;
-            }
-        };
-    }
+        }
+    };
+}
 
 /// Get PTO balance for a user in a specific company
 pub async fn get_balance_for_company(
     user_id: Uuid,
     company_id: Uuid,
 ) -> Result<Option<PtoBalance>> {
-    let pto_balance = sqlx::query_as::<_, PtoBalance>(
-        r#"
-            SELECT
-                user_id,
-                pto_balance_hours,
-                sick_balance_hours,
-                personal_balance_hours,
-                pto_accrual_rate,
-                hire_date,
-                last_accrual_date
-            FROM
-                user_company 
-            WHERE
-                user_id = $1
-                AND company_id = $2
-            "#,
-    )
+    let pto_balance = sqlx::query_as::<_, PtoBalance>(&sql(r#"
+        SELECT
+            user_id,
+            pto_balance_hours,
+            sick_balance_hours,
+            personal_balance_hours,
+            pto_accrual_rate,
+            hire_date,
+            last_accrual_date
+        FROM
+            user_company 
+        WHERE
+            user_id = ?
+            AND company_id = ?
+    "#))
     .bind(user_id)
     .bind(company_id)
-    .fetch_optional(pool())
+    .fetch_optional(get_pool())
     .await?;
 
     Ok(pto_balance)
@@ -75,7 +83,6 @@ pub async fn update_balance_for_company(
 
     // Execute updates for each field that's provided
     update_field!(
-        pool(),
         update.pto_balance_hours,
         "pto_balance_hours",
         user_id,
@@ -83,7 +90,6 @@ pub async fn update_balance_for_company(
         now
     );
     update_field!(
-        pool(),
         update.sick_balance_hours,
         "sick_balance_hours",
         user_id,
@@ -91,7 +97,6 @@ pub async fn update_balance_for_company(
         now
     );
     update_field!(
-        pool(),
         update.personal_balance_hours,
         "personal_balance_hours",
         user_id,
@@ -99,21 +104,13 @@ pub async fn update_balance_for_company(
         now
     );
     update_field!(
-        pool(),
         update.pto_accrual_rate,
         "pto_accrual_rate",
         user_id,
         company_id,
         now
     );
-    update_field!(
-        pool(),
-        update.hire_date,
-        "hire_date",
-        user_id,
-        company_id,
-        now
-    );
+    update_field!(update.hire_date, "hire_date", user_id, company_id, now);
 
     // Return updated balance
     get_balance_for_company(user_id, company_id)
@@ -162,7 +159,7 @@ pub async fn adjust_balance_for_company(
 
     // Update balance in user_company table
     let query = format!(
-        "
+        r#"
             UPDATE
                 user_company
             SET
@@ -171,7 +168,7 @@ pub async fn adjust_balance_for_company(
             WHERE
                 user_id = ?
                 AND company_id = ?
-            ",
+        "#,
         field_name
     );
     sqlx::query(&sql(&query))
@@ -179,7 +176,7 @@ pub async fn adjust_balance_for_company(
         .bind(now)
         .bind(user_id)
         .bind(company_id)
-        .execute(pool())
+        .execute(get_pool())
         .await?;
 
     // Create history record
@@ -213,7 +210,7 @@ pub async fn adjust_balance_for_company(
                 description,
                 related_time_off_id,
                 created_at
-        "#))
+    "#))
     .bind(user_id)
     .bind(company_id)
     .bind(balance_type_str)
@@ -223,7 +220,7 @@ pub async fn adjust_balance_for_company(
     .bind(new_balance)
     .bind(adjustment.description)
     .bind(now)
-    .fetch_one(pool())
+    .fetch_one(get_pool())
     .await?;
 
     Ok(history_row)
@@ -238,31 +235,31 @@ pub async fn get_balance_history(
     let limit = limit.unwrap_or(50);
 
     let history = sqlx::query_as::<_, PtoBalanceHistory>(&sql(r#"
-            SELECT 
-                id,
-                user_id,
-                balance_type,
-                change_type,
-                hours_changed,
-                previous_balance,
-                new_balance,
-                description,
-                related_time_off_id,
-                created_at
-            FROM
-                pto_balance_history
-            WHERE
-                user_id = ?
-                AND company_id = ?
-            ORDER BY
-                created_at DESC
-            LIMIT
-                ?
-        "#))
+        SELECT 
+            id,
+            user_id,
+            balance_type,
+            change_type,
+            hours_changed,
+            previous_balance,
+            new_balance,
+            description,
+            related_time_off_id,
+            created_at
+        FROM
+            pto_balance_history
+        WHERE
+            user_id = ?
+            AND company_id = ?
+        ORDER BY
+            created_at DESC
+        LIMIT
+            ?
+    "#))
     .bind(user_id)
     .bind(company_id)
     .bind(limit as i64)
-    .fetch_all(pool())
+    .fetch_all(get_pool())
     .await?;
 
     Ok(history)
@@ -313,39 +310,44 @@ pub async fn process_accrual_for_company(
     // Update balance in user_company table
     let new_balance = current_balance.pto_balance_hours + hours_to_accrue;
 
-    sqlx::query(
-            "UPDATE user_company SET pto_balance_hours = $1, last_accrual_date = $2, updated_at = $3 WHERE user_id = $4 AND company_id = $5"
-        )
-        .bind(new_balance)
-        .bind(today)
-        .bind(now)
-        .bind(user_id)
-        .bind(company_id)
-        .execute(pool())
-        .await?;
+    sqlx::query(&sql(r#"
+        UPDATE user_company
+        SET
+            pto_balance_hours = ?,
+            last_accrual_date = ?,
+            updated_at = ?
+        WHERE
+            user_id = ?
+            AND company_id = ?
+    "#))
+    .bind(new_balance)
+    .bind(today)
+    .bind(now)
+    .bind(user_id)
+    .bind(company_id)
+    .execute(get_pool())
+    .await?;
 
     // Create history record
     let balance_type_str = PtoBalanceType::Pto.to_string();
     let change_type_str = PtoChangeType::Accrual.to_string();
     let description = format!("Monthly accrual of {} hours", hours_to_accrue);
 
-    sqlx::query(
-        r#"
-            INSERT INTO
-                pto_balance_history (
-                    user_id,
-                    balance_type,
-                    change_type,
-                    hours_changed,
-                    previous_balance,
-                    new_balance,
-                    description,
-                    created_at
-                )
-            VALUES
-                ($1, $2, $3, $4, $5, $6, $7, $8)
-            "#,
-    )
+    sqlx::query(&sql(r#"
+        INSERT INTO
+            pto_balance_history (
+                user_id,
+                balance_type,
+                change_type,
+                hours_changed,
+                previous_balance,
+                new_balance,
+                description,
+                created_at
+            )
+        VALUES
+            (?, ?, ?, ?, ?, ?, ?, ?)
+    "#))
     .bind(user_id)
     .bind(balance_type_str)
     .bind(change_type_str)
@@ -354,7 +356,7 @@ pub async fn process_accrual_for_company(
     .bind(new_balance)
     .bind(description)
     .bind(now)
-    .execute(pool())
+    .execute(get_pool())
     .await?;
 
     Ok(Some(PtoBalanceAccrualResult {
@@ -411,15 +413,23 @@ pub async fn use_balance_for_time_off_for_company(
 
     // Update balance in user_company table
     let query = format!(
-        "UPDATE user_company SET {} = $1, updated_at = $2 WHERE user_id = $3 AND company_id = $4",
+        r#"
+        UPDATE user_company
+        SET
+            {} = ?,
+            updated_at = ?
+        WHERE
+            user_id = ?
+            AND company_id = ?
+        "#,
         field_name
     );
-    sqlx::query(&query)
+    sqlx::query(&sql(&query))
         .bind(new_balance)
         .bind(now)
         .bind(user_id)
         .bind(company_id)
-        .execute(pool())
+        .execute(get_pool())
         .await?;
 
     // Create history record
@@ -427,24 +437,9 @@ pub async fn use_balance_for_time_off_for_company(
     let change_type_str = PtoChangeType::Usage.to_string();
     let hours_changed = -hours_used;
 
-    let history_row = sqlx::query_as::<_, PtoBalanceHistory>(
-        r#"
-            INSERT INTO
-                pto_balance_history (
-                    user_id,
-                    balance_type,
-                    change_type,
-                    hours_changed,
-                    previous_balance,
-                    new_balance,
-                    description,
-                    related_time_off_id,
-                    created_at
-                )
-            VALUES
-                ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-            RETURNING 
-                id,
+    let history_row = sqlx::query_as::<_, PtoBalanceHistory>(&sql(r#"
+        INSERT INTO
+            pto_balance_history (
                 user_id,
                 balance_type,
                 change_type,
@@ -454,8 +449,21 @@ pub async fn use_balance_for_time_off_for_company(
                 description,
                 related_time_off_id,
                 created_at
-            "#,
-    )
+            )
+        VALUES
+            (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        RETURNING 
+            id,
+            user_id,
+            balance_type,
+            change_type,
+            hours_changed,
+            previous_balance,
+            new_balance,
+            description,
+            related_time_off_id,
+            created_at
+    "#))
     .bind(user_id)
     .bind(balance_type_str)
     .bind(change_type_str)
@@ -465,7 +473,7 @@ pub async fn use_balance_for_time_off_for_company(
     .bind("Time-off request usage")
     .bind(time_off_id)
     .bind(now)
-    .fetch_one(pool())
+    .fetch_one(get_pool())
     .await?;
 
     Ok(history_row)

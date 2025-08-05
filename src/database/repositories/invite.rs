@@ -1,11 +1,10 @@
 use anyhow::Result;
-
 use chrono::{Duration, Utc};
 use uuid::Uuid;
 
 use crate::database::{
+    get_pool,
     models::{CompanyRole, InviteToken},
-    pool,
     utils::sql,
 };
 
@@ -21,21 +20,8 @@ pub async fn create_invite_token(
     let created_at = Utc::now();
 
     let invite_token = sqlx::query_as::<_, InviteToken>(&sql(r#"
-            INSERT INTO
-                invite_tokens (
-                    email,
-                    token,
-                    inviter_id,
-                    role,
-                    company_id,
-                    team_id,
-                    expires_at,
-                    created_at
-                )
-            VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?)
-            RETURNING
-                id,
+        INSERT INTO
+            invite_tokens (
                 email,
                 token,
                 inviter_id,
@@ -43,9 +29,22 @@ pub async fn create_invite_token(
                 company_id,
                 team_id,
                 expires_at,
-                used_at,
                 created_at
-        "#))
+            )
+        VALUES
+            (?, ?, ?, ?, ?, ?, ?, ?)
+        RETURNING
+            id,
+            email,
+            token,
+            inviter_id,
+            role,
+            company_id,
+            team_id,
+            expires_at,
+            used_at,
+            created_at
+    "#))
     .bind(email)
     .bind(token)
     .bind(inviter_id)
@@ -54,7 +53,7 @@ pub async fn create_invite_token(
     .bind(team_id)
     .bind(expires_at)
     .bind(created_at)
-    .fetch_one(pool())
+    .fetch_one(get_pool())
     .await?;
 
     Ok(invite_token)
@@ -62,25 +61,25 @@ pub async fn create_invite_token(
 
 pub async fn get_invite_token(token: &str) -> Result<Option<InviteToken>> {
     let invite_token = sqlx::query_as::<_, InviteToken>(&sql(r#"
-            SELECT
-                id,
-                email,
-                token,
-                inviter_id,
-                role,
-                company_id,
-                team_id,
-                expires_at,
-                used_at,
-                created_at
-            FROM
-                invite_tokens
-            WHERE
-                token = ?
-                AND used_at IS NULL
-        "#))
+        SELECT
+            id,
+            email,
+            token,
+            inviter_id,
+            role,
+            company_id,
+            team_id,
+            expires_at,
+            used_at,
+            created_at
+        FROM
+            invite_tokens
+        WHERE
+            token = ?
+            AND used_at IS NULL
+    "#))
     .bind(token)
-    .fetch_optional(pool())
+    .fetch_optional(get_pool())
     .await?;
 
     Ok(invite_token)
@@ -92,7 +91,7 @@ pub async fn mark_invite_token_as_used(token: &str) -> Result<()> {
     sqlx::query(&sql("UPDATE invite_tokens SET used_at = ? WHERE token = ?"))
         .bind(used_at)
         .bind(token)
-        .execute(pool())
+        .execute(get_pool())
         .await?;
 
     Ok(())
@@ -103,25 +102,25 @@ pub async fn get_invites_by_inviter(
     company_id: Uuid,
 ) -> Result<Vec<InviteToken>> {
     let invites = sqlx::query_as::<_, InviteToken>(&sql(r#"
-            SELECT
-                id,
-                email,
-                token,
-                inviter_id,
-                role,
-                company_id,
-                team_id,
-                expires_at,
-                used_at,
-                created_at
-            FROM invite_tokens
-            WHERE inviter_id = ?
-                AND company_id = ?
-            ORDER BY created_at DESC
-        "#))
+        SELECT
+            id,
+            email,
+            token,
+            inviter_id,
+            role,
+            company_id,
+            team_id,
+            expires_at,
+            used_at,
+            created_at
+        FROM invite_tokens
+        WHERE inviter_id = ?
+            AND company_id = ?
+        ORDER BY created_at DESC
+    "#))
     .bind(inviter_id)
     .bind(company_id)
-    .fetch_all(pool())
+    .fetch_all(get_pool())
     .await?;
 
     Ok(invites)
@@ -133,7 +132,7 @@ pub async fn cleanup_expired_tokens() -> Result<u64> {
         r#"DELETE FROM invite_tokens WHERE expires_at < ? AND used_at IS NULL"#,
     ))
     .bind(now)
-    .execute(pool())
+    .execute(get_pool())
     .await?;
 
     Ok(result.rows_affected())
@@ -141,15 +140,15 @@ pub async fn cleanup_expired_tokens() -> Result<u64> {
 
 pub async fn revoke_invite_token(token: &str, inviter_id: Uuid) -> Result<bool> {
     let result = sqlx::query(&sql(r#"
-            DELETE FROM invite_tokens
-            WHERE
-                token = ?
-                AND inviter_id = ?
-                AND used_at IS NULL
-        "#))
+        DELETE FROM invite_tokens
+        WHERE
+            token = ?
+            AND inviter_id = ?
+            AND used_at IS NULL
+    "#))
     .bind(token)
     .bind(inviter_id)
-    .execute(pool())
+    .execute(get_pool())
     .await?;
 
     Ok(result.rows_affected() > 0)

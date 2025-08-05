@@ -1,7 +1,8 @@
-use crate::database::{models::User, pool, utils::sql};
 use anyhow::Result;
 use chrono::Utc;
 use uuid::Uuid;
+
+use crate::database::{get_pool, models::User, utils::sql};
 
 pub async fn create_user(user: &User) -> Result<User> {
     let user = sqlx::query_as::<_, User>(&sql(r#"
@@ -16,6 +17,13 @@ pub async fn create_user(user: &User) -> Result<User> {
             )
         VALUES
             (?, ?, ?, ?, ?, ?)
+        RETURNING 
+            id,
+            email,
+            password_hash,
+            name,
+            created_at,
+            updated_at
     "#))
     .bind(&user.id)
     .bind(&user.email)
@@ -23,7 +31,7 @@ pub async fn create_user(user: &User) -> Result<User> {
     .bind(&user.name)
     .bind(&user.created_at)
     .bind(&user.updated_at)
-    .fetch_one(pool())
+    .fetch_one(get_pool())
     .await?;
 
     Ok(user)
@@ -44,7 +52,7 @@ pub async fn find_by_email(email: &str) -> Result<Option<User>> {
             email = ?
     "#))
     .bind(email)
-    .fetch_optional(pool())
+    .fetch_optional(get_pool())
     .await?;
 
     Ok(user)
@@ -65,7 +73,7 @@ pub async fn find_by_id(id: Uuid) -> Result<Option<User>> {
             id = ?
     "#))
     .bind(id)
-    .fetch_optional(pool())
+    .fetch_optional(get_pool())
     .await?;
 
     Ok(user)
@@ -85,7 +93,7 @@ pub async fn get_all_users() -> Result<Vec<User>> {
         ORDER BY
             created_at DESC
     "#))
-    .fetch_all(pool())
+    .fetch_all(get_pool())
     .await?;
 
     Ok(users)
@@ -105,6 +113,7 @@ pub async fn update_user(id: Uuid, name: &str, email: &str) -> Result<User> {
         RETURNING
             id,
             email,
+            password_hash,
             name,
             updated_at
     "#))
@@ -112,7 +121,7 @@ pub async fn update_user(id: Uuid, name: &str, email: &str) -> Result<User> {
     .bind(email)
     .bind(updated_at)
     .bind(id)
-    .fetch_one(pool())
+    .fetch_one(get_pool())
     .await?;
 
     Ok(user)
@@ -121,7 +130,7 @@ pub async fn update_user(id: Uuid, name: &str, email: &str) -> Result<User> {
 pub async fn delete_user(id: Uuid) -> Result<()> {
     sqlx::query("DELETE FROM users WHERE id = $1")
         .bind(id)
-        .execute(pool())
+        .execute(get_pool())
         .await?;
 
     Ok(())
@@ -130,7 +139,7 @@ pub async fn delete_user(id: Uuid) -> Result<()> {
 pub async fn email_exists(email: &str) -> Result<bool> {
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE email = $1")
         .bind(email)
-        .fetch_one(pool())
+        .fetch_one(get_pool())
         .await?;
 
     Ok(count > 0)
@@ -150,7 +159,7 @@ pub async fn update_password(user_id: Uuid, password_hash: &str) -> Result<()> {
     .bind(password_hash)
     .bind(updated_at)
     .bind(user_id)
-    .execute(pool())
+    .execute(get_pool())
     .await?;
 
     Ok(())

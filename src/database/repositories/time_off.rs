@@ -3,8 +3,8 @@ use chrono::{NaiveDate, Utc};
 use uuid::Uuid;
 
 use crate::database::{
+    get_pool,
     models::{TimeOffRequest, TimeOffRequestInput, TimeOffStatus},
-    pool,
     utils::sql,
 };
 /// Create a new time-off request
@@ -51,7 +51,7 @@ pub async fn create_request(input: TimeOffRequestInput) -> Result<TimeOffRequest
     .bind(status_str)
     .bind(now)
     .bind(now)
-    .fetch_one(pool())
+    .fetch_one(get_pool())
     .await?;
 
     Ok(time_off_request)
@@ -117,7 +117,7 @@ pub async fn get_requests(
         prepared = prepared.bind(param);
     }
 
-    let requests = prepared.fetch_all(pool()).await?;
+    let requests = prepared.fetch_all(get_pool()).await?;
 
     Ok(requests)
 }
@@ -145,7 +145,7 @@ pub async fn get_request_by_id(id: Uuid) -> Result<Option<TimeOffRequest>> {
             "#,
     )
     .bind(id)
-    .fetch_optional(pool())
+    .fetch_optional(get_pool())
     .await?;
 
     Ok(time_off_request)
@@ -188,7 +188,7 @@ pub async fn update_request(id: Uuid, input: TimeOffRequestInput) -> Result<Time
     .bind(request_type_str)
     .bind(now)
     .bind(id)
-    .fetch_one(pool())
+    .fetch_one(get_pool())
     .await?;
 
     Ok(time_off_request)
@@ -232,7 +232,7 @@ pub async fn approve_request(
     .bind(notes)
     .bind(now)
     .bind(id)
-    .fetch_one(pool())
+    .fetch_one(get_pool())
     .await?;
 
     Ok(time_off_request)
@@ -277,7 +277,7 @@ pub async fn deny_request(
     .bind(notes)
     .bind(now)
     .bind(id)
-    .fetch_one(pool())
+    .fetch_one(get_pool())
     .await?;
 
     Ok(time_off_request)
@@ -313,7 +313,7 @@ pub async fn cancel_request(id: Uuid) -> Result<TimeOffRequest> {
     .bind(status_str)
     .bind(now)
     .bind(id)
-    .fetch_one(pool())
+    .fetch_one(get_pool())
     .await?;
 
     Ok(time_off_request)
@@ -323,7 +323,7 @@ pub async fn cancel_request(id: Uuid) -> Result<TimeOffRequest> {
 pub async fn delete_request(id: Uuid) -> Result<()> {
     sqlx::query("DELETE FROM time_off_requests WHERE id = $1")
         .bind(id)
-        .execute(pool())
+        .execute(get_pool())
         .await?;
 
     Ok(())

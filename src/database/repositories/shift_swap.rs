@@ -1,15 +1,15 @@
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::database::{
+    get_pool,
     models::{
         Shift, ShiftSwap, ShiftSwapInput, ShiftSwapResponse, ShiftSwapResponseStatus,
         ShiftSwapStatus, ShiftSwapType, UserInfo,
     },
-    pool,
     utils::sql,
-    Result,
 };
 
 #[derive(sqlx::FromRow)]
@@ -105,7 +105,7 @@ pub async fn create_swap_request(input: ShiftSwapInput) -> Result<ShiftSwap> {
     .bind(status_str)
     .bind(now)
     .bind(now)
-    .fetch_one(pool())
+    .fetch_one(get_pool())
     .await?;
 
     Ok(shift_swap)
@@ -143,7 +143,7 @@ pub async fn get_swap_requests_for_company(
             "#,
     )
     .bind(company_id)
-    .fetch_all(pool())
+    .fetch_all(get_pool())
     .await?;
 
     let mut swaps = Vec::new();
@@ -197,7 +197,7 @@ pub async fn find_swap_request_by_id(id: Uuid) -> Result<Option<ShiftSwap>> {
             "#,
     )
     .bind(id)
-    .fetch_optional(pool())
+    .fetch_optional(get_pool())
     .await?;
 
     Ok(shift_swap)
@@ -239,7 +239,7 @@ pub async fn approve_swap(id: Uuid, approved_by: Uuid, notes: String) -> Result<
     .bind(notes)
     .bind(now)
     .bind(id)
-    .fetch_one(pool())
+    .fetch_one(get_pool())
     .await?;
 
     Ok(shift_swap)
@@ -281,7 +281,7 @@ pub async fn deny_swap(id: Uuid, denied_by: Uuid, notes: String) -> Result<Shift
     .bind(notes)
     .bind(now)
     .bind(id)
-    .fetch_one(pool())
+    .fetch_one(get_pool())
     .await?;
 
     Ok(shift_swap)
@@ -319,7 +319,7 @@ pub async fn cancel_swap(id: Uuid) -> Result<ShiftSwap> {
     .bind(status_str)
     .bind(now)
     .bind(id)
-    .fetch_one(pool())
+    .fetch_one(get_pool())
     .await?;
 
     Ok(shift_swap)
@@ -357,7 +357,7 @@ pub async fn complete_swap(id: Uuid) -> Result<ShiftSwap> {
     .bind(status_str)
     .bind(now)
     .bind(id)
-    .fetch_one(pool())
+    .fetch_one(get_pool())
     .await?;
 
     Ok(shift_swap)
@@ -437,7 +437,7 @@ pub async fn get_swap_requests_with_details(
         prepared = prepared.bind(param);
     }
 
-    let rows = prepared.fetch_all(pool()).await?;
+    let rows = prepared.fetch_all(get_pool()).await?;
 
     let shift_swap_response = rows
         .into_iter()
@@ -514,7 +514,7 @@ pub async fn get_swap_by_id_with_details(id: Uuid) -> Result<ShiftSwapDetail> {
                 ss.id = $1
         "#))
     .bind(id)
-    .fetch_one(pool())
+    .fetch_one(get_pool())
     .await?;
 
     let mut shift_swap_detail = ShiftSwapDetail {
@@ -567,7 +567,7 @@ pub async fn get_swap_responses(swap_id: Uuid) -> Result<Vec<ShiftSwapResponse>>
                 swap_id = ?
         "#))
     .bind(swap_id)
-    .fetch_all(pool())
+    .fetch_all(get_pool())
     .await?;
 
     Ok(responses)
@@ -592,7 +592,7 @@ pub async fn get_swap_response_for_user(
         "#))
     .bind(swap_id)
     .bind(user_id)
-    .fetch_optional(pool())
+    .fetch_optional(get_pool())
     .await?;
 
     Ok(response)
@@ -633,7 +633,7 @@ pub async fn create_swap_response(
         .bind(response_type)
         .bind(notes)
         .bind(now)
-        .fetch_one(pool())
+        .fetch_one(get_pool())
         .await?;
 
     Ok(shift_swap_response)
@@ -668,7 +668,7 @@ pub async fn update_swap_response_status(
     .bind(notes)
     .bind(now)
     .bind(response_id)
-    .fetch_one(pool())
+    .fetch_one(get_pool())
     .await?;
 
     Ok(shift_swap_response)

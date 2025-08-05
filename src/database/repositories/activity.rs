@@ -1,9 +1,10 @@
+use anyhow::Result;
+
 use crate::database::{
+    get_pool,
     models::{CompanyActivity, CreateActivityInput},
-    pool,
     utils::sql,
 };
-use sqlx::Result;
 
 /// Log a new activity  
 pub async fn log_activity(request: CreateActivityInput) -> Result<CompanyActivity> {
@@ -50,7 +51,7 @@ pub async fn log_activity(request: CreateActivityInput) -> Result<CompanyActivit
     .bind(metadata_json)
     .bind(request.ip_address)
     .bind(request.user_agent)
-    .fetch_one(pool())
+    .fetch_one(get_pool())
     .await?;
 
     Ok(company_activity)

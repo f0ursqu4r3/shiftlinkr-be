@@ -1,12 +1,12 @@
-use std::env;
 use be::config::Config;
+use std::env;
 
 mod common;
 
 #[test]
 fn test_config_from_env_with_defaults() {
     common::setup_test_env();
-    
+
     // Store original values
     let original_values = [
         ("DATABASE_URL", env::var("DATABASE_URL").ok()),
@@ -19,13 +19,18 @@ fn test_config_from_env_with_defaults() {
 
     // Clear environment variables
     for (key, _) in &original_values {
-        unsafe { env::remove_var(key); }
+        unsafe {
+            env::remove_var(key);
+        }
     }
 
     let config = Config::from_env().unwrap();
 
     assert_eq!(config.database_url, "sqlite:./shiftlinkr.db");
-    assert_eq!(config.jwt_secret, "your-super-secret-jwt-key-change-this-in-production-12345");
+    assert_eq!(
+        config.jwt_secret,
+        "your-super-secret-jwt-key-change-this-in-production-12345"
+    );
     assert_eq!(config.jwt_expiration_days, 30);
     assert_eq!(config.host, "127.0.0.1");
     assert_eq!(config.port, 8080);
@@ -34,7 +39,9 @@ fn test_config_from_env_with_defaults() {
     // Restore original values
     for (key, value) in original_values {
         if let Some(val) = value {
-            unsafe { env::set_var(key, val); }
+            unsafe {
+                env::set_var(key, val);
+            }
         }
     }
 }
@@ -42,7 +49,7 @@ fn test_config_from_env_with_defaults() {
 #[test]
 fn test_config_from_env_with_custom_values() {
     common::setup_test_env();
-    
+
     // Store original values
     let original_values = [
         ("DATABASE_URL", env::var("DATABASE_URL").ok()),
@@ -88,25 +95,29 @@ fn test_config_from_env_with_custom_values() {
 fn test_config_environment_detection() {
     let production_config = Config {
         database_url: "test".to_string(),
+        run_migrations: true,
         jwt_secret: "test".to_string(),
         jwt_expiration_days: 1,
         host: "localhost".to_string(),
         port: 8080,
         environment: "production".to_string(),
+        client_base_url: "http://localhost:3000".to_string(),
     };
 
     let development_config = Config {
         database_url: "test".to_string(),
+        run_migrations: true,
         jwt_secret: "test".to_string(),
         jwt_expiration_days: 1,
         host: "localhost".to_string(),
         port: 8080,
         environment: "development".to_string(),
+        client_base_url: "http://localhost:3000".to_string(),
     };
 
     assert!(production_config.is_production());
     assert!(!production_config.is_development());
-    
+
     assert!(!development_config.is_production());
     assert!(development_config.is_development());
 }
@@ -115,11 +126,13 @@ fn test_config_environment_detection() {
 fn test_server_address_formatting() {
     let config = Config {
         database_url: "test".to_string(),
+        run_migrations: true,
         jwt_secret: "test".to_string(),
         jwt_expiration_days: 1,
         host: "192.168.1.1".to_string(),
         port: 9000,
         environment: "test".to_string(),
+        client_base_url: "http://localhost:3000".to_string(),
     };
 
     assert_eq!(config.server_address(), "192.168.1.1:9000");
@@ -129,14 +142,16 @@ fn test_server_address_formatting() {
 fn test_config_invalid_port() {
     // Store original
     let original_port = env::var("PORT").ok();
-    
-    unsafe { env::set_var("PORT", "invalid_port"); }
-    
+
+    unsafe {
+        env::set_var("PORT", "invalid_port");
+    }
+
     let config = Config::from_env().unwrap();
-    
+
     // Should fall back to default
     assert_eq!(config.port, 8080);
-    
+
     // Restore
     unsafe {
         if let Some(val) = original_port {
@@ -151,14 +166,16 @@ fn test_config_invalid_port() {
 fn test_config_invalid_jwt_expiration() {
     // Store original
     let original_exp = env::var("JWT_EXPIRATION_DAYS").ok();
-    
-    unsafe { env::set_var("JWT_EXPIRATION_DAYS", "invalid_number"); }
-    
+
+    unsafe {
+        env::set_var("JWT_EXPIRATION_DAYS", "invalid_number");
+    }
+
     let config = Config::from_env().unwrap();
-    
+
     // Should fall back to default
     assert_eq!(config.jwt_expiration_days, 30);
-    
+
     // Restore
     unsafe {
         if let Some(val) = original_exp {

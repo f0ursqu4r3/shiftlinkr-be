@@ -2,7 +2,7 @@ use anyhow::Result;
 use chrono::{Duration, Utc};
 use uuid::Uuid;
 
-use crate::database::{models::PasswordResetToken, pool};
+use crate::database::{get_pool, models::PasswordResetToken, utils::sql};
 
 /// Generate a cryptographically secure random token
 fn generate_secure_token() -> String {
@@ -28,35 +28,25 @@ pub async fn create_token(user_id: Uuid) -> Result<PasswordResetToken> {
     let expires_at = Utc::now() + Duration::hours(1); // 1 hour expiration
     let created_at = Utc::now();
 
-    let reset_token = PasswordResetToken {
-        id: token_id,
-        user_id,
-        token: token.clone(),
-        expires_at,
-        used_at: None,
-        created_at,
-    };
-
-    sqlx::query(
-        r#"
-            INSERT INTO
-                password_reset_tokens (
-                    id,
-                    user_id,
-                    token,
-                    expires_at,
-                    created_at
-                )
-            VALUES
-                ($1, $2, $3, $4, $5)
-            "#,
-    )
-    .bind(&reset_token.id)
-    .bind(&reset_token.user_id)
-    .bind(&reset_token.token)
-    .bind(&reset_token.expires_at)
-    .bind(&reset_token.created_at)
-    .execute(pool())
+    let reset_token = sqlx::query_as::<_, PasswordResetToken>(&sql(r#"
+        INSERT INTO
+            password_reset_tokens (id, user_id, token, expires_at, created_at)
+        VALUES
+            (?, ?, ?, ?, ?)
+        RETURNING
+            id,
+            user_id,
+            token,
+            expires_at,
+            used_at,
+            created_at
+    "#))
+    .bind(&token_id)
+    .bind(&user_id)
+    .bind(&token.clone())
+    .bind(&expires_at)
+    .bind(&created_at)
+    .fetch_one(get_pool())
     .await?;
 
     Ok(reset_token)
@@ -66,52 +56,68 @@ pub async fn create_token(user_id: Uuid) -> Result<PasswordResetToken> {
 pub async fn find_valid_token(token: &str) -> Result<Option<PasswordResetToken>> {
     let now = Utc::now();
 
-    let result = sqlx::query_as::<_, PasswordResetToken>(
-        r#"
-            SELECT
-                id,
-                user_id,
-                token,
-                expires_at,
-                used_at,
-                created_at
-            FROM
-                password_reset_tokens
-            WHERE
-                token = $1
-                AND used_at IS NULL
-                AND expires_at > $2
-            "#,
-    )
+    let result = sqlx::query_as::<_, PasswordResetToken>(&sql(r#"
+        SELECT
+            id,
+            user_id,
+            token,
+            expires_at,
+            used_at,
+            created_at
+        FROM
+            password_reset_tokens
+        WHERE
+            token = ?
+            AND used_at IS NULL
+            AND expires_at > ?
+    "#))
     .bind(token)
     .bind(now)
-    .fetch_optional(pool())
+    .fetch_optional(get_pool())
     .await?;
 
     Ok(result)
 }
 
 /// Mark a token as used
-pub async fn mark_token_used(token: &str) -> Result<()> {
+pub async fn mark_token_used(token: &str) -> Result<PasswordResetToken> {
     let now = Utc::now();
 
-    sqlx::query("UPDATE password_reset_tokens SET used_at = $1 WHERE token = $2")
-        .bind(now)
-        .bind(token)
-        .execute(pool())
-        .await?;
+    let result = sqlx::query_as::<_, PasswordResetToken>(&sql(r#"
+        UPDATE password_reset_tokens
+        SET
+            used_at = ?
+        WHERE
+            token = ?
+            AND used_at IS NULL
+        RETURNING
+            id,
+            user_id,
+            token,
+            expires_at,
+            used_at,
+            created_at
+    "#))
+    .bind(now)
+    .bind(token)
+    .fetch_one(get_pool())
+    .await?;
 
-    Ok(())
+    Ok(result)
 }
 
 /// Clean up expired tokens (optional cleanup method)
 pub async fn cleanup_expired_tokens() -> Result<u64> {
     let now = Utc::now();
 
-    let result = sqlx::query("DELETE FROM password_reset_tokens WHERE expires_at < $1")
-        .bind(now)
-        .execute(pool())
-        .await?;
+    let result = sqlx::query(&sql(r#"
+        DELETE FROM password_reset_tokens
+        WHERE
+            expires_at < ?
+    "#))
+    .bind(now)
+    .execute(get_pool())
+    .await?;
 
     Ok(result.rows_affected())
 }
@@ -120,12 +126,15 @@ pub async fn cleanup_expired_tokens() -> Result<u64> {
 pub async fn invalidate_user_tokens(user_id: Uuid) -> Result<()> {
     let now = Utc::now();
 
-    sqlx::query(
-        "UPDATE password_reset_tokens SET used_at = $1 WHERE user_id = $2 AND used_at IS NULL",
-    )
+    sqlx::query(&sql(r#"
+        UPDATE password_reset_tokens
+        SET used_at = ?
+        WHERE user_id = ?
+        AND used_at IS NULL
+    "#))
     .bind(now)
     .bind(user_id)
-    .execute(pool())
+    .execute(get_pool())
     .await?;
 
     Ok(())

@@ -1,8 +1,8 @@
 use anyhow::Result;
 
 use crate::database::{
+    get_pool,
     models::{CreateUserCompanyInput, UpdateUserCompanyInput, UserCompany},
-    pool,
 };
 
 pub async fn create_balance(request: &CreateUserCompanyInput) -> Result<UserCompany> {
@@ -41,7 +41,7 @@ pub async fn create_balance(request: &CreateUserCompanyInput) -> Result<UserComp
     .bind(request.personal_balance_hours.unwrap_or(0))
     .bind(request.pto_accrual_rate.unwrap_or(0.0))
     .bind(request.hire_date)
-    .fetch_one(pool())
+    .fetch_one(get_pool())
     .await?;
 
     Ok(balance)
@@ -74,7 +74,7 @@ pub async fn get_user_balance_for_company(
     )
     .bind(user_id)
     .bind(company_id)
-    .fetch_optional(pool())
+    .fetch_optional(get_pool())
     .await?;
 
     Ok(balance)
@@ -104,7 +104,7 @@ pub async fn get_user_balances(user_id: &str) -> Result<Vec<UserCompany>> {
             "#,
     )
     .bind(user_id)
-    .fetch_all(pool())
+    .fetch_all(get_pool())
     .await?;
 
     Ok(balances)
@@ -169,7 +169,7 @@ pub async fn update_balance(
 
     query_builder = query_builder.bind(user_id).bind(company_id);
 
-    query_builder.execute(pool()).await?;
+    query_builder.execute(get_pool()).await?;
 
     // Return updated balance
     get_user_balance_for_company(user_id, company_id)
@@ -181,7 +181,7 @@ pub async fn delete_balance(user_id: &str, company_id: i64) -> Result<()> {
     sqlx::query("DELETE FROM user_company WHERE user_id = $1 AND company_id = $2")
         .bind(user_id)
         .bind(company_id)
-        .execute(pool())
+        .execute(get_pool())
         .await?;
 
     Ok(())
@@ -211,7 +211,7 @@ pub async fn get_company_balances(company_id: i64) -> Result<Vec<UserCompany>> {
             "#,
     )
     .bind(company_id)
-    .fetch_all(pool())
+    .fetch_all(get_pool())
     .await?;
 
     Ok(balances)

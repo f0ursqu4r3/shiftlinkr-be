@@ -5,17 +5,9 @@ use anyhow::Result;
 use be::config::Config;
 use be::database::init_database;
 use be::database::models::{AddEmployeeToCompanyInput, CompanyRole, CreateCompanyInput, User};
-use be::database::repositories::activity::ActivityRepository;
-use be::database::repositories::company::CompanyRepository;
-use be::database::repositories::location::LocationRepository;
-use be::database::repositories::password_reset::PasswordResetTokenRepository;
-use be::database::repositories::pto_balance::PtoBalanceRepository;
-use be::database::repositories::time_off::TimeOffRepository;
-use be::database::repositories::user::UserRepository;
-use be::services::auth::AuthService;
-use be::services::ActivityLogger;
+use be::database::repositories::{company as company_repo, user as user_repo};
+use be::services::auth;
 use chrono::Utc;
-use serde_json::json;
 use sqlx::PgPool;
 use std::env;
 use uuid::Uuid;
@@ -23,10 +15,6 @@ use uuid::Uuid;
 pub struct TestContext {
     pub pool: PgPool,
     pub config: Config,
-    pub auth_service: AuthService,
-    pub time_off_repo: TimeOffRepository,
-    pub pto_balance_repo: PtoBalanceRepository,
-    pub activity_logger: ActivityLogger,
 }
 
 impl TestContext {
@@ -46,31 +34,32 @@ impl TestContext {
             client_base_url: "http://localhost:3000".to_string(),
         };
 
-        let pool = init_database(&database_url, true).await?;
-        let user_repository = UserRepository::new(pool.clone());
-        let password_reset_repository = PasswordResetTokenRepository::new(pool.clone());
-        let company_repository = CompanyRepository::new(pool.clone());
-        let activity_repository = ActivityRepository::new(pool.clone());
+        // Try to initialize the global pool, ignore errors if already set
+        let pool = match init_database(&database_url, true).await {
+            Ok(p) => p,
+            Err(e) => {
+                // If initialization fails (probably already set), create a new connection
+                // but don't run migrations again
+                eprintln!("init_database failed: {}, creating direct connection", e);
+                let p = PgPool::connect(&database_url).await?;
+                // Run migrations just in case they haven't been run
+                let _ = sqlx::migrate!("./migrations").run(&p).await;
+                p
+            }
+        };
 
-        let auth_service = AuthService::new(
-            config.clone(),
-            user_repository,
-            company_repository,
-            password_reset_repository,
-        );
+        // Clean up any existing test data
+        Self::cleanup_test_data(&pool).await?;
 
-        let time_off_repo = TimeOffRepository::new(pool.clone());
-        let pto_balance_repo = PtoBalanceRepository::new(pool.clone());
-        let activity_logger = ActivityLogger::new(activity_repository);
+        Ok(TestContext { pool, config })
+    }
 
-        Ok(TestContext {
-            pool,
-            config,
-            auth_service,
-            time_off_repo,
-            pto_balance_repo,
-            activity_logger,
-        })
+    async fn cleanup_test_data(pool: &PgPool) -> Result<()> {
+        // Clean up test data in reverse dependency order, ignoring missing tables
+        let _ = sqlx::query("DELETE FROM user_companies").execute(pool).await;
+        let _ = sqlx::query("DELETE FROM companies").execute(pool).await;  
+        let _ = sqlx::query("DELETE FROM users").execute(pool).await;
+        Ok(())
     }
 }
 
@@ -81,295 +70,169 @@ pub fn setup_test_env() {
     let _ = env_logger::builder().is_test(true).try_init();
 }
 
-pub async fn create_test_repositories(
-    ctx: &TestContext,
-) -> (
-    web::Data<TimeOffRepository>,
-    web::Data<PtoBalanceRepository>,
-    web::Data<ActivityLogger>,
-    web::Data<Config>,
-) {
-    let time_off_repo_data = web::Data::new(ctx.time_off_repo.clone());
-    let pto_balance_repo_data = web::Data::new(ctx.pto_balance_repo.clone());
-    let activity_logger_data = web::Data::new(ctx.activity_logger.clone());
-    let config_data = web::Data::new(ctx.config.clone());
-
-    (
-        time_off_repo_data,
-        pto_balance_repo_data,
-        activity_logger_data,
-        config_data,
-    )
-}
-
-/// Create admin app data for tests (replacement for old AppState-based function)
-pub async fn create_admin_app_data() -> (
-    web::Data<LocationRepository>,
-    web::Data<LocationRepository>, // location_repo_data
-    web::Data<CompanyRepository>,
-    web::Data<Config>,
-    web::Data<ActivityLogger>,
-    TestContext,
-) {
-    setup_test_env();
-    let ctx = TestContext::new().await.unwrap();
-
-    let location_repo_data = web::Data::new(LocationRepository::new(ctx.pool.clone()));
-    let company_repo_data = web::Data::new(CompanyRepository::new(ctx.pool.clone()));
-    let config_data = web::Data::new(ctx.config.clone());
-    let activity_logger_data = web::Data::new(ctx.activity_logger.clone());
-
-    (
-        location_repo_data.clone(), // First param for backwards compatibility
-        location_repo_data,         // Second param is the actual location repo
-        company_repo_data,
-        config_data,
-        activity_logger_data,
-        ctx,
-    )
-}
-
-/// Create simplified app services for tests that don't need locations
-pub async fn create_test_app_services() -> (
-    web::Data<CompanyRepository>,
-    web::Data<Config>,
-    web::Data<ActivityLogger>,
-    TestContext,
-) {
-    setup_test_env();
-    let ctx = TestContext::new().await.unwrap();
-
-    let company_repo_data = web::Data::new(CompanyRepository::new(ctx.pool.clone()));
-    let config_data = web::Data::new(ctx.config.clone());
-    let activity_logger_data = web::Data::new(ctx.activity_logger.clone());
-
-    (company_repo_data, config_data, activity_logger_data, ctx)
-}
-
-pub async fn create_admin_user(ctx: &TestContext) -> String {
-    // Create a test company first
-    let company_repo = CompanyRepository::new(ctx.pool.clone());
-    let create_company_input = CreateCompanyInput {
-        name: "Test Company".to_string(),
-        description: None,
-        website: None,
-        phone: None,
-        email: Some("test@company.com".to_string()),
-        address: None,
-        logo_url: None,
-        timezone: Some("UTC".to_string()),
+/// Create a simple configuration data for tests
+pub async fn create_test_config() -> web::Data<Config> {
+    let config = Config {
+        database_url: env::var("TEST_DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://localhost:5432/shiftlinkr_test".to_string()),
+        run_migrations: true,
+        jwt_secret: "test-jwt-secret-key".to_string(),
+        jwt_expiration_days: 1,
+        host: "127.0.0.1".to_string(),
+        port: 0,
+        environment: "test".to_string(),
+        client_base_url: "http://localhost:3000".to_string(),
     };
-    let company = company_repo
-        .create_company(&create_company_input)
-        .await
-        .expect("Failed to create test company");
+    web::Data::new(config)
+}
 
-    // Create admin user
+/// Create a test user and return their ID and token
+pub async fn create_test_user_with_token(
+    email: &str,
+    password: &str,
+    name: &str,
+) -> Result<(Uuid, String)> {
     let user = User {
         id: Uuid::new_v4(),
-        email: "admin@test.com".to_string(),
-        password_hash: bcrypt::hash("password123", bcrypt::DEFAULT_COST).unwrap(),
-        name: "Admin User".to_string(),
+        name: name.to_string(),
+        email: email.to_string(),
+        password_hash: bcrypt::hash(password, 4).unwrap(),
         created_at: Utc::now(),
         updated_at: Utc::now(),
     };
 
-    let user_repo = UserRepository::new(ctx.pool.clone());
-    let admin_user = user_repo
-        .create_user(&user)
-        .await
-        .expect("Failed to create admin user");
+    let created_user = user_repo::create_user(&user).await?;
+    let token = auth::generate_company_token(created_user.id, Uuid::new_v4()).await?;
 
-    let user_id = admin_user.id;
-
-    // Add user to company as admin
-    let add_employee_request = AddEmployeeToCompanyInput {
-        user_id,
-        role: Some(CompanyRole::Admin),
-        is_primary: Some(true),
-        hire_date: None,
-    };
-
-    company_repo
-        .add_employee_to_company(company.id, &add_employee_request)
-        .await
-        .expect("Failed to add admin to company");
-
-    // Generate JWT token for this user
-    ctx.auth_service
-        .generate_company_token(admin_user.id, company.id)
-        .await
-        .expect("Failed to generate JWT token")
+    Ok((created_user.id, token))
 }
 
-/// Helper function to make a user an admin of the default company for testing
-pub async fn make_user_admin_of_default_company(
-    company_repo: &CompanyRepository,
-    user_id: Uuid,
-    company_id: Uuid,
-) -> Result<()> {
-    let add_employee_request = AddEmployeeToCompanyInput {
-        user_id,
-        role: Some(CompanyRole::Admin),
-        is_primary: Some(true),
-        hire_date: None,
-    };
-
-    company_repo
-        .add_employee_to_company(company_id, &add_employee_request)
-        .await?;
-
-    Ok(())
-}
-
-/// Helper function to make a user an admin using string user_id (for backward compatibility)
-pub async fn make_user_admin_of_default_company_str(
-    company_repo: &CompanyRepository,
-    user_id_str: &str,
-) -> Result<Uuid> {
-    let user_id = Uuid::parse_str(user_id_str)?;
-
-    // Create a default company for testing
-    let create_company_input = CreateCompanyInput {
-        name: "Test Company".to_string(),
-        description: None,
+/// Create a test company and return its ID
+pub async fn create_test_company(name: &str, user_id: Uuid) -> Result<Uuid> {
+    let company_input = CreateCompanyInput {
+        name: name.to_string(),
+        description: Some("Test company".to_string()),
         website: None,
         phone: None,
-        email: Some("test@company.com".to_string()),
+        email: None,
         address: None,
         logo_url: None,
-        timezone: Some("UTC".to_string()),
+        timezone: None,
     };
-    let company = company_repo.create_company(&create_company_input).await?;
 
-    let add_employee_request = AddEmployeeToCompanyInput {
+    let company = company_repo::create_company(&company_input).await?;
+
+    // Add the user as an admin
+    let add_employee_input = AddEmployeeToCompanyInput {
         user_id,
         role: Some(CompanyRole::Admin),
         is_primary: Some(true),
         hire_date: None,
     };
 
-    company_repo
-        .add_employee_to_company(company.id, &add_employee_request)
-        .await?;
+    company_repo::add_employee_to_company(company.id, &add_employee_input).await?;
 
     Ok(company.id)
 }
 
-/// Helper function to register a user and get auth token
-pub async fn register_test_user<S>(
-    app: &S,
-    email: &str,
-    password: &str,
-    name: &str,
-) -> Result<(String, String)>
-where
-    S: actix_web::dev::Service<
-        actix_web::dev::ServiceRequest,
-        Response = actix_web::dev::ServiceResponse<actix_web::body::BoxBody>,
-        Error = actix_web::Error,
-    >,
-{
-    let register_data = json!({
-        "email": email,
-        "password": password,
-        "name": name
-    });
-
-    let req = test::TestRequest::post()
-        .uri("/api/v1/auth/register")
-        .set_json(&register_data)
-        .to_srv_request();
-
-    let resp = test::call_service(app, req).await;
-    if resp.status() != StatusCode::OK {
-        let body: serde_json::Value = test::read_body_json(resp).await;
-        return Err(anyhow::anyhow!("Registration failed: {:?}", body));
-    }
-
-    let body: serde_json::Value = test::read_body_json(resp).await;
-    let token = body["token"].as_str().unwrap().to_string();
-    let user_id = body["user"]["id"].as_str().unwrap().to_string();
-
-    Ok((token, user_id))
-}
-
-/// Helper function to create an admin user for testing
-pub async fn create_admin_user_and_token<S>(
-    app: &S,
-    company_repo: &CompanyRepository,
-    email: &str,
-    password: &str,
-    name: &str,
-) -> Result<(String, String)>
-where
-    S: actix_web::dev::Service<
-        actix_web::dev::ServiceRequest,
-        Response = actix_web::dev::ServiceResponse<actix_web::body::BoxBody>,
-        Error = actix_web::Error,
-    >,
-{
-    let (token, user_id_str) = register_test_user(app, email, password, name).await?;
-    let user_id = Uuid::parse_str(&user_id_str)?;
-
-    // Create a company for testing
-    let create_company_input = CreateCompanyInput {
-        name: "Test Company".to_string(),
-        description: None,
-        website: None,
-        phone: None,
-        email: Some("test@company.com".to_string()),
-        address: None,
-        logo_url: None,
-        timezone: Some("UTC".to_string()),
-    };
-    let company = company_repo.create_company(&create_company_input).await?;
-
-    make_user_admin_of_default_company(company_repo, user_id, company.id).await?;
-    Ok((token, user_id_str))
-}
-
-/// Helper to create a manager user for testing
-pub async fn create_manager_user_and_token<S>(
-    app: &S,
-    company_repo: &CompanyRepository,
-    email: &str,
-    password: &str,
-    name: &str,
-) -> Result<(String, String)>
-where
-    S: actix_web::dev::Service<
-        actix_web::dev::ServiceRequest,
-        Response = actix_web::dev::ServiceResponse<actix_web::body::BoxBody>,
-        Error = actix_web::Error,
-    >,
-{
-    let (token, user_id_str) = register_test_user(app, email, password, name).await?;
-    let user_id = Uuid::parse_str(&user_id_str)?;
-
-    // Create a company for testing
-    let create_company_input = CreateCompanyInput {
-        name: "Test Company".to_string(),
-        description: None,
-        website: None,
-        phone: None,
-        email: Some("test@company.com".to_string()),
-        address: None,
-        logo_url: None,
-        timezone: Some("UTC".to_string()),
-    };
-    let company = company_repo.create_company(&create_company_input).await?;
-
-    let add_employee_request = AddEmployeeToCompanyInput {
+/// Make a user an admin of a company
+pub async fn make_user_admin_of_company(user_id: Uuid, company_id: Uuid) -> Result<()> {
+    let add_employee_input = AddEmployeeToCompanyInput {
         user_id,
-        role: Some(CompanyRole::Manager),
-        is_primary: Some(true),
+        role: Some(CompanyRole::Admin),
+        is_primary: Some(false),
         hire_date: None,
     };
 
-    company_repo
-        .add_employee_to_company(company.id, &add_employee_request)
-        .await?;
+    company_repo::add_employee_to_company(company_id, &add_employee_input).await?;
+    Ok(())
+}
 
-    Ok((token, user_id_str))
+/// Create a test user with a default company and return user_id, company_id, and token
+pub async fn create_user_with_company(
+    email: &str,
+    password: &str,
+    name: &str,
+    company_name: &str,
+) -> Result<(Uuid, Uuid, String)> {
+    let (user_id, _) = create_test_user_with_token(email, password, name).await?;
+    let company_id = create_test_company(company_name, user_id).await?;
+    let token = auth::generate_company_token(user_id, company_id).await?;
+
+    Ok((user_id, company_id, token))
+}
+
+/// Helper to create a default test company with ID
+pub async fn create_default_test_company() -> Result<Uuid> {
+    let company_input = CreateCompanyInput {
+        name: "Test Company".to_string(),
+        description: Some("Default test company".to_string()),
+        website: None,
+        phone: None,
+        email: None,
+        address: None,
+        logo_url: None,
+        timezone: None,
+    };
+
+    let company = company_repo::create_company(&company_input).await?;
+    Ok(company.id)
+}
+
+/// Helper to create a test user with the given email and make them admin of the default company
+pub async fn create_admin_user_str(email: &str) -> Result<Uuid> {
+    let user = User {
+        id: Uuid::new_v4(),
+        name: "Admin User".to_string(),
+        email: email.to_string(),
+        password_hash: bcrypt::hash("password", 4).unwrap(),
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    };
+
+    let created_user = user_repo::create_user(&user).await?;
+    Ok(created_user.id)
+}
+
+/// Helper to make a user admin of the default company - updated signature
+pub async fn make_user_admin_of_default_company_str(user_id: Uuid, company_id: Uuid) -> Result<()> {
+    make_user_admin_of_company(user_id, company_id).await
+}
+
+/// Assert response status and extract JSON body
+pub async fn assert_response_ok(response: actix_web::dev::ServiceResponse) -> serde_json::Value {
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = test::read_body(response).await;
+    serde_json::from_slice(&body).expect("Failed to parse response body as JSON")
+}
+
+/// Assert response has specific status code and extract JSON body
+pub async fn assert_response_status(
+    response: actix_web::dev::ServiceResponse,
+    expected_status: StatusCode,
+) -> serde_json::Value {
+    assert_eq!(response.status(), expected_status);
+    let body = test::read_body(response).await;
+    serde_json::from_slice(&body).expect("Failed to parse response body as JSON")
+}
+
+/// Create a sample auth header with bearer token
+pub fn create_auth_header(token: &str) -> (&'static str, String) {
+    ("Authorization", format!("Bearer {}", token))
+}
+
+pub fn assert_response_unauthorized(response: actix_web::dev::ServiceResponse) {
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+pub fn assert_response_forbidden(response: actix_web::dev::ServiceResponse) {
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+pub fn assert_response_not_found(response: actix_web::dev::ServiceResponse) {
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+pub fn assert_response_bad_request(response: actix_web::dev::ServiceResponse) {
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }

@@ -1,8 +1,11 @@
+use std::collections::HashMap;
+
+use actix_web::HttpRequest;
+use anyhow::Result;
+use uuid::Uuid;
+
 use crate::database::models::{ActivityType, CreateActivityInput, EntityType};
 use crate::database::repositories::activity as activity_repo;
-use actix_web::HttpRequest;
-use std::collections::HashMap;
-use uuid::Uuid;
 
 /// Extract client info from HTTP request
 fn extract_client_info(req: &HttpRequest) -> (Option<String>, Option<String>) {
@@ -35,7 +38,7 @@ pub async fn log_activity(
     description: String,
     metadata: Option<HashMap<String, serde_json::Value>>,
     req: &HttpRequest,
-) -> Result<(), sqlx::Error> {
+) -> Result<()> {
     let (ip_address, user_agent) = extract_client_info(req);
 
     let request = CreateActivityInput {
@@ -64,7 +67,7 @@ pub async fn log_user_activity(
     description: String,
     metadata: Option<HashMap<String, serde_json::Value>>,
     req: &HttpRequest,
-) -> Result<(), sqlx::Error> {
+) -> Result<()> {
     let (ip_address, user_agent) = extract_client_info(req);
 
     let request = CreateActivityInput {
@@ -92,7 +95,7 @@ pub async fn log_auth_activity(
     description: String,
     metadata: Option<HashMap<String, serde_json::Value>>,
     req: &HttpRequest,
-) -> Result<(), sqlx::Error> {
+) -> Result<()> {
     let (ip_address, user_agent) = extract_client_info(req);
 
     let request = CreateActivityInput {
@@ -121,7 +124,7 @@ pub async fn log_location_activity(
     description: String,
     metadata: Option<HashMap<String, serde_json::Value>>,
     req: &HttpRequest,
-) -> Result<(), sqlx::Error> {
+) -> Result<()> {
     let (ip_address, user_agent) = extract_client_info(req);
 
     let request = CreateActivityInput {
@@ -150,7 +153,7 @@ pub async fn log_team_activity(
     description: String,
     metadata: Option<HashMap<String, serde_json::Value>>,
     req: &HttpRequest,
-) -> Result<(), sqlx::Error> {
+) -> Result<()> {
     let (ip_address, user_agent) = extract_client_info(req);
 
     let request = CreateActivityInput {
@@ -179,7 +182,7 @@ pub async fn log_shift_activity(
     description: String,
     metadata: Option<HashMap<String, serde_json::Value>>,
     req: &HttpRequest,
-) -> Result<(), sqlx::Error> {
+) -> Result<()> {
     let (ip_address, user_agent) = extract_client_info(req);
 
     let request = CreateActivityInput {
@@ -208,7 +211,7 @@ pub async fn log_time_off_activity(
     description: String,
     metadata: Option<HashMap<String, serde_json::Value>>,
     req: &HttpRequest,
-) -> Result<(), sqlx::Error> {
+) -> Result<()> {
     let (ip_address, user_agent) = extract_client_info(req);
 
     let request = CreateActivityInput {
@@ -237,7 +240,7 @@ pub async fn log_shift_swap_activity(
     description: String,
     metadata: Option<HashMap<String, serde_json::Value>>,
     req: &HttpRequest,
-) -> Result<(), sqlx::Error> {
+) -> Result<()> {
     let (ip_address, user_agent) = extract_client_info(req);
 
     let request = CreateActivityInput {
@@ -265,7 +268,7 @@ pub async fn log_skill_activity(
     description: String,
     metadata: Option<HashMap<String, serde_json::Value>>,
     req: &HttpRequest,
-) -> Result<(), sqlx::Error> {
+) -> Result<()> {
     let (ip_address, user_agent) = extract_client_info(req);
 
     let request = CreateActivityInput {

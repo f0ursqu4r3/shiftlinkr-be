@@ -26,6 +26,16 @@ pub async fn init_database(database_url: &str, run_migrations: bool) -> Result<P
     Ok(new_pool)
 }
 
-pub fn pool() -> &'static PgPool {
+pub async fn init_database_for_tests(database_url: &str, run_migrations: bool) -> Result<PgPool> {
+    // For tests, try to return existing pool if already set
+    if let Some(existing_pool) = DB_POOL.get() {
+        return Ok(existing_pool.clone());
+    }
+
+    // Otherwise initialize normally
+    init_database(database_url, run_migrations).await
+}
+
+pub fn get_pool() -> &'static PgPool {
     DB_POOL.get().expect("DB_POOL not initialized")
 }

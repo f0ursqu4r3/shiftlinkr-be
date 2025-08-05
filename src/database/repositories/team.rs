@@ -3,8 +3,8 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use crate::database::{
+    get_pool,
     models::{Team, TeamInput, TeamMember},
-    pool,
     utils::sql,
 };
 
@@ -35,7 +35,7 @@ pub async fn create_team(input: TeamInput) -> Result<Team> {
     .bind(input.location_id)
     .bind(now)
     .bind(now)
-    .fetch_one(pool())
+    .fetch_one(get_pool())
     .await?;
 
     Ok(team)
@@ -56,7 +56,7 @@ pub async fn get_team_by_id(id: Uuid) -> Result<Option<Team>> {
                 id = ?
         "#))
     .bind(id)
-    .fetch_optional(pool())
+    .fetch_optional(get_pool())
     .await?;
 
     Ok(team)
@@ -79,7 +79,7 @@ pub async fn get_teams_by_location(location_id: Uuid) -> Result<Vec<Team>> {
                 name
         "#))
     .bind(location_id)
-    .fetch_all(pool())
+    .fetch_all(get_pool())
     .await?;
 
     Ok(teams)
@@ -103,7 +103,7 @@ pub async fn get_all_teams_for_company(company_id: Uuid) -> Result<Vec<Team>> {
                 t.name
         "#))
     .bind(company_id)
-    .fetch_all(pool())
+    .fetch_all(get_pool())
     .await?;
 
     Ok(teams)
@@ -134,7 +134,7 @@ pub async fn update_team(id: Uuid, input: TeamInput) -> Result<Option<Team>> {
     .bind(input.location_id)
     .bind(now)
     .bind(id)
-    .fetch_optional(pool())
+    .fetch_optional(get_pool())
     .await?;
 
     Ok(team)
@@ -143,7 +143,7 @@ pub async fn update_team(id: Uuid, input: TeamInput) -> Result<Option<Team>> {
 pub async fn delete_team(id: Uuid) -> Result<Option<()>> {
     let result = sqlx::query(&sql("DELETE FROM teams WHERE id = ?"))
         .bind(id)
-        .execute(pool())
+        .execute(get_pool())
         .await?;
 
     Ok(if result.rows_affected() > 0 {
@@ -174,7 +174,7 @@ pub async fn add_team_member(team_id: Uuid, user_id: Uuid) -> Result<TeamMember>
     .bind(team_id)
     .bind(user_id)
     .bind(now)
-    .fetch_one(pool())
+    .fetch_one(get_pool())
     .await?;
 
     Ok(team_member)
@@ -193,7 +193,7 @@ pub async fn get_team_members(team_id: Uuid) -> Result<Vec<TeamMember>> {
                 team_id = ?
         "#))
     .bind(team_id)
-    .fetch_all(pool())
+    .fetch_all(get_pool())
     .await?;
 
     Ok(team_members)
@@ -208,7 +208,7 @@ pub async fn remove_team_member(team_id: Uuid, user_id: Uuid) -> Result<Option<(
             "#))
     .bind(team_id)
     .bind(user_id)
-    .execute(pool())
+    .execute(get_pool())
     .await?;
 
     Ok(if result.rows_affected() > 0 {
@@ -236,7 +236,7 @@ pub async fn get_user_teams(user_id: Uuid) -> Result<Vec<Team>> {
                 t.name
         "#))
     .bind(user_id)
-    .fetch_all(pool())
+    .fetch_all(get_pool())
     .await?;
 
     Ok(teams)
