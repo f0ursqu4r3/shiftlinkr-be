@@ -2,14 +2,13 @@ use actix_web::{web, HttpRequest, HttpResponse, Result};
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::database::models::activity::Action;
-use crate::database::models::{ShiftSwapInput, ShiftSwapResponseStatus, ShiftSwapStatus};
-use crate::database::repositories::company::CompanyRepository;
-use crate::database::repositories::shift_swap::ShiftSwapRepository;
+use crate::database::models::{
+    activity::Action, ShiftSwapInput, ShiftSwapResponseStatus, ShiftSwapStatus,
+};
+use crate::database::repositories::{company as company_repo, shift_swap as shift_swap_repo};
 use crate::error::AppError;
 use crate::handlers::shared::ApiResponse;
-use crate::services::activity_logger::ActivityLogger;
-use crate::services::user_context::AsyncUserContext;
+use crate::services::{activity_logger, user_context::extract_context};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,12 +34,11 @@ pub struct ApprovalRequest {
 
 /// Create a new shift swap request
 pub async fn create_swap_request(
-    AsyncUserContext(user_context): AsyncUserContext,
-    repo: web::Data<ShiftSwapRepository>,
-    activity_logger: web::Data<ActivityLogger>,
     input: web::Json<ShiftSwapInput>,
     req: HttpRequest,
 ) -> Result<HttpResponse> {
+    let user_context = extract_context(&req).await?;
+
     // Users can only create swap requests for themselves unless they're managers/admins
     let request_input = input.into_inner();
     let original_shift_id = request_input.original_shift_id;
@@ -50,13 +48,15 @@ pub async fn create_swap_request(
 
     user_context.requires_same_user(requesting_user_id)?;
 
-    let swap_request = repo.create_swap_request(request_input).await.map_err(|e| {
-        log::error!("Failed to create swap request: {}", e);
-        AppError::DatabaseError(e)
-    })?; // Handle error and return early if creation fails
+    let swap_request = shift_swap_repo::create_swap_request(request_input)
+        .await
+        .map_err(|e| {
+            log::error!("Failed to create swap request: {}", e);
+            AppError::DatabaseError(e)
+        })?; // Handle error and return early if creation fails
     {
         // Log the swap creation activity
-        let metadata = ActivityLogger::metadata(vec![
+        let metadata = activity_logger::metadata(vec![
             ("original_shift_id", original_shift_id.to_string()),
             ("requesting_user_id", requesting_user_id.to_string()),
             (
@@ -65,20 +65,19 @@ pub async fn create_swap_request(
             ),
         ]);
 
-        if let Err(e) = activity_logger
-            .log_shift_swap_activity(
-                company_id,
-                Some(user_context.user_id()),
-                swap_request.id,
-                Action::CREATED,
-                format!(
-                    "Shift swap request created by user {} for shift {}",
-                    requesting_user_id, original_shift_id
-                ),
-                Some(metadata),
-                &req,
-            )
-            .await
+        if let Err(e) = activity_logger::log_shift_swap_activity(
+            company_id,
+            Some(user_context.user_id()),
+            swap_request.id,
+            Action::CREATED,
+            format!(
+                "Shift swap request created by user {} for shift {}",
+                requesting_user_id, original_shift_id
+            ),
+            Some(metadata),
+            &req,
+        )
+        .await
         {
             log::warn!("Failed to log shift swap creation activity: {}", e);
         }
@@ -89,10 +88,11 @@ pub async fn create_swap_request(
 
 /// Get shift swap requests with optional filtering
 pub async fn get_swap_requests(
-    AsyncUserContext(user_context): AsyncUserContext,
-    repo: web::Data<ShiftSwapRepository>,
     query: web::Query<SwapQuery>,
+    req: HttpRequest,
 ) -> Result<HttpResponse> {
+    let user_context = extract_context(&req).await?;
+
     let user_id = user_context.user_id();
     let company_id = user_context.strict_company_id()?;
     let requesting_user_id = query.requesting_user_id;
@@ -104,32 +104,28 @@ pub async fn get_swap_requests(
         user_context.requires_same_user(requesting_user_id.unwrap_or(user_id))?;
     }
 
-    let requests = repo
-        .get_swap_requests_with_details(
-            requesting_user_id,
-            company_id, // Add company_id
-            status_filter,
-            None, // swap_type
-        )
-        .await
-        .map_err(|e| {
-            log::error!("Failed to fetch swap requests: {}", e);
-            AppError::DatabaseError(e)
-        })?;
+    let requests = shift_swap_repo::get_swap_requests_with_details(
+        requesting_user_id,
+        company_id, // Add company_id
+        status_filter,
+        None, // swap_type
+    )
+    .await
+    .map_err(|e| {
+        log::error!("Failed to fetch swap requests: {}", e);
+        AppError::DatabaseError(e)
+    })?;
 
     Ok(ApiResponse::success(requests))
 }
 
 /// Get a specific shift swap request by ID
-pub async fn get_swap_request(
-    AsyncUserContext(user_context): AsyncUserContext,
-    repo: web::Data<ShiftSwapRepository>,
-    path: web::Path<Uuid>,
-) -> Result<HttpResponse> {
+pub async fn get_swap_request(path: web::Path<Uuid>, req: HttpRequest) -> Result<HttpResponse> {
+    let user_context = extract_context(&req).await?;
+
     let swap_id = path.into_inner();
 
-    let swap_request = repo
-        .find_swap_request_by_id(swap_id)
+    let swap_request = shift_swap_repo::find_swap_request_by_id(swap_id)
         .await
         .map_err(|e| {
             log::error!("Failed to fetch swap request: {}", e);
@@ -156,19 +152,16 @@ pub async fn get_swap_request(
 
 /// Respond to a shift swap request (for targeted swaps)
 pub async fn respond_to_swap(
-    AsyncUserContext(user_context): AsyncUserContext,
-    repo: web::Data<ShiftSwapRepository>,
-    company_repo: web::Data<CompanyRepository>,
-    activity_logger: web::Data<ActivityLogger>,
     path: web::Path<Uuid>,
     response: web::Json<SwapResponseRequest>,
     req: HttpRequest,
 ) -> Result<HttpResponse> {
+    let user_context = extract_context(&req).await?;
+
     let swap_id = path.into_inner();
 
     // First get the swap request to check permissions
-    let swap_request = repo
-        .find_swap_request_by_id(swap_id)
+    let swap_request = shift_swap_repo::find_swap_request_by_id(swap_id)
         .await
         .map_err(|e| {
             log::error!("Failed to fetch swap request for response: {}", e);
@@ -198,24 +191,22 @@ pub async fn respond_to_swap(
     let notes = response.notes.clone();
 
     // Note: Type mismatch issues - using workarounds for now
-    let updated_swap = repo
-        .create_swap_response(
-            swap_id,
-            user_context.user.id,
-            decision.clone(),
-            notes.clone(),
-        )
-        .await
-        .map_err(|e| {
-            log::error!("Failed to respond to swap request: {}", e);
-            AppError::DatabaseError(e)
-        })?;
+    let updated_swap = shift_swap_repo::create_swap_response(
+        swap_id,
+        user_context.user.id,
+        decision.clone(),
+        notes.clone(),
+    )
+    .await
+    .map_err(|e| {
+        log::error!("Failed to respond to swap request: {}", e);
+        AppError::DatabaseError(e)
+    })?;
 
-    if let Ok(Some(company)) = company_repo
-        .get_primary_company_for_user(user_context.user.id)
-        .await
+    if let Ok(Some(company)) =
+        company_repo::get_primary_company_for_user(user_context.user.id).await
     {
-        let metadata = ActivityLogger::metadata(vec![
+        let metadata = activity_logger::metadata(vec![
             ("original_shift_id", original_shift_id.to_string()),
             ("requesting_user_id", requesting_user_id.to_string()),
             (
@@ -227,20 +218,19 @@ pub async fn respond_to_swap(
             ("notes", response.notes.clone().unwrap_or_default()),
         ]);
 
-        if let Err(e) = activity_logger
-            .log_shift_swap_activity(
-                company.id,
-                Some(user_context.user.id),
-                swap_id, // Note: Type mismatch with i64 expected
-                Action::UPDATED,
-                format!(
-                    "User {} responded to swap request from {} with decision {:?}",
-                    user_context.user.id, requesting_user_id, decision
-                ),
-                Some(metadata),
-                &req,
-            )
-            .await
+        if let Err(e) = activity_logger::log_shift_swap_activity(
+            company.id,
+            Some(user_context.user.id),
+            swap_id, // Note: Type mismatch with i64 expected
+            Action::UPDATED,
+            format!(
+                "User {} responded to swap request from {} with decision {:?}",
+                user_context.user.id, requesting_user_id, decision
+            ),
+            Some(metadata),
+            &req,
+        )
+        .await
         {
             log::warn!("Failed to log swap response activity: {}", e);
         }
@@ -251,19 +241,17 @@ pub async fn respond_to_swap(
 
 /// Approve a shift swap request (managers/admins only)
 pub async fn approve_swap_request(
-    AsyncUserContext(user_context): AsyncUserContext,
-    shift_swap_repo: web::Data<ShiftSwapRepository>,
-    activity_logger: web::Data<ActivityLogger>,
     path: web::Path<Uuid>,
     approval: web::Json<ApprovalRequest>,
     req: HttpRequest,
 ) -> Result<HttpResponse> {
+    let user_context = extract_context(&req).await?;
+
     user_context.requires_manager()?;
 
     let swap_id = path.into_inner();
 
-    let swap_request = shift_swap_repo
-        .find_swap_request_by_id(swap_id)
+    let swap_request = shift_swap_repo::find_swap_request_by_id(swap_id)
         .await
         .map_err(|e| {
             log::error!("Error fetching swap request for approval: {}", e);
@@ -274,22 +262,21 @@ pub async fn approve_swap_request(
             AppError::NotFound("Swap request not found".to_string())
         })?;
 
-    let shift_swap = shift_swap_repo
-        .approve_swap(
-            swap_id,
-            user_context.user.id,
-            approval.notes.clone().unwrap_or_default(),
-        )
-        .await
-        .map_err(|e| {
-            log::error!("Error approving swap request: {}", e);
-            AppError::DatabaseError(e)
-        })?;
+    let shift_swap = shift_swap_repo::approve_swap(
+        swap_id,
+        user_context.user.id,
+        approval.notes.clone().unwrap_or_default(),
+    )
+    .await
+    .map_err(|e| {
+        log::error!("Error approving swap request: {}", e);
+        AppError::DatabaseError(e)
+    })?;
 
     // Log swap approval activity
     let company_id = user_context.strict_company_id()?;
 
-    let metadata = ActivityLogger::metadata(vec![
+    let metadata = activity_logger::metadata(vec![
         (
             "original_shift_id",
             swap_request.original_shift_id.to_string(),
@@ -307,20 +294,19 @@ pub async fn approve_swap_request(
         ("approval_notes", approval.notes.clone().unwrap_or_default()),
     ]);
 
-    if let Err(e) = activity_logger
-        .log_shift_swap_activity(
-            company_id,
-            Some(user_context.user.id),
-            swap_id, // Note: Type mismatch with expected Uuid vs i64
-            Action::APPROVED,
-            format!(
-                "Shift swap request approved for user {}",
-                swap_request.requesting_user_id
-            ),
-            Some(metadata),
-            &req,
-        )
-        .await
+    if let Err(e) = activity_logger::log_shift_swap_activity(
+        company_id,
+        Some(user_context.user.id),
+        swap_id, // Note: Type mismatch with expected Uuid vs i64
+        Action::APPROVED,
+        format!(
+            "Shift swap request approved for user {}",
+            swap_request.requesting_user_id
+        ),
+        Some(metadata),
+        &req,
+    )
+    .await
     {
         log::warn!("Failed to log swap approval activity: {}", e);
     }
@@ -330,19 +316,17 @@ pub async fn approve_swap_request(
 
 /// Deny a shift swap request (managers/admins only)
 pub async fn deny_swap_request(
-    AsyncUserContext(user_context): AsyncUserContext,
-    shift_swap_repo: web::Data<ShiftSwapRepository>,
-    activity_logger: web::Data<ActivityLogger>,
     path: web::Path<Uuid>,
     denial: web::Json<ApprovalRequest>,
     req: HttpRequest,
 ) -> Result<HttpResponse> {
+    let user_context = extract_context(&req).await?;
+
     user_context.requires_manager()?;
 
     let swap_id = path.into_inner();
 
-    let swap_request = shift_swap_repo
-        .find_swap_request_by_id(swap_id)
+    let swap_request = shift_swap_repo::find_swap_request_by_id(swap_id)
         .await
         .map_err(|e| {
             log::error!("Error fetching swap request for denial: {}", e);
@@ -353,22 +337,21 @@ pub async fn deny_swap_request(
             AppError::NotFound("Swap request not found".to_string())
         })?;
 
-    let shift_swap = shift_swap_repo
-        .deny_swap(
-            swap_id,
-            user_context.user.id,
-            denial.notes.clone().unwrap_or_default(),
-        )
-        .await
-        .map_err(|e| {
-            log::error!("Error denying swap request: {}", e);
-            AppError::DatabaseError(e)
-        })?;
+    let shift_swap = shift_swap_repo::deny_swap(
+        swap_id,
+        user_context.user.id,
+        denial.notes.clone().unwrap_or_default(),
+    )
+    .await
+    .map_err(|e| {
+        log::error!("Error denying swap request: {}", e);
+        AppError::DatabaseError(e)
+    })?;
 
     let company_id = user_context.strict_company_id()?;
     // Log swap denial activity
 
-    let metadata = ActivityLogger::metadata(vec![
+    let metadata = activity_logger::metadata(vec![
         (
             "original_shift_id",
             swap_request.original_shift_id.to_string(),
@@ -386,20 +369,19 @@ pub async fn deny_swap_request(
         ("denial_notes", denial.notes.clone().unwrap_or_default()),
     ]);
 
-    if let Err(e) = activity_logger
-        .log_shift_swap_activity(
-            company_id,
-            Some(user_context.user.id),
-            swap_id, // Note: Type mismatch with expected Uuid vs i64
-            Action::REJECTED,
-            format!(
-                "Shift swap request denied for user {}",
-                swap_request.requesting_user_id
-            ),
-            Some(metadata),
-            &req,
-        )
-        .await
+    if let Err(e) = activity_logger::log_shift_swap_activity(
+        company_id,
+        Some(user_context.user.id),
+        swap_id, // Note: Type mismatch with expected Uuid vs i64
+        Action::REJECTED,
+        format!(
+            "Shift swap request denied for user {}",
+            swap_request.requesting_user_id
+        ),
+        Some(metadata),
+        &req,
+    )
+    .await
     {
         log::warn!("Failed to log swap denial activity: {}", e);
     }

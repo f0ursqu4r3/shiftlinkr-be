@@ -7,6 +7,7 @@ use be::database::init_database;
 use be::database::models::{AddEmployeeToCompanyInput, CompanyRole, CreateCompanyInput, User};
 use be::database::repositories::activity::ActivityRepository;
 use be::database::repositories::company::CompanyRepository;
+use be::database::repositories::location::LocationRepository;
 use be::database::repositories::password_reset::PasswordResetTokenRepository;
 use be::database::repositories::pto_balance::PtoBalanceRepository;
 use be::database::repositories::time_off::TimeOffRepository;
@@ -101,6 +102,50 @@ pub async fn create_test_repositories(
     )
 }
 
+/// Create admin app data for tests (replacement for old AppState-based function)
+pub async fn create_admin_app_data() -> (
+    web::Data<LocationRepository>,
+    web::Data<LocationRepository>, // location_repo_data
+    web::Data<CompanyRepository>,
+    web::Data<Config>,
+    web::Data<ActivityLogger>,
+    TestContext,
+) {
+    setup_test_env();
+    let ctx = TestContext::new().await.unwrap();
+
+    let location_repo_data = web::Data::new(LocationRepository::new(ctx.pool.clone()));
+    let company_repo_data = web::Data::new(CompanyRepository::new(ctx.pool.clone()));
+    let config_data = web::Data::new(ctx.config.clone());
+    let activity_logger_data = web::Data::new(ctx.activity_logger.clone());
+
+    (
+        location_repo_data.clone(), // First param for backwards compatibility
+        location_repo_data,         // Second param is the actual location repo
+        company_repo_data,
+        config_data,
+        activity_logger_data,
+        ctx,
+    )
+}
+
+/// Create simplified app services for tests that don't need locations
+pub async fn create_test_app_services() -> (
+    web::Data<CompanyRepository>,
+    web::Data<Config>,
+    web::Data<ActivityLogger>,
+    TestContext,
+) {
+    setup_test_env();
+    let ctx = TestContext::new().await.unwrap();
+
+    let company_repo_data = web::Data::new(CompanyRepository::new(ctx.pool.clone()));
+    let config_data = web::Data::new(ctx.config.clone());
+    let activity_logger_data = web::Data::new(ctx.activity_logger.clone());
+
+    (company_repo_data, config_data, activity_logger_data, ctx)
+}
+
 pub async fn create_admin_user(ctx: &TestContext) -> String {
     // Create a test company first
     let company_repo = CompanyRepository::new(ctx.pool.clone());
@@ -175,6 +220,40 @@ pub async fn make_user_admin_of_default_company(
         .await?;
 
     Ok(())
+}
+
+/// Helper function to make a user an admin using string user_id (for backward compatibility)
+pub async fn make_user_admin_of_default_company_str(
+    company_repo: &CompanyRepository,
+    user_id_str: &str,
+) -> Result<Uuid> {
+    let user_id = Uuid::parse_str(user_id_str)?;
+
+    // Create a default company for testing
+    let create_company_input = CreateCompanyInput {
+        name: "Test Company".to_string(),
+        description: None,
+        website: None,
+        phone: None,
+        email: Some("test@company.com".to_string()),
+        address: None,
+        logo_url: None,
+        timezone: Some("UTC".to_string()),
+    };
+    let company = company_repo.create_company(&create_company_input).await?;
+
+    let add_employee_request = AddEmployeeToCompanyInput {
+        user_id,
+        role: Some(CompanyRole::Admin),
+        is_primary: Some(true),
+        hire_date: None,
+    };
+
+    company_repo
+        .add_employee_to_company(company.id, &add_employee_request)
+        .await?;
+
+    Ok(company.id)
 }
 
 /// Helper function to register a user and get auth token

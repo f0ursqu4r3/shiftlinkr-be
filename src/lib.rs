@@ -8,7 +8,6 @@ pub mod services;
 
 // Re-export commonly used types
 pub use config::Config;
-pub use services::AuthService;
 
 // Re-export database types
 pub use database::{init_database, repositories};

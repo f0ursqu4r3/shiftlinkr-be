@@ -1,55 +1,44 @@
 use anyhow::Result;
 use chrono::{Duration, Utc};
-use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::database::models::PasswordResetToken;
+use crate::database::{models::PasswordResetToken, pool};
 
-#[derive(Clone)]
-pub struct PasswordResetTokenRepository {
-    pool: PgPool,
-}
-
-impl PasswordResetTokenRepository {
-    pub fn new(pool: PgPool) -> Self {
-        Self { pool }
-    }
-
-    /// Generate a cryptographically secure random token
-    fn generate_secure_token() -> String {
-        use rand::Rng;
-        const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
+/// Generate a cryptographically secure random token
+fn generate_secure_token() -> String {
+    use rand::Rng;
+    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
                                 abcdefghijklmnopqrstuvwxyz\
                                 0123456789";
-        const TOKEN_LEN: usize = 64;
-        let mut rng = rand::rng();
+    const TOKEN_LEN: usize = 64;
+    let mut rng = rand::rng();
 
-        (0..TOKEN_LEN)
-            .map(|_| {
-                let idx = rng.random_range(0..CHARSET.len());
-                CHARSET[idx] as char
-            })
-            .collect()
-    }
+    (0..TOKEN_LEN)
+        .map(|_| {
+            let idx = rng.random_range(0..CHARSET.len());
+            CHARSET[idx] as char
+        })
+        .collect()
+}
 
-    /// Create a new password reset token
-    pub async fn create_token(&self, user_id: Uuid) -> Result<PasswordResetToken> {
-        let token_id = Uuid::new_v4();
-        let token = Self::generate_secure_token();
-        let expires_at = Utc::now() + Duration::hours(1); // 1 hour expiration
-        let created_at = Utc::now();
+/// Create a new password reset token
+pub async fn create_token(user_id: Uuid) -> Result<PasswordResetToken> {
+    let token_id = Uuid::new_v4();
+    let token = generate_secure_token();
+    let expires_at = Utc::now() + Duration::hours(1); // 1 hour expiration
+    let created_at = Utc::now();
 
-        let reset_token = PasswordResetToken {
-            id: token_id,
-            user_id,
-            token: token.clone(),
-            expires_at,
-            used_at: None,
-            created_at,
-        };
+    let reset_token = PasswordResetToken {
+        id: token_id,
+        user_id,
+        token: token.clone(),
+        expires_at,
+        used_at: None,
+        created_at,
+    };
 
-        sqlx::query(
-            r#"
+    sqlx::query(
+        r#"
             INSERT INTO
                 password_reset_tokens (
                     id,
@@ -61,24 +50,24 @@ impl PasswordResetTokenRepository {
             VALUES
                 ($1, $2, $3, $4, $5)
             "#,
-        )
-        .bind(&reset_token.id)
-        .bind(&reset_token.user_id)
-        .bind(&reset_token.token)
-        .bind(&reset_token.expires_at)
-        .bind(&reset_token.created_at)
-        .execute(&self.pool)
-        .await?;
+    )
+    .bind(&reset_token.id)
+    .bind(&reset_token.user_id)
+    .bind(&reset_token.token)
+    .bind(&reset_token.expires_at)
+    .bind(&reset_token.created_at)
+    .execute(pool())
+    .await?;
 
-        Ok(reset_token)
-    }
+    Ok(reset_token)
+}
 
-    /// Find a valid (unused and not expired) token
-    pub async fn find_valid_token(&self, token: &str) -> Result<Option<PasswordResetToken>> {
-        let now = Utc::now();
+/// Find a valid (unused and not expired) token
+pub async fn find_valid_token(token: &str) -> Result<Option<PasswordResetToken>> {
+    let now = Utc::now();
 
-        let result = sqlx::query_as::<_, PasswordResetToken>(
-            r#"
+    let result = sqlx::query_as::<_, PasswordResetToken>(
+        r#"
             SELECT
                 id,
                 user_id,
@@ -93,52 +82,51 @@ impl PasswordResetTokenRepository {
                 AND used_at IS NULL
                 AND expires_at > $2
             "#,
-        )
+    )
+    .bind(token)
+    .bind(now)
+    .fetch_optional(pool())
+    .await?;
+
+    Ok(result)
+}
+
+/// Mark a token as used
+pub async fn mark_token_used(token: &str) -> Result<()> {
+    let now = Utc::now();
+
+    sqlx::query("UPDATE password_reset_tokens SET used_at = $1 WHERE token = $2")
+        .bind(now)
         .bind(token)
-        .bind(now)
-        .fetch_optional(&self.pool)
+        .execute(pool())
         .await?;
 
-        Ok(result)
-    }
+    Ok(())
+}
 
-    /// Mark a token as used
-    pub async fn mark_token_used(&self, token: &str) -> Result<()> {
-        let now = Utc::now();
+/// Clean up expired tokens (optional cleanup method)
+pub async fn cleanup_expired_tokens() -> Result<u64> {
+    let now = Utc::now();
 
-        sqlx::query("UPDATE password_reset_tokens SET used_at = $1 WHERE token = $2")
-            .bind(now)
-            .bind(token)
-            .execute(&self.pool)
-            .await?;
-
-        Ok(())
-    }
-
-    /// Clean up expired tokens (optional cleanup method)
-    pub async fn cleanup_expired_tokens(&self) -> Result<u64> {
-        let now = Utc::now();
-
-        let result = sqlx::query("DELETE FROM password_reset_tokens WHERE expires_at < $1")
-            .bind(now)
-            .execute(&self.pool)
-            .await?;
-
-        Ok(result.rows_affected())
-    }
-
-    /// Invalidate all tokens for a user (when password is reset)
-    pub async fn invalidate_user_tokens(&self, user_id: Uuid) -> Result<()> {
-        let now = Utc::now();
-
-        sqlx::query(
-            "UPDATE password_reset_tokens SET used_at = $1 WHERE user_id = $2 AND used_at IS NULL",
-        )
+    let result = sqlx::query("DELETE FROM password_reset_tokens WHERE expires_at < $1")
         .bind(now)
-        .bind(user_id)
-        .execute(&self.pool)
+        .execute(pool())
         .await?;
 
-        Ok(())
-    }
+    Ok(result.rows_affected())
+}
+
+/// Invalidate all tokens for a user (when password is reset)
+pub async fn invalidate_user_tokens(user_id: Uuid) -> Result<()> {
+    let now = Utc::now();
+
+    sqlx::query(
+        "UPDATE password_reset_tokens SET used_at = $1 WHERE user_id = $2 AND used_at IS NULL",
+    )
+    .bind(now)
+    .bind(user_id)
+    .execute(pool())
+    .await?;
+
+    Ok(())
 }

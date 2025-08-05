@@ -1,29 +1,19 @@
 use anyhow::Result;
 use chrono::{NaiveDate, Utc};
-use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::database::{
     models::{TimeOffRequest, TimeOffRequestInput, TimeOffStatus},
+    pool,
     utils::sql,
 };
+/// Create a new time-off request
+pub async fn create_request(input: TimeOffRequestInput) -> Result<TimeOffRequest> {
+    let now = Utc::now();
+    let request_type_str = input.request_type.to_string();
+    let status_str = TimeOffStatus::Pending.to_string();
 
-#[derive(Clone)]
-pub struct TimeOffRepository {
-    pool: PgPool,
-}
-
-impl TimeOffRepository {
-    pub fn new(pool: PgPool) -> Self {
-        Self { pool }
-    }
-    /// Create a new time-off request
-    pub async fn create_request(&self, input: TimeOffRequestInput) -> Result<TimeOffRequest> {
-        let now = Utc::now();
-        let request_type_str = input.request_type.to_string();
-        let status_str = TimeOffStatus::Pending.to_string();
-
-        let time_off_request = sqlx::query_as::<_, TimeOffRequest>(&sql(r#"
+    let time_off_request = sqlx::query_as::<_, TimeOffRequest>(&sql(r#"
             INSERT INTO
                 time_off_requests (
                     user_id,
@@ -52,30 +42,29 @@ impl TimeOffRepository {
                 created_at,
                 updated_at
         "#))
-        .bind(input.user_id)
-        .bind(input.company_id)
-        .bind(input.start_date)
-        .bind(input.end_date)
-        .bind(input.reason)
-        .bind(request_type_str)
-        .bind(status_str)
-        .bind(now)
-        .bind(now)
-        .fetch_one(&self.pool)
-        .await?;
+    .bind(input.user_id)
+    .bind(input.company_id)
+    .bind(input.start_date)
+    .bind(input.end_date)
+    .bind(input.reason)
+    .bind(request_type_str)
+    .bind(status_str)
+    .bind(now)
+    .bind(now)
+    .fetch_one(pool())
+    .await?;
 
-        Ok(time_off_request)
-    }
+    Ok(time_off_request)
+}
 
-    /// Get all time-off requests with optional filtering
-    pub async fn get_requests(
-        &self,
-        user_id: Option<Uuid>,
-        status: Option<TimeOffStatus>,
-        start_date: Option<NaiveDate>,
-        end_date: Option<NaiveDate>,
-    ) -> Result<Vec<TimeOffRequest>> {
-        let mut query = r#"
+/// Get all time-off requests with optional filtering
+pub async fn get_requests(
+    user_id: Option<Uuid>,
+    status: Option<TimeOffStatus>,
+    start_date: Option<NaiveDate>,
+    end_date: Option<NaiveDate>,
+) -> Result<Vec<TimeOffRequest>> {
+    let mut query = r#"
             SELECT
                 id,
                 user_id,
@@ -91,52 +80,52 @@ impl TimeOffRepository {
             FROM
                 time_off_requests
             "#
-        .to_string();
+    .to_string();
 
-        let mut params = Vec::new();
-        let mut conditions = vec![];
+    let mut params = Vec::new();
+    let mut conditions = vec![];
 
-        if let Some(uid) = user_id {
-            conditions.push(format!("user_id = ${}", params.len() + 1));
-            params.push(uid.to_string());
-        }
-
-        if let Some(s) = status {
-            conditions.push(format!("status = ${}", params.len() + 1));
-            params.push(s.to_string());
-        }
-
-        if let Some(sd) = start_date {
-            conditions.push(format!("start_date >= ${}", params.len() + 1));
-            params.push(sd.to_string());
-        }
-
-        if let Some(ed) = end_date {
-            conditions.push(format!("end_date <= ${}", params.len() + 1));
-            params.push(ed.to_string());
-        }
-
-        if !params.is_empty() {
-            query.push_str(" WHERE ");
-            query.push_str(&conditions.join(" AND "));
-        }
-
-        query.push_str(" ORDER BY created_at DESC");
-
-        let mut prepared = sqlx::query_as::<_, TimeOffRequest>(&query);
-        for param in params {
-            prepared = prepared.bind(param);
-        }
-
-        let requests = prepared.fetch_all(&self.pool).await?;
-
-        Ok(requests)
+    if let Some(uid) = user_id {
+        conditions.push(format!("user_id = ${}", params.len() + 1));
+        params.push(uid.to_string());
     }
 
-    /// Get a specific time-off request by ID
-    pub async fn get_request_by_id(&self, id: Uuid) -> Result<Option<TimeOffRequest>> {
-        let time_off_request = sqlx::query_as::<_, TimeOffRequest>(
-            r#"
+    if let Some(s) = status {
+        conditions.push(format!("status = ${}", params.len() + 1));
+        params.push(s.to_string());
+    }
+
+    if let Some(sd) = start_date {
+        conditions.push(format!("start_date >= ${}", params.len() + 1));
+        params.push(sd.to_string());
+    }
+
+    if let Some(ed) = end_date {
+        conditions.push(format!("end_date <= ${}", params.len() + 1));
+        params.push(ed.to_string());
+    }
+
+    if !params.is_empty() {
+        query.push_str(" WHERE ");
+        query.push_str(&conditions.join(" AND "));
+    }
+
+    query.push_str(" ORDER BY created_at DESC");
+
+    let mut prepared = sqlx::query_as::<_, TimeOffRequest>(&query);
+    for param in params {
+        prepared = prepared.bind(param);
+    }
+
+    let requests = prepared.fetch_all(pool()).await?;
+
+    Ok(requests)
+}
+
+/// Get a specific time-off request by ID
+pub async fn get_request_by_id(id: Uuid) -> Result<Option<TimeOffRequest>> {
+    let time_off_request = sqlx::query_as::<_, TimeOffRequest>(
+        r#"
             SELECT
                 id,
                 user_id,
@@ -154,25 +143,21 @@ impl TimeOffRepository {
             WHERE
                 id = $1
             "#,
-        )
-        .bind(id)
-        .fetch_optional(&self.pool)
-        .await?;
+    )
+    .bind(id)
+    .fetch_optional(pool())
+    .await?;
 
-        Ok(time_off_request)
-    }
+    Ok(time_off_request)
+}
 
-    /// Update a time-off request
-    pub async fn update_request(
-        &self,
-        id: Uuid,
-        input: TimeOffRequestInput,
-    ) -> Result<TimeOffRequest> {
-        let now = Utc::now();
-        let request_type_str = input.request_type.to_string();
+/// Update a time-off request
+pub async fn update_request(id: Uuid, input: TimeOffRequestInput) -> Result<TimeOffRequest> {
+    let now = Utc::now();
+    let request_type_str = input.request_type.to_string();
 
-        let time_off_request = sqlx::query_as::<_, TimeOffRequest>(
-            r#"
+    let time_off_request = sqlx::query_as::<_, TimeOffRequest>(
+        r#"
             UPDATE
                 time_off_requests
             SET
@@ -196,31 +181,30 @@ impl TimeOffRepository {
                 created_at,
                 updated_at
             "#,
-        )
-        .bind(input.start_date)
-        .bind(input.end_date)
-        .bind(input.reason)
-        .bind(request_type_str)
-        .bind(now)
-        .bind(id)
-        .fetch_one(&self.pool)
-        .await?;
+    )
+    .bind(input.start_date)
+    .bind(input.end_date)
+    .bind(input.reason)
+    .bind(request_type_str)
+    .bind(now)
+    .bind(id)
+    .fetch_one(pool())
+    .await?;
 
-        Ok(time_off_request)
-    }
+    Ok(time_off_request)
+}
 
-    /// Approve a time-off request
-    pub async fn approve_request(
-        &self,
-        id: Uuid,
-        approved_by: Uuid,
-        notes: Option<String>,
-    ) -> Result<TimeOffRequest> {
-        let now = Utc::now();
-        let status_str = TimeOffStatus::Approved.to_string();
+/// Approve a time-off request
+pub async fn approve_request(
+    id: Uuid,
+    approved_by: Uuid,
+    notes: Option<String>,
+) -> Result<TimeOffRequest> {
+    let now = Utc::now();
+    let status_str = TimeOffStatus::Approved.to_string();
 
-        let time_off_request = sqlx::query_as::<_, TimeOffRequest>(
-            r#"
+    let time_off_request = sqlx::query_as::<_, TimeOffRequest>(
+        r#"
             UPDATE time_off_requests
             SET
                 status = $1,
@@ -242,30 +226,29 @@ impl TimeOffRepository {
                 created_at,
                 updated_at
             "#,
-        )
-        .bind(status_str)
-        .bind(approved_by)
-        .bind(notes)
-        .bind(now)
-        .bind(id)
-        .fetch_one(&self.pool)
-        .await?;
+    )
+    .bind(status_str)
+    .bind(approved_by)
+    .bind(notes)
+    .bind(now)
+    .bind(id)
+    .fetch_one(pool())
+    .await?;
 
-        Ok(time_off_request)
-    }
+    Ok(time_off_request)
+}
 
-    /// Deny a time-off request
-    pub async fn deny_request(
-        &self,
-        id: Uuid,
-        denied_by: Uuid,
-        notes: Option<String>,
-    ) -> Result<TimeOffRequest> {
-        let now = Utc::now();
-        let status_str = TimeOffStatus::Denied.to_string();
+/// Deny a time-off request
+pub async fn deny_request(
+    id: Uuid,
+    denied_by: Uuid,
+    notes: Option<String>,
+) -> Result<TimeOffRequest> {
+    let now = Utc::now();
+    let status_str = TimeOffStatus::Denied.to_string();
 
-        let time_off_request = sqlx::query_as::<_, TimeOffRequest>(
-            r#"
+    let time_off_request = sqlx::query_as::<_, TimeOffRequest>(
+        r#"
             UPDATE
                 time_off_requests
             SET
@@ -288,25 +271,25 @@ impl TimeOffRepository {
                 created_at,
                 updated_at
             "#,
-        )
-        .bind(status_str)
-        .bind(denied_by)
-        .bind(notes)
-        .bind(now)
-        .bind(id)
-        .fetch_one(&self.pool)
-        .await?;
+    )
+    .bind(status_str)
+    .bind(denied_by)
+    .bind(notes)
+    .bind(now)
+    .bind(id)
+    .fetch_one(pool())
+    .await?;
 
-        Ok(time_off_request)
-    }
+    Ok(time_off_request)
+}
 
-    /// Cancel a time-off request
-    pub async fn cancel_request(&self, id: Uuid) -> Result<TimeOffRequest> {
-        let now = Utc::now();
-        let status_str = TimeOffStatus::Cancelled.to_string();
+/// Cancel a time-off request
+pub async fn cancel_request(id: Uuid) -> Result<TimeOffRequest> {
+    let now = Utc::now();
+    let status_str = TimeOffStatus::Cancelled.to_string();
 
-        let time_off_request = sqlx::query_as::<_, TimeOffRequest>(
-            r#"
+    let time_off_request = sqlx::query_as::<_, TimeOffRequest>(
+        r#"
             UPDATE time_off_requests
             SET
                 status = $1,
@@ -326,23 +309,22 @@ impl TimeOffRepository {
                 created_at,
                 updated_at
             "#,
-        )
-        .bind(status_str)
-        .bind(now)
+    )
+    .bind(status_str)
+    .bind(now)
+    .bind(id)
+    .fetch_one(pool())
+    .await?;
+
+    Ok(time_off_request)
+}
+
+/// Delete a time-off request
+pub async fn delete_request(id: Uuid) -> Result<()> {
+    sqlx::query("DELETE FROM time_off_requests WHERE id = $1")
         .bind(id)
-        .fetch_one(&self.pool)
+        .execute(pool())
         .await?;
 
-        Ok(time_off_request)
-    }
-
-    /// Delete a time-off request
-    pub async fn delete_request(&self, id: Uuid) -> Result<()> {
-        sqlx::query("DELETE FROM time_off_requests WHERE id = $1")
-            .bind(id)
-            .execute(&self.pool)
-            .await?;
-
-        Ok(())
-    }
+    Ok(())
 }

@@ -1,6 +1,5 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::database::{
@@ -8,21 +7,16 @@ use crate::database::{
         Shift, ShiftSwap, ShiftSwapInput, ShiftSwapResponse, ShiftSwapResponseStatus,
         ShiftSwapStatus, ShiftSwapType, UserInfo,
     },
+    pool,
     utils::sql,
     Result,
 };
-
-#[derive(Clone)]
-pub struct ShiftSwapRepository {
-    pool: PgPool,
-}
 
 #[derive(sqlx::FromRow)]
 struct ShiftSwapDetailRaw {
     id: Uuid,
     swap_type: ShiftSwapType,
     requesting_user_id: Uuid,
-    original_shift_id: Uuid,
     status: ShiftSwapStatus,
     notes: Option<String>,
     created_at: DateTime<Utc>,
@@ -58,26 +52,21 @@ pub struct ShiftSwapDetail {
     pub responses: Vec<ShiftSwapResponse>,
 }
 
-impl ShiftSwapRepository {
-    pub fn new(pool: PgPool) -> Self {
-        Self { pool }
-    }
+/// Create a new shift swap request
+pub async fn create_swap_request(input: ShiftSwapInput) -> Result<ShiftSwap> {
+    let now = Utc::now();
 
-    /// Create a new shift swap request
-    pub async fn create_swap_request(&self, input: ShiftSwapInput) -> Result<ShiftSwap> {
-        let now = Utc::now();
+    // Determine initial status based on swap type
+    let initial_status = match input.swap_type {
+        ShiftSwapType::Open => ShiftSwapStatus::Open,
+        ShiftSwapType::Targeted => ShiftSwapStatus::Pending,
+    };
 
-        // Determine initial status based on swap type
-        let initial_status = match input.swap_type {
-            ShiftSwapType::Open => ShiftSwapStatus::Open,
-            ShiftSwapType::Targeted => ShiftSwapStatus::Pending,
-        };
+    let swap_type_str = input.swap_type.to_string();
+    let status_str = initial_status.to_string();
 
-        let swap_type_str = input.swap_type.to_string();
-        let status_str = initial_status.to_string();
-
-        let shift_swap = sqlx::query_as::<_, ShiftSwap>(
-            r#"
+    let shift_swap = sqlx::query_as::<_, ShiftSwap>(
+        r#"
             INSERT INTO
                 shift_swaps (
                     requesting_user_id,
@@ -106,33 +95,32 @@ impl ShiftSwapRepository {
                 created_at,
                 updated_at
             "#,
-        )
-        .bind(input.requesting_user_id)
-        .bind(input.original_shift_id)
-        .bind(input.target_user_id)
-        .bind(input.target_shift_id)
-        .bind(input.notes)
-        .bind(swap_type_str)
-        .bind(status_str)
-        .bind(now)
-        .bind(now)
-        .fetch_one(&self.pool)
-        .await?;
+    )
+    .bind(input.requesting_user_id)
+    .bind(input.original_shift_id)
+    .bind(input.target_user_id)
+    .bind(input.target_shift_id)
+    .bind(input.notes)
+    .bind(swap_type_str)
+    .bind(status_str)
+    .bind(now)
+    .bind(now)
+    .fetch_one(pool())
+    .await?;
 
-        Ok(shift_swap)
-    }
+    Ok(shift_swap)
+}
 
-    /// Get all swap requests with optional filtering
-    pub async fn get_swap_requests_for_company(
-        &self,
-        user_id: Option<Uuid>,
-        company_id: Uuid,
-        status: Option<ShiftSwapStatus>,
-        swap_type: Option<ShiftSwapType>,
-    ) -> Result<Vec<ShiftSwap>> {
-        // For simplicity, just get all and filter in memory for now
-        let shift_swaps = sqlx::query_as::<_, ShiftSwap>(
-            r#"
+/// Get all swap requests with optional filtering
+pub async fn get_swap_requests_for_company(
+    user_id: Option<Uuid>,
+    company_id: Uuid,
+    status: Option<ShiftSwapStatus>,
+    swap_type: Option<ShiftSwapType>,
+) -> Result<Vec<ShiftSwap>> {
+    // For simplicity, just get all and filter in memory for now
+    let shift_swaps = sqlx::query_as::<_, ShiftSwap>(
+        r#"
             SELECT
                 id,
                 requesting_user_id,
@@ -153,42 +141,42 @@ impl ShiftSwapRepository {
             ORDER BY
                 created_at DESC
             "#,
-        )
-        .bind(company_id)
-        .fetch_all(&self.pool)
-        .await?;
+    )
+    .bind(company_id)
+    .fetch_all(pool())
+    .await?;
 
-        let mut swaps = Vec::new();
-        for swap in shift_swaps {
-            // Apply filters
-            if let Some(uid) = user_id {
-                if swap.requesting_user_id != uid && swap.target_user_id.as_ref() != Some(&uid) {
-                    continue;
-                }
+    let mut swaps = Vec::new();
+    for swap in shift_swaps {
+        // Apply filters
+        if let Some(uid) = user_id {
+            if swap.requesting_user_id != uid && swap.target_user_id.as_ref() != Some(&uid) {
+                continue;
             }
-
-            if let Some(ref s) = status {
-                if &swap.status != s {
-                    continue;
-                }
-            }
-
-            if let Some(ref st) = swap_type {
-                if &swap.swap_type != st {
-                    continue;
-                }
-            }
-
-            swaps.push(swap);
         }
 
-        Ok(swaps)
+        if let Some(ref s) = status {
+            if &swap.status != s {
+                continue;
+            }
+        }
+
+        if let Some(ref st) = swap_type {
+            if &swap.swap_type != st {
+                continue;
+            }
+        }
+
+        swaps.push(swap);
     }
 
-    /// Get a swap request by ID
-    pub async fn find_swap_request_by_id(&self, id: Uuid) -> Result<Option<ShiftSwap>> {
-        let shift_swap = sqlx::query_as::<_, ShiftSwap>(
-            r#"
+    Ok(swaps)
+}
+
+/// Get a swap request by ID
+pub async fn find_swap_request_by_id(id: Uuid) -> Result<Option<ShiftSwap>> {
+    let shift_swap = sqlx::query_as::<_, ShiftSwap>(
+        r#"
             SELECT
                 id,
                 requesting_user_id,
@@ -207,26 +195,21 @@ impl ShiftSwapRepository {
             WHERE
                 id = $1
             "#,
-        )
-        .bind(id)
-        .fetch_optional(&self.pool)
-        .await?;
+    )
+    .bind(id)
+    .fetch_optional(pool())
+    .await?;
 
-        Ok(shift_swap)
-    }
+    Ok(shift_swap)
+}
 
-    /// Approve a swap request (managers/admins only)
-    pub async fn approve_swap(
-        &self,
-        id: Uuid,
-        approved_by: Uuid,
-        notes: String,
-    ) -> Result<ShiftSwap> {
-        let now = Utc::now();
-        let status_str = ShiftSwapStatus::Approved.to_string();
+/// Approve a swap request (managers/admins only)
+pub async fn approve_swap(id: Uuid, approved_by: Uuid, notes: String) -> Result<ShiftSwap> {
+    let now = Utc::now();
+    let status_str = ShiftSwapStatus::Approved.to_string();
 
-        let shift_swap = sqlx::query_as::<_, ShiftSwap>(
-            r#"
+    let shift_swap = sqlx::query_as::<_, ShiftSwap>(
+        r#"
             UPDATE
                 shift_swaps
             SET
@@ -250,25 +233,25 @@ impl ShiftSwapRepository {
                 created_at,
                 updated_at
             "#,
-        )
-        .bind(status_str)
-        .bind(approved_by)
-        .bind(notes)
-        .bind(now)
-        .bind(id)
-        .fetch_one(&self.pool)
-        .await?;
+    )
+    .bind(status_str)
+    .bind(approved_by)
+    .bind(notes)
+    .bind(now)
+    .bind(id)
+    .fetch_one(pool())
+    .await?;
 
-        Ok(shift_swap)
-    }
+    Ok(shift_swap)
+}
 
-    /// Deny a swap request (managers/admins only)
-    pub async fn deny_swap(&self, id: Uuid, denied_by: Uuid, notes: String) -> Result<ShiftSwap> {
-        let now = Utc::now();
-        let status_str = ShiftSwapStatus::Denied.to_string();
+/// Deny a swap request (managers/admins only)
+pub async fn deny_swap(id: Uuid, denied_by: Uuid, notes: String) -> Result<ShiftSwap> {
+    let now = Utc::now();
+    let status_str = ShiftSwapStatus::Denied.to_string();
 
-        let shift_swap = sqlx::query_as::<_, ShiftSwap>(
-            r#"
+    let shift_swap = sqlx::query_as::<_, ShiftSwap>(
+        r#"
             UPDATE
                 shift_swaps
             SET
@@ -292,25 +275,25 @@ impl ShiftSwapRepository {
                 created_at,
                 updated_at
             "#,
-        )
-        .bind(status_str)
-        .bind(denied_by)
-        .bind(notes)
-        .bind(now)
-        .bind(id)
-        .fetch_one(&self.pool)
-        .await?;
+    )
+    .bind(status_str)
+    .bind(denied_by)
+    .bind(notes)
+    .bind(now)
+    .bind(id)
+    .fetch_one(pool())
+    .await?;
 
-        Ok(shift_swap)
-    }
+    Ok(shift_swap)
+}
 
-    /// Cancel a swap request
-    pub async fn cancel_swap(&self, id: Uuid) -> Result<ShiftSwap> {
-        let now = Utc::now();
-        let status_str = ShiftSwapStatus::Cancelled.to_string();
+/// Cancel a swap request
+pub async fn cancel_swap(id: Uuid) -> Result<ShiftSwap> {
+    let now = Utc::now();
+    let status_str = ShiftSwapStatus::Cancelled.to_string();
 
-        let shift_swap = sqlx::query_as::<_, ShiftSwap>(
-            r#"
+    let shift_swap = sqlx::query_as::<_, ShiftSwap>(
+        r#"
             UPDATE
                 shift_swaps
             SET
@@ -332,23 +315,23 @@ impl ShiftSwapRepository {
                 created_at,
                 updated_at
             "#,
-        )
-        .bind(status_str)
-        .bind(now)
-        .bind(id)
-        .fetch_one(&self.pool)
-        .await?;
+    )
+    .bind(status_str)
+    .bind(now)
+    .bind(id)
+    .fetch_one(pool())
+    .await?;
 
-        Ok(shift_swap)
-    }
+    Ok(shift_swap)
+}
 
-    /// Complete a swap request
-    pub async fn complete_swap(&self, id: Uuid) -> Result<ShiftSwap> {
-        let now = Utc::now();
-        let status_str = ShiftSwapStatus::Completed.to_string();
+/// Complete a swap request
+pub async fn complete_swap(id: Uuid) -> Result<ShiftSwap> {
+    let now = Utc::now();
+    let status_str = ShiftSwapStatus::Completed.to_string();
 
-        let shift_swap = sqlx::query_as::<_, ShiftSwap>(
-            r#"
+    let shift_swap = sqlx::query_as::<_, ShiftSwap>(
+        r#"
             UPDATE
                 shift_swaps
             SET
@@ -370,25 +353,24 @@ impl ShiftSwapRepository {
                 created_at,
                 updated_at
             "#,
-        )
-        .bind(status_str)
-        .bind(now)
-        .bind(id)
-        .fetch_one(&self.pool)
-        .await?;
+    )
+    .bind(status_str)
+    .bind(now)
+    .bind(id)
+    .fetch_one(pool())
+    .await?;
 
-        Ok(shift_swap)
-    }
+    Ok(shift_swap)
+}
 
-    /// Get all swap requests with full details (user and shift info) for frontend
-    pub async fn get_swap_requests_with_details(
-        &self,
-        user_id: Option<Uuid>,
-        company_id: Uuid,
-        status: Option<ShiftSwapStatus>,
-        swap_type: Option<ShiftSwapType>,
-    ) -> Result<Vec<ShiftSwapDetail>> {
-        let mut query = r#"
+/// Get all swap requests with full details (user and shift info) for frontend
+pub async fn get_swap_requests_with_details(
+    user_id: Option<Uuid>,
+    company_id: Uuid,
+    status: Option<ShiftSwapStatus>,
+    swap_type: Option<ShiftSwapType>,
+) -> Result<Vec<ShiftSwapDetail>> {
+    let mut query = r#"
             SELECT
                 ss.id,
                 ss.swap_type,
@@ -422,80 +404,80 @@ impl ShiftSwapRepository {
                 JOIN users u ON u.id = ss.requesting_user_id
                 JOIN shifts s ON s.id = ss.original_shift_id
         "#
-        .to_string();
+    .to_string();
 
-        let mut conditions = vec!["s.company_id = ?"];
-        let mut params = vec![company_id.to_string()];
+    let mut conditions = vec!["s.company_id = ?"];
+    let mut params = vec![company_id.to_string()];
 
-        if let Some(status_val) = status {
-            conditions.push("ss.status = ?");
-            params.push(status_val.to_string());
-        }
-        if let Some(swap_type_val) = swap_type {
-            conditions.push("ss.swap_type = ?");
-            params.push(swap_type_val.to_string());
-        }
-        if let Some(uid) = user_id {
-            conditions.push("(ss.requesting_user_id = ? OR ss.target_user_id = ?)");
-            params.push(uid.to_string());
-            params.push(uid.to_string());
-        }
-
-        if !conditions.is_empty() {
-            query.push_str(" WHERE ");
-            query.push_str(&conditions.join(" AND "));
-        }
-
-        // Build base query with company filter
-        query.push_str(" ORDER BY ss.created_at DESC");
-
-        let sql_query = sql(&query);
-        let mut prepared = sqlx::query_as::<_, ShiftSwapDetailRaw>(&sql_query);
-        for param in params {
-            prepared = prepared.bind(param);
-        }
-
-        let rows = prepared.fetch_all(&self.pool).await?;
-
-        let shift_swap_response = rows
-            .into_iter()
-            .map(|row| ShiftSwapDetail {
-                id: row.id,
-                swap_type: row.swap_type,
-                requested_by: UserInfo {
-                    id: row.requesting_user_id,
-                    name: row.requesting_user_name,
-                    email: "".to_string(), // Will be filled by join query
-                },
-                original_shift: Shift {
-                    id: row.shift_id,
-                    company_id: row.shift_company_id,
-                    title: row.shift_title,
-                    description: row.shift_description,
-                    location_id: row.shift_location_id.unwrap_or_default(),
-                    team_id: row.shift_team_id,
-                    start_time: row.shift_start_time,
-                    end_time: row.shift_end_time,
-                    min_duration_minutes: row.shift_min_duration_minutes,
-                    max_duration_minutes: row.shift_max_duration_minutes,
-                    max_people: row.shift_max_people,
-                    status: row.shift_status.parse().unwrap_or_default(),
-                    created_at: row.shift_created_at,
-                    updated_at: row.shift_updated_at,
-                },
-                status: row.status,
-                reason: row.notes.unwrap_or_default(),
-                request_date: row.created_at,
-                responses: vec![],
-            })
-            .collect();
-
-        Ok(shift_swap_response)
+    if let Some(status_val) = status {
+        conditions.push("ss.status = ?");
+        params.push(status_val.to_string());
+    }
+    if let Some(swap_type_val) = swap_type {
+        conditions.push("ss.swap_type = ?");
+        params.push(swap_type_val.to_string());
+    }
+    if let Some(uid) = user_id {
+        conditions.push("(ss.requesting_user_id = ? OR ss.target_user_id = ?)");
+        params.push(uid.to_string());
+        params.push(uid.to_string());
     }
 
-    /// Get a swap request by ID with full details
-    pub async fn get_swap_by_id_with_details(&self, id: Uuid) -> Result<ShiftSwapDetail> {
-        let row = sqlx::query_as::<_, ShiftSwapDetailRaw>(&sql(r#"
+    if !conditions.is_empty() {
+        query.push_str(" WHERE ");
+        query.push_str(&conditions.join(" AND "));
+    }
+
+    // Build base query with company filter
+    query.push_str(" ORDER BY ss.created_at DESC");
+
+    let sql_query = sql(&query);
+    let mut prepared = sqlx::query_as::<_, ShiftSwapDetailRaw>(&sql_query);
+    for param in params {
+        prepared = prepared.bind(param);
+    }
+
+    let rows = prepared.fetch_all(pool()).await?;
+
+    let shift_swap_response = rows
+        .into_iter()
+        .map(|row| ShiftSwapDetail {
+            id: row.id,
+            swap_type: row.swap_type,
+            requested_by: UserInfo {
+                id: row.requesting_user_id,
+                name: row.requesting_user_name,
+                email: row.requesting_user_email,
+            },
+            original_shift: Shift {
+                id: row.shift_id,
+                company_id: row.shift_company_id,
+                title: row.shift_title,
+                description: row.shift_description,
+                location_id: row.shift_location_id.unwrap_or_default(),
+                team_id: row.shift_team_id,
+                start_time: row.shift_start_time,
+                end_time: row.shift_end_time,
+                min_duration_minutes: row.shift_min_duration_minutes,
+                max_duration_minutes: row.shift_max_duration_minutes,
+                max_people: row.shift_max_people,
+                status: row.shift_status.parse().unwrap_or_default(),
+                created_at: row.shift_created_at,
+                updated_at: row.shift_updated_at,
+            },
+            status: row.status,
+            reason: row.notes.unwrap_or_default(),
+            request_date: row.created_at,
+            responses: vec![],
+        })
+        .collect();
+
+    Ok(shift_swap_response)
+}
+
+/// Get a swap request by ID with full details
+pub async fn get_swap_by_id_with_details(id: Uuid) -> Result<ShiftSwapDetail> {
+    let row = sqlx::query_as::<_, ShiftSwapDetailRaw>(&sql(r#"
             SELECT
                 ss.id,
                 ss.swap_type,
@@ -531,47 +513,47 @@ impl ShiftSwapRepository {
             WHERE
                 ss.id = $1
         "#))
-        .bind(id)
-        .fetch_one(&self.pool)
-        .await?;
+    .bind(id)
+    .fetch_one(pool())
+    .await?;
 
-        let mut shift_swap_detail = ShiftSwapDetail {
-            id: row.id,
-            swap_type: row.swap_type,
-            requested_by: UserInfo {
-                id: row.requesting_user_id,
-                name: row.requesting_user_name,
-                email: "".to_string(), // Will be filled by join query
-            },
-            original_shift: Shift {
-                id: row.shift_id,
-                company_id: row.shift_company_id,
-                title: row.shift_title,
-                description: row.shift_description,
-                location_id: row.shift_location_id.unwrap_or_default(),
-                team_id: row.shift_team_id,
-                start_time: row.shift_start_time,
-                end_time: row.shift_end_time,
-                min_duration_minutes: row.shift_min_duration_minutes,
-                max_duration_minutes: row.shift_max_duration_minutes,
-                max_people: row.shift_max_people,
-                status: row.shift_status.parse().unwrap_or_default(),
-                created_at: row.shift_created_at,
-                updated_at: row.shift_updated_at,
-            },
-            status: row.status,
-            reason: row.notes.unwrap_or_default(),
-            request_date: row.created_at,
-            responses: vec![],
-        };
-        let responses = self.get_swap_responses(row.id).await?;
-        shift_swap_detail.responses = responses;
-        Ok(shift_swap_detail)
-    }
+    let mut shift_swap_detail = ShiftSwapDetail {
+        id: row.id,
+        swap_type: row.swap_type,
+        requested_by: UserInfo {
+            id: row.requesting_user_id,
+            name: row.requesting_user_name,
+            email: "".to_string(), // Will be filled by join query
+        },
+        original_shift: Shift {
+            id: row.shift_id,
+            company_id: row.shift_company_id,
+            title: row.shift_title,
+            description: row.shift_description,
+            location_id: row.shift_location_id.unwrap_or_default(),
+            team_id: row.shift_team_id,
+            start_time: row.shift_start_time,
+            end_time: row.shift_end_time,
+            min_duration_minutes: row.shift_min_duration_minutes,
+            max_duration_minutes: row.shift_max_duration_minutes,
+            max_people: row.shift_max_people,
+            status: row.shift_status.parse().unwrap_or_default(),
+            created_at: row.shift_created_at,
+            updated_at: row.shift_updated_at,
+        },
+        status: row.status,
+        reason: row.notes.unwrap_or_default(),
+        request_date: row.created_at,
+        responses: vec![],
+    };
+    let responses = get_swap_responses(row.id).await?;
+    shift_swap_detail.responses = responses;
+    Ok(shift_swap_detail)
+}
 
-    /// Get all responses for a specific swap request
-    pub async fn get_swap_responses(&self, swap_id: Uuid) -> Result<Vec<ShiftSwapResponse>> {
-        let responses = sqlx::query_as::<_, ShiftSwapResponse>(&sql(r#"
+/// Get all responses for a specific swap request
+pub async fn get_swap_responses(swap_id: Uuid) -> Result<Vec<ShiftSwapResponse>> {
+    let responses = sqlx::query_as::<_, ShiftSwapResponse>(&sql(r#"
             SELECT
                 id,
                 swap_id,
@@ -584,19 +566,18 @@ impl ShiftSwapRepository {
             WHERE
                 swap_id = ?
         "#))
-        .bind(swap_id)
-        .fetch_all(&self.pool)
-        .await?;
+    .bind(swap_id)
+    .fetch_all(pool())
+    .await?;
 
-        Ok(responses)
-    }
+    Ok(responses)
+}
 
-    pub async fn get_swap_response_for_user(
-        &self,
-        swap_id: Uuid,
-        user_id: Uuid,
-    ) -> Result<Option<ShiftSwapResponse>> {
-        let response = sqlx::query_as::<_, ShiftSwapResponse>(&sql(r#"
+pub async fn get_swap_response_for_user(
+    swap_id: Uuid,
+    user_id: Uuid,
+) -> Result<Option<ShiftSwapResponse>> {
+    let response = sqlx::query_as::<_, ShiftSwapResponse>(&sql(r#"
             SELECT
                 id,
                 swap_id,
@@ -609,24 +590,23 @@ impl ShiftSwapRepository {
             WHERE
                 swap_id = ? AND responding_user_id = ?
         "#))
-        .bind(swap_id)
-        .bind(user_id)
-        .fetch_optional(&self.pool)
-        .await?;
+    .bind(swap_id)
+    .bind(user_id)
+    .fetch_optional(pool())
+    .await?;
 
-        Ok(response)
-    }
+    Ok(response)
+}
 
-    pub async fn create_swap_response(
-        &self,
-        swap_id: Uuid,
-        user_id: Uuid,
-        response_type: ShiftSwapResponseStatus,
-        notes: Option<String>,
-    ) -> Result<ShiftSwapResponse> {
-        let now = Utc::now();
+pub async fn create_swap_response(
+    swap_id: Uuid,
+    user_id: Uuid,
+    response_type: ShiftSwapResponseStatus,
+    notes: Option<String>,
+) -> Result<ShiftSwapResponse> {
+    let now = Utc::now();
 
-        let shift_swap_response = sqlx::query_as::<_, ShiftSwapResponse>(&sql(r#"
+    let shift_swap_response = sqlx::query_as::<_, ShiftSwapResponse>(&sql(r#"
             INSERT INTO
                 shift_swap_responses (swap_id, responding_user_id, response_type, notes, created_at, updated_at)
             VALUES
@@ -653,22 +633,21 @@ impl ShiftSwapRepository {
         .bind(response_type)
         .bind(notes)
         .bind(now)
-        .fetch_one(&self.pool)
+        .fetch_one(pool())
         .await?;
 
-        Ok(shift_swap_response)
-    }
+    Ok(shift_swap_response)
+}
 
-    /// Update a swap response status
-    pub async fn update_swap_response_status(
-        &self,
-        response_id: Uuid,
-        response_type: ShiftSwapResponseStatus,
-        notes: Option<String>,
-    ) -> Result<ShiftSwapResponse> {
-        let now = Utc::now();
+/// Update a swap response status
+pub async fn update_swap_response_status(
+    response_id: Uuid,
+    response_type: ShiftSwapResponseStatus,
+    notes: Option<String>,
+) -> Result<ShiftSwapResponse> {
+    let now = Utc::now();
 
-        let shift_swap_response = sqlx::query_as::<_, ShiftSwapResponse>(&sql(r#"
+    let shift_swap_response = sqlx::query_as::<_, ShiftSwapResponse>(&sql(r#"
             UPDATE
                 shift_swap_responses
             SET
@@ -685,13 +664,12 @@ impl ShiftSwapRepository {
                 notes,
                 created_at
         "#))
-        .bind(response_type)
-        .bind(notes)
-        .bind(now)
-        .bind(response_id)
-        .fetch_one(&self.pool)
-        .await?;
+    .bind(response_type)
+    .bind(notes)
+    .bind(now)
+    .bind(response_id)
+    .fetch_one(pool())
+    .await?;
 
-        Ok(shift_swap_response)
-    }
+    Ok(shift_swap_response)
 }

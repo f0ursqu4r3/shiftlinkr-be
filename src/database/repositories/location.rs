@@ -1,28 +1,18 @@
 use anyhow::Result;
 use chrono::Utc;
-use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::database::{
     models::{Location, LocationInput},
+    pool,
     utils::sql,
 };
 
-#[derive(Clone)]
-pub struct LocationRepository {
-    pool: PgPool,
-}
-
-impl LocationRepository {
-    pub fn new(pool: PgPool) -> Self {
-        Self { pool }
-    }
-
-    // Location management methods
-    pub async fn create_location(&self, location: LocationInput) -> Result<Location> {
-        let now = Utc::now();
-        let location = sqlx::query_as::<_, Location>(
-            r#"
+// Location management methods
+pub async fn create_location(location: LocationInput) -> Result<Location> {
+    let now = Utc::now();
+    let location = sqlx::query_as::<_, Location>(
+        r#"
             INSERT INTO
                 locations (
                     name,
@@ -45,62 +35,59 @@ impl LocationRepository {
                 created_at,
                 updated_at
             "#,
-        )
-        .bind(location.name)
-        .bind(location.address)
-        .bind(location.phone)
-        .bind(location.email)
-        .bind(location.company_id)
-        .bind(now)
-        .bind(now)
-        .fetch_one(&self.pool)
-        .await?;
+    )
+    .bind(location.name)
+    .bind(location.address)
+    .bind(location.phone)
+    .bind(location.email)
+    .bind(location.company_id)
+    .bind(now)
+    .bind(now)
+    .fetch_one(pool())
+    .await?;
 
-        Ok(location)
-    }
+    Ok(location)
+}
 
-    pub async fn find_by_id(&self, id: Uuid) -> Result<Option<Location>> {
-        let location = sqlx::query_as::<_, Location>(
+pub async fn find_by_id(id: Uuid) -> Result<Option<Location>> {
+    let location = sqlx::query_as::<_, Location>(
             "SELECT id, name, address, phone, email, company_id, created_at, updated_at FROM locations WHERE id = $1"
         )
         .bind(id)
-        .fetch_optional(&self.pool)
+        .fetch_optional(pool())
         .await?;
 
-        Ok(location)
-    }
+    Ok(location)
+}
 
-    pub async fn find_by_team_id(&self, team_id: Uuid) -> Result<Option<Location>> {
-        let location = sqlx::query_as::<_, Location>(
+pub async fn find_by_team_id(team_id: Uuid) -> Result<Option<Location>> {
+    let location = sqlx::query_as::<_, Location>(
             "SELECT l.id, l.name, l.address, l.phone, l.email, l.company_id, l.created_at, l.updated_at FROM locations l INNER JOIN teams t ON l.id = t.location_id WHERE t.id = $1"
         )
         .bind(team_id)
-        .fetch_optional(&self.pool)
+        .fetch_optional(pool())
         .await?;
 
-        Ok(location)
-    }
+    Ok(location)
+}
 
-    pub async fn get_locations_by_company(&self, company_id: Uuid) -> Result<Vec<Location>> {
-        let locations = sqlx::query_as::<_, Location>(
+pub async fn get_locations_by_company(company_id: Uuid) -> Result<Vec<Location>> {
+    let locations = sqlx::query_as::<_, Location>(
             "SELECT id, name, address, phone, email, company_id, created_at, updated_at FROM locations WHERE company_id = $1 ORDER BY name"
         )
         .bind(company_id)
-        .fetch_all(&self.pool)
+        .fetch_all(pool())
         .await?;
 
-        Ok(locations)
+    Ok(locations)
+}
+
+pub async fn get_locations_by_company_ids(company_ids: Vec<Uuid>) -> Result<Vec<Location>> {
+    if company_ids.is_empty() {
+        return Ok(Vec::new());
     }
 
-    pub async fn get_locations_by_company_ids(
-        &self,
-        company_ids: Vec<Uuid>,
-    ) -> Result<Vec<Location>> {
-        if company_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        let locations = sqlx::query_as::<_, Location>(&sql(r#"
+    let locations = sqlx::query_as::<_, Location>(&sql(r#"
             SELECT
                 id,
                 name,
@@ -117,21 +104,17 @@ impl LocationRepository {
             ORDER BY
                 name
         "#))
-        .bind(&company_ids)
-        .fetch_all(&self.pool)
-        .await?;
+    .bind(&company_ids)
+    .fetch_all(pool())
+    .await?;
 
-        Ok(locations)
-    }
+    Ok(locations)
+}
 
-    pub async fn update_location(
-        &self,
-        id: Uuid,
-        input: LocationInput,
-    ) -> Result<Option<Location>> {
-        let now = Utc::now();
-        let location = sqlx::query_as::<_, Location>(
-            r#"
+pub async fn update_location(id: Uuid, input: LocationInput) -> Result<Option<Location>> {
+    let now = Utc::now();
+    let location = sqlx::query_as::<_, Location>(
+        r#"
             UPDATE
                 locations
             SET
@@ -153,30 +136,29 @@ impl LocationRepository {
                 created_at,
                 updated_at
             "#,
-        )
-        .bind(input.name)
-        .bind(input.address)
-        .bind(input.phone)
-        .bind(input.email)
-        .bind(input.company_id)
-        .bind(now)
+    )
+    .bind(input.name)
+    .bind(input.address)
+    .bind(input.phone)
+    .bind(input.email)
+    .bind(input.company_id)
+    .bind(now)
+    .bind(id)
+    .fetch_optional(pool())
+    .await?;
+
+    Ok(location)
+}
+
+pub async fn delete_location(id: Uuid) -> Result<Option<()>> {
+    let result = sqlx::query("DELETE FROM locations WHERE id = $1")
         .bind(id)
-        .fetch_optional(&self.pool)
+        .execute(pool())
         .await?;
 
-        Ok(location)
-    }
-
-    pub async fn delete_location(&self, id: Uuid) -> Result<Option<()>> {
-        let result = sqlx::query("DELETE FROM locations WHERE id = $1")
-            .bind(id)
-            .execute(&self.pool)
-            .await?;
-
-        Ok(if result.rows_affected() > 0 {
-            Some(())
-        } else {
-            None
-        })
-    }
+    Ok(if result.rows_affected() > 0 {
+        Some(())
+    } else {
+        None
+    })
 }

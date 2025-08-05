@@ -14,21 +14,3 @@ pub mod team;
 pub mod time_off;
 pub mod user;
 pub mod user_company;
-
-// Re-export all repositories for easy importing
-pub use activity::ActivityRepository;
-pub use company::CompanyRepository;
-pub use invite::InviteRepository;
-pub use location::LocationRepository;
-pub use password_reset::PasswordResetTokenRepository;
-pub use pto_balance::PtoBalanceRepository;
-pub use schedule::ScheduleRepository;
-pub use shift::ShiftRepository;
-pub use shift_claim::ShiftClaimRepository;
-pub use shift_swap::ShiftSwapRepository;
-pub use skill::SkillRepository;
-pub use stats::StatsRepository;
-pub use team::TeamRepository;
-pub use time_off::TimeOffRepository;
-pub use user::UserRepository;
-pub use user_company::UserCompanyRepository;

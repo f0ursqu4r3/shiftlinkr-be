@@ -5,18 +5,17 @@ use serde::Serialize;
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::config::Config;
+use crate::config::config;
 use crate::database::models::{
     Action, AddEmployeeToCompanyInput, CompanyInfo, CreateInviteInput, CreateUserInput,
     ForgotPasswordInput, GetInviteResponse, LoginInput, ResetPasswordInput, UserInfo,
 };
-use crate::database::repositories::invite::InviteRepository;
-use crate::database::repositories::UserRepository;
+use crate::database::repositories::{
+    company as company_repo, invite as invite_repo, user as user_repo,
+};
 use crate::error::AppError;
 use crate::handlers::shared::ApiResponse;
-use crate::repositories::CompanyRepository;
-use crate::services::user_context::AsyncUserContext;
-use crate::{ActivityLogger, AuthService};
+use crate::services::{activity_logger, auth, user_context::extract_context};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -32,13 +31,10 @@ pub struct InviteTokenResponse {
     pub expires_at: String,
 }
 
-pub async fn register(
-    auth_service: web::Data<AuthService>,
-    request: web::Json<CreateUserInput>,
-) -> Result<HttpResponse> {
+pub async fn register(request: web::Json<CreateUserInput>) -> Result<HttpResponse> {
     let register_request = request.into_inner();
 
-    let response = auth_service.register(register_request).await.map_err(|e| {
+    let response = auth::register(register_request).await.map_err(|e| {
         log::error!("Failed to register user: {}", e);
         AppError::DatabaseError(e)
     })?;
@@ -46,13 +42,10 @@ pub async fn register(
     Ok(ApiResponse::success(response))
 }
 
-pub async fn login(
-    auth_service: web::Data<AuthService>,
-    request: web::Json<LoginInput>,
-) -> Result<HttpResponse> {
+pub async fn login(request: web::Json<LoginInput>) -> Result<HttpResponse> {
     let login_request = request.into_inner();
 
-    let response = auth_service.login(login_request).await.map_err(|e| {
+    let response = auth::login(login_request).await.map_err(|e| {
         log::error!("Failed to login user: {}", e);
         AppError::DatabaseError(e)
     })?;
@@ -60,17 +53,16 @@ pub async fn login(
     Ok(ApiResponse::success(response))
 }
 
-pub async fn me(
-    AsyncUserContext(user_context): AsyncUserContext,
-    company_repository: web::Data<CompanyRepository>,
-) -> Result<HttpResponse> {
+pub async fn me(req: HttpRequest) -> Result<HttpResponse> {
+    // Extract user context from request
+    let user_context = extract_context(&req).await?;
+
     let user_id = user_context.user_id();
     // Get the user's information
     let user_info = UserInfo::from(user_context.user.clone());
 
     // Get user's companies
-    let companies = company_repository
-        .get_companies_for_user(user_id)
+    let companies = company_repo::get_companies_for_user(user_id)
         .await
         .map_err(|e| {
             log::error!("Failed to get companies for user {}: {}", user_id, e);
@@ -85,20 +77,13 @@ pub async fn me(
     Ok(ApiResponse::success(response))
 }
 
-pub async fn forgot_password(
-    auth_service: web::Data<AuthService>,
-    config: web::Data<Config>,
-    request: web::Json<ForgotPasswordInput>,
-) -> Result<HttpResponse> {
-    let token = auth_service
-        .forgot_password(&request.email)
-        .await
-        .map_err(|e| {
-            log::error!("Failed to send password reset email: {}", e);
-            AppError::DatabaseError(e)
-        })?;
+pub async fn forgot_password(request: web::Json<ForgotPasswordInput>) -> Result<HttpResponse> {
+    let token = auth::forgot_password(&request.email).await.map_err(|e| {
+        log::error!("Failed to send password reset email: {}", e);
+        AppError::DatabaseError(e)
+    })?;
 
-    if config.environment != "production" {
+    if config().environment != "production" {
         return Ok(ApiResponse::success(json!({ "token": token })));
     }
 
@@ -107,12 +92,8 @@ pub async fn forgot_password(
     ))
 }
 
-pub async fn reset_password(
-    auth_service: web::Data<AuthService>,
-    request: web::Json<ResetPasswordInput>,
-) -> Result<HttpResponse> {
-    auth_service
-        .reset_password(&request.token, &request.new_password)
+pub async fn reset_password(input: web::Json<ResetPasswordInput>) -> Result<HttpResponse> {
+    auth::reset_password(&input.token, &input.new_password)
         .await
         .map_err(|e| {
             log::error!("Failed to reset password: {}", e);
@@ -125,15 +106,11 @@ pub async fn reset_password(
 }
 
 pub async fn create_invite(
-    AsyncUserContext(user_context): AsyncUserContext,
-    activity_logger: web::Data<ActivityLogger>,
-    user_repo: web::Data<UserRepository>,
-    company_repo: web::Data<CompanyRepository>,
-    invite_repo: web::Data<InviteRepository>,
-    config: web::Data<Config>,
-    request: web::Json<CreateInviteInput>,
+    input: web::Json<CreateInviteInput>,
     req: HttpRequest,
 ) -> Result<HttpResponse> {
+    let user_context = extract_context(&req).await?;
+
     let user_id = user_context.user_id();
 
     user_context.requires_manager()?;
@@ -143,13 +120,12 @@ pub async fn create_invite(
         AppError::PermissionDenied("User does not belong to any company".to_string())
     })?;
 
-    if let Some(user) = user_repo.find_by_email(&request.email).await.map_err(|e| {
+    if let Some(user) = user_repo::find_by_email(&input.email).await.map_err(|e| {
         log::error!("Failed to check existing user: {}", e);
         AppError::DatabaseError(e)
     })? {
         // Check if user is already part of the company
-        if company_repo
-            .check_user_company_access(user.id, company_id)
+        if company_repo::check_user_company_access(user.id, company_id)
             .await
             .is_ok()
         {
@@ -160,32 +136,32 @@ pub async fn create_invite(
         }
     }
 
-    let invite_token = invite_repo
-        .create_invite_token(
-            &request.email,
-            user_id,
-            request.role.clone(),
-            company_id,
-            request.team_id,
-        )
-        .await
-        .map_err(|e| {
-            log::error!("Failed to create invite token: {}", e);
-            AppError::DatabaseError(e)
-        })?;
+    let invite_token = invite_repo::create_invite_token(
+        &input.email,
+        user_id,
+        input.role.clone(),
+        company_id,
+        input.team_id,
+    )
+    .await
+    .map_err(|e| {
+        log::error!("Failed to create invite token: {}", e);
+        AppError::DatabaseError(e)
+    })?;
 
     let invite_link = format!(
         "{}/auth/invite/{}",
-        config.client_base_url, invite_token.token
+        config().client_base_url,
+        invite_token.token
     );
 
     // Log invite creation activity
-    let metadata = ActivityLogger::metadata(vec![
-        (&"email", request.email.clone()),
-        (&"role", request.role.to_string()),
+    let metadata = activity_logger::metadata(vec![
+        (&"email", input.email.clone()),
+        (&"role", input.role.to_string()),
         (
             &"team_id",
-            request
+            input
                 .team_id
                 .map_or_else(|| "None".to_string(), |id| id.to_string()),
         ),
@@ -195,19 +171,18 @@ pub async fn create_invite(
         (&"inviter_id", user_id.to_string()),
     ]);
 
-    if let Err(err) = activity_logger
-        .log_activity(
-            company_id,
-            Some(user_id),
-            "invite_creation".to_string(),
-            "invite".to_string(),
-            invite_token.id,
-            Action::INVITED.to_string(),
-            format!("Invite created for email {}", request.email),
-            Some(metadata),
-            &req,
-        )
-        .await
+    if let Err(err) = activity_logger::log_activity(
+        company_id,
+        Some(user_id),
+        "invite_creation".to_string(),
+        "invite".to_string(),
+        invite_token.id,
+        Action::INVITED.to_string(),
+        format!("Invite created for email {}", input.email),
+        Some(metadata),
+        &req,
+    )
+    .await
     {
         log::error!("Failed to log invite creation activity: {}", err);
     }
@@ -225,16 +200,10 @@ pub async fn create_invite(
     Ok(ApiResponse::success(invite_token_response))
 }
 
-pub async fn get_invite(
-    invite_repo: web::Data<InviteRepository>,
-    user_repo: web::Data<UserRepository>,
-    company_repo: web::Data<CompanyRepository>,
-    path: web::Path<String>,
-) -> Result<HttpResponse> {
+pub async fn get_invite(path: web::Path<String>) -> Result<HttpResponse> {
     let token = path.into_inner();
 
-    let invite_token = invite_repo
-        .get_invite_token(&token)
+    let invite_token = invite_repo::get_invite_token(&token)
         .await
         .map_err(|e| {
             log::error!("Failed to get invite token: {}", e);
@@ -251,12 +220,12 @@ pub async fn get_invite(
     }
 
     // Get inviter name from user repository
-    let inviter_name = match user_repo.find_by_id(invite_token.inviter_id).await {
+    let inviter_name = match user_repo::find_by_id(invite_token.inviter_id).await {
         Ok(Some(user)) => user.name,
         _ => "Unknown".to_string(),
     };
 
-    let company_name = match company_repo.find_by_id(invite_token.company_id).await {
+    let company_name = match company_repo::find_by_id(invite_token.company_id).await {
         Ok(Some(company)) => company.name,
         _ => "Unknown".to_string(),
     };
@@ -274,17 +243,13 @@ pub async fn get_invite(
     Ok(ApiResponse::success(invite_response))
 }
 
-pub async fn accept_invite(
-    AsyncUserContext(user_context): AsyncUserContext,
-    invite_repo: web::Data<InviteRepository>,
-    company_repo: web::Data<CompanyRepository>,
-    token: Path<String>,
-) -> Result<HttpResponse> {
+pub async fn accept_invite(token: Path<String>, req: HttpRequest) -> Result<HttpResponse> {
+    let user_context = extract_context(&req).await?;
+
     let user = user_context.user;
 
     // Get invite token
-    let invite_token = invite_repo
-        .get_invite_token(&token)
+    let invite_token = invite_repo::get_invite_token(&token)
         .await
         .map_err(|err| {
             log::error!("Failed to get invite token: {}", err);
@@ -306,8 +271,7 @@ pub async fn accept_invite(
     }
 
     // Check if the user is already part of the company
-    if let Some(_) = company_repo
-        .check_user_company_access(user.id, invite_token.company_id)
+    if let Some(_) = company_repo::check_user_company_access(user.id, invite_token.company_id)
         .await
         .map_err(|e| {
             log::error!("Failed to check user company access: {}", e);
@@ -320,7 +284,7 @@ pub async fn accept_invite(
             user.id,
             invite_token.company_id
         );
-        if let Err(err) = invite_repo.mark_invite_token_as_used(&token).await {
+        if let Err(err) = invite_repo::mark_invite_token_as_used(&token).await {
             log::error!("Failed to mark invite token as used: {}", err);
         }
         return Err(
@@ -328,38 +292,66 @@ pub async fn accept_invite(
         );
     }
 
-    let has_primary_company = company_repo
-        .has_primary_company(user.id)
+    let has_primary_company = company_repo::has_primary_company(user.id)
         .await
         .unwrap_or(false);
 
-    company_repo
-        .add_employee_to_company(
-            invite_token.company_id,
-            &AddEmployeeToCompanyInput {
-                user_id: user.id,
-                role: Some(invite_token.role),
-                is_primary: Some(!has_primary_company), // Set primary company if user has no primary company
-                hire_date: None,                        // No hire date provided in invite
-            },
-        )
-        .await
-        .map_err(|e| {
-            log::error!("Failed to add user to company: {}", e);
-            AppError::DatabaseError(e)
-        })?;
+    company_repo::add_employee_to_company(
+        invite_token.company_id,
+        &AddEmployeeToCompanyInput {
+            user_id: user.id,
+            role: Some(invite_token.role.clone()),
+            is_primary: Some(!has_primary_company), // Set primary company if user has no primary company
+            hire_date: None,                        // No hire date provided in invite
+        },
+    )
+    .await
+    .map_err(|e| {
+        log::error!("Failed to add user to company: {}", e);
+        AppError::DatabaseError(e)
+    })?;
 
     // Mark invite as used
-    if let Err(err) = invite_repo.mark_invite_token_as_used(&token).await {
+    if let Err(err) = invite_repo::mark_invite_token_as_used(&token).await {
         log::error!("Failed to mark invite token as used: {}", err);
     };
+
+    // log the activity
+    let metadata = activity_logger::metadata(vec![
+        (&"email", user.email.clone()),
+        (&"role", invite_token.role.to_string()),
+        (
+            &"team_id",
+            invite_token
+                .team_id
+                .map_or_else(|| "None".to_string(), |id| id.to_string()),
+        ),
+        (&"company_id", invite_token.company_id.to_string()),
+        (&"inviter_id", invite_token.inviter_id.to_string()),
+    ]);
+
+    if let Err(err) = activity_logger::log_activity(
+        invite_token.company_id,
+        Some(user.id),
+        "invite_acceptance".to_string(),
+        "invite".to_string(),
+        invite_token.id,
+        Action::ACCEPTED.to_string(),
+        format!("Invite accepted for email {}", user.email),
+        Some(metadata),
+        &req,
+    )
+    .await
+    {
+        log::error!("Failed to log invite acceptance activity: {}", err);
+    }
+
     // Log successful invite acceptance
     // Return an Ok response with user info
     let user_info = UserInfo::from(user.clone());
 
     // Get user's companies
-    let companies = company_repo
-        .get_companies_for_user(user.id)
+    let companies = company_repo::get_companies_for_user(user.id)
         .await
         .map_err(|e| {
             log::error!("Failed to get companies for user {}: {}", user.id, e);
@@ -374,15 +366,11 @@ pub async fn accept_invite(
     Ok(ApiResponse::success(response))
 }
 
-pub async fn reject_invite(
-    AsyncUserContext(user_context): AsyncUserContext,
-    user_repo: web::Data<UserRepository>,
-    invite_repo: web::Data<InviteRepository>,
-    token: Path<String>,
-) -> Result<HttpResponse> {
+pub async fn reject_invite(token: Path<String>, req: HttpRequest) -> Result<HttpResponse> {
+    let user_context = extract_context(&req).await?;
+
     // Get invite token
-    let invite_token = invite_repo
-        .get_invite_token(&token)
+    let invite_token = invite_repo::get_invite_token(&token)
         .await
         .map_err(|e| {
             log::error!("Failed to get invite token: {}", e);
@@ -393,8 +381,7 @@ pub async fn reject_invite(
             AppError::NotFound("Invite token not found or expired".to_string())
         })?;
 
-    let user = user_repo
-        .find_by_email(&invite_token.email)
+    let user = user_repo::find_by_email(&invite_token.email)
         .await
         .map_err(|e| {
             log::error!("Failed to find user by email {}: {}", invite_token.email, e);
@@ -408,18 +395,47 @@ pub async fn reject_invite(
     // Check if the user rejecting the invite is the same as the user in the token
     user_context.requires_same_user(user.id)?;
 
+    // Log the rejection activity
+    let metadata = activity_logger::metadata(vec![
+        (&"email", invite_token.email.clone()),
+        (&"role", invite_token.role.to_string()),
+        (
+            &"team_id",
+            invite_token
+                .team_id
+                .map_or_else(|| "None".to_string(), |id| id.to_string()),
+        ),
+        (&"company_id", invite_token.company_id.to_string()),
+        (&"inviter_id", invite_token.inviter_id.to_string()),
+    ]);
+
+    if let Err(err) = activity_logger::log_activity(
+        invite_token.company_id,
+        Some(user.id),
+        "invite_rejection".to_string(),
+        "invite".to_string(),
+        invite_token.id,
+        Action::REJECTED.to_string(),
+        format!("Invite rejected for email {}", invite_token.email),
+        Some(metadata),
+        &req,
+    )
+    .await
+    {
+        log::error!("Failed to log invite rejection activity: {}", err);
+    }
+
     // Mark invite as used
-    if let Err(err) = invite_repo.mark_invite_token_as_used(&token).await {
+    if let Err(err) = invite_repo::mark_invite_token_as_used(&token).await {
         log::error!("Failed to mark invite token as used: {}", err);
     }
 
     Ok(ApiResponse::success("Invite rejected successfully"))
 }
 
-pub async fn get_my_invites(
-    AsyncUserContext(user_context): AsyncUserContext,
-    invite_repo: web::Data<InviteRepository>,
-) -> Result<HttpResponse> {
+pub async fn get_my_invites(req: HttpRequest) -> Result<HttpResponse> {
+    let user_context = extract_context(&req).await?;
+
     // Extract token from Authorization header
     let user_id = user_context.user_id();
 
@@ -430,8 +446,7 @@ pub async fn get_my_invites(
         AppError::PermissionDenied("User does not belong to any company".to_string())
     })?;
 
-    let invites = invite_repo
-        .get_invites_by_inviter(user_id, company_id)
+    let invites = invite_repo::get_invites_by_inviter(user_id, company_id)
         .await
         .map_err(|e| {
             log::error!("Failed to get invites for user {}: {}", user_id, e);
@@ -441,18 +456,14 @@ pub async fn get_my_invites(
     Ok(ApiResponse::success(invites))
 }
 
-pub async fn switch_company(
-    AsyncUserContext(user_context): AsyncUserContext,
-    company_repo: web::Data<CompanyRepository>,
-    auth_service: web::Data<AuthService>,
-    path: Path<Uuid>,
-) -> Result<HttpResponse> {
+pub async fn switch_company(path: Path<Uuid>, req: HttpRequest) -> Result<HttpResponse> {
+    let user_context = extract_context(&req).await?;
+
     let new_company_id = path.into_inner();
     let user_id = user_context.user_id();
 
     // Check if user belongs to the new company
-    company_repo
-        .check_user_company_access(user_id, new_company_id)
+    company_repo::check_user_company_access(user_id, new_company_id)
         .await
         .map_err(|e| {
             log::error!(
@@ -466,8 +477,7 @@ pub async fn switch_company(
             AppError::PermissionDenied("You don't have access to this company".to_string())
         })?;
 
-    let response = auth_service
-        .switch_company(user_id, new_company_id)
+    let response = auth::switch_company(user_id, new_company_id)
         .await
         .map_err(|e| {
             log::error!("Failed to switch company for user {}: {}", user_id, e);

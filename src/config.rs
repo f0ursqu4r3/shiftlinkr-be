@@ -1,5 +1,6 @@
 use anyhow::Result;
 use std::env;
+use std::sync::OnceLock;
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -13,12 +14,14 @@ pub struct Config {
     pub client_base_url: String,
 }
 
+static CONFIG: OnceLock<Config> = OnceLock::new();
+
 impl Config {
     pub fn from_env() -> Result<Self> {
         // Load .env file if it exists
         dotenvy::dotenv().ok();
 
-        Ok(Config {
+        let config = Config {
             database_url: env::var("DATABASE_URL")
                 .unwrap_or_else(|_| "postgres://@localhost:5432/shiftlinkr".to_string()),
             run_migrations: env::var("RUN_MIGRATIONS")
@@ -40,13 +43,17 @@ impl Config {
             environment: env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string()),
             client_base_url: env::var("BASE_URL")
                 .unwrap_or_else(|_| "http://localhost:3000".to_string()),
-        })
+        };
+        CONFIG
+            .set(config.clone())
+            .expect("Config can only be set once");
+        Ok(config)
     }
 
     /// Load configuration from environment variables only (without loading .env files)
     /// This is useful for testing where you want to control the environment directly
     pub fn from_env_only() -> Result<Self> {
-        Ok(Config {
+        let config = Config {
             database_url: env::var("DATABASE_URL")
                 .unwrap_or_else(|_| "postgres://@localhost:5432/shiftlinkr".to_string()),
             run_migrations: env::var("RUN_MIGRATIONS")
@@ -68,7 +75,11 @@ impl Config {
             environment: env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string()),
             client_base_url: env::var("BASE_URL")
                 .unwrap_or_else(|_| "http://localhost:3000".to_string()),
-        })
+        };
+        CONFIG
+            .set(config.clone())
+            .expect("Config can only be set once");
+        Ok(config)
     }
 
     pub fn is_production(&self) -> bool {
@@ -82,4 +93,8 @@ impl Config {
     pub fn server_address(&self) -> String {
         format!("{}:{}", self.host, self.port)
     }
+}
+
+pub fn config() -> &'static Config {
+    CONFIG.get().expect("Config not initialized")
 }

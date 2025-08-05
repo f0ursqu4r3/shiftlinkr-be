@@ -20,6 +20,9 @@ pub enum AppError {
     #[error("Bad request: {0}")]
     BadRequest(String),
 
+    #[error("Unauthorized access")]
+    Unauthorized,
+
     #[error("Internal server error")]
     InternalServerError,
 }
@@ -33,6 +36,7 @@ impl ResponseError for AppError {
             AppError::BadRequest(_) => StatusCode::BAD_REQUEST,
             AppError::Forbidden(_) => StatusCode::FORBIDDEN,
             AppError::InternalServerError => StatusCode::INTERNAL_SERVER_ERROR,
+            AppError::Unauthorized => StatusCode::UNAUTHORIZED,
         }
     }
 

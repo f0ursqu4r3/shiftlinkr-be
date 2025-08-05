@@ -10,12 +10,17 @@ mod common;
 #[actix_web::test]
 #[serial]
 async fn test_location_create_success() {
-    let (app_state, location_repo_data, company_repo_data, config_data, activity_logger_data, _ctx) =
-        common::create_admin_app_data().await;
+    let (
+        _app_state_compat,
+        location_repo_data,
+        company_repo_data,
+        config_data,
+        activity_logger_data,
+        _ctx,
+    ) = common::create_admin_app_data().await;
 
     let app = test::init_service(
         App::new()
-            .app_data(app_state)
             .app_data(location_repo_data)
             .app_data(company_repo_data)
             .app_data(config_data)
@@ -70,7 +75,7 @@ async fn test_location_create_success() {
 
     // Make the user an admin of the default company for testing
     let company_repo = CompanyRepository::new(_ctx.pool.clone());
-    common::make_user_admin_of_default_company(&company_repo, user_id)
+    let company_id = common::make_user_admin_of_default_company_str(&company_repo, user_id)
         .await
         .expect("Failed to make user admin");
 
@@ -80,7 +85,7 @@ async fn test_location_create_success() {
         "address": "123 Test St",
         "phone": "555-1234",
         "email": "test@location.com",
-        "company_id": 1
+        "company_id": company_id.to_string()
     });
 
     let req = test::TestRequest::post()
@@ -101,12 +106,17 @@ async fn test_location_create_success() {
 #[actix_web::test]
 #[serial]
 async fn test_location_list_success() {
-    let (app_state, location_repo_data, company_repo_data, config_data, activity_logger_data, _ctx) =
-        common::create_admin_app_data().await;
+    let (
+        _app_state_compat,
+        location_repo_data,
+        company_repo_data,
+        config_data,
+        activity_logger_data,
+        _ctx,
+    ) = common::create_admin_app_data().await;
 
     let app = test::init_service(
         App::new()
-            .app_data(app_state)
             .app_data(location_repo_data)
             .app_data(company_repo_data)
             .app_data(config_data)
@@ -144,7 +154,7 @@ async fn test_location_list_success() {
 
     // Make the user an admin of the default company for testing
     let company_repo = CompanyRepository::new(_ctx.pool.clone());
-    common::make_user_admin_of_default_company(&company_repo, user_id)
+    let company_id = common::make_user_admin_of_default_company_str(&company_repo, user_id)
         .await
         .expect("Failed to make user admin");
 
@@ -154,7 +164,7 @@ async fn test_location_list_success() {
         "address": "123 Test St",
         "phone": "555-1234",
         "email": "test@location.com",
-        "company_id": 1
+        "company_id": company_id.to_string()
     });
 
     let create_req = test::TestRequest::post()
@@ -185,12 +195,17 @@ async fn test_location_list_success() {
 #[actix_web::test]
 #[serial]
 async fn test_team_create_success() {
-    let (app_state, location_repo_data, company_repo_data, config_data, activity_logger_data, _ctx) =
-        common::create_admin_app_data().await;
+    let (
+        _app_state_compat,
+        location_repo_data,
+        company_repo_data,
+        config_data,
+        activity_logger_data,
+        _ctx,
+    ) = common::create_admin_app_data().await;
 
     let app = test::init_service(
         App::new()
-            .app_data(app_state)
             .app_data(location_repo_data)
             .app_data(company_repo_data)
             .app_data(config_data)
@@ -229,7 +244,7 @@ async fn test_team_create_success() {
 
     // Make the user an admin of the default company for testing
     let company_repo = CompanyRepository::new(_ctx.pool.clone());
-    common::make_user_admin_of_default_company(&company_repo, user_id)
+    let company_id = common::make_user_admin_of_default_company_str(&company_repo, user_id)
         .await
         .expect("Failed to make user admin");
 
@@ -239,7 +254,7 @@ async fn test_team_create_success() {
         "address": "123 Test St",
         "phone": "555-1234",
         "email": "test@location.com",
-        "company_id": 1
+        "company_id": company_id.to_string()
     });
 
     let create_loc_req = test::TestRequest::post()

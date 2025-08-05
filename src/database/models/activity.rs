@@ -96,4 +96,5 @@ pub mod Action {
     pub const RELEASED: &str = "released";
     pub const CANCELLED: &str = "cancelled";
     pub const SWITCH_COMPANY: &str = "switch_company";
+    pub const ACCEPTED: &str = "accepted";
 }
