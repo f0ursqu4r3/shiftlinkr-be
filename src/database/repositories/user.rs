@@ -128,19 +128,30 @@ pub async fn update_user(id: Uuid, name: &str, email: &str) -> Result<User> {
 }
 
 pub async fn delete_user(id: Uuid) -> Result<()> {
-    sqlx::query("DELETE FROM users WHERE id = $1")
-        .bind(id)
-        .execute(get_pool())
-        .await?;
+    sqlx::query(&sql(r#"
+        DELETE FROM users
+        WHERE
+            id = ?
+    "#))
+    .bind(id)
+    .execute(get_pool())
+    .await?;
 
     Ok(())
 }
 
 pub async fn email_exists(email: &str) -> Result<bool> {
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE email = $1")
-        .bind(email)
-        .fetch_one(get_pool())
-        .await?;
+    let count: i64 = sqlx::query_scalar(&sql(r#"
+        SELECT
+            COUNT(*)
+        FROM
+            users
+        WHERE
+            email = ?
+    "#))
+    .bind(email)
+    .fetch_one(get_pool())
+    .await?;
 
     Ok(count > 0)
 }
