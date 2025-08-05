@@ -56,8 +56,10 @@ impl TestContext {
 
     async fn cleanup_test_data(pool: &PgPool) -> Result<()> {
         // Clean up test data in reverse dependency order, ignoring missing tables
-        let _ = sqlx::query("DELETE FROM user_companies").execute(pool).await;
-        let _ = sqlx::query("DELETE FROM companies").execute(pool).await;  
+        let _ = sqlx::query("DELETE FROM user_companies")
+            .execute(pool)
+            .await;
+        let _ = sqlx::query("DELETE FROM companies").execute(pool).await;
         let _ = sqlx::query("DELETE FROM users").execute(pool).await;
         Ok(())
     }

@@ -1,5 +1,6 @@
-use crate::handlers::time_off;
 use actix_web::web;
+
+use crate::handlers::time_off;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(

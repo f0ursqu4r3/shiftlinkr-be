@@ -3,12 +3,14 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::database::models::{
-    Action, AssignmentResponse, Shift, ShiftAssignment, ShiftAssignmentInput, ShiftClaimInput,
-    ShiftInput, ShiftQuery, ShiftQueryType, ShiftStatus,
-};
-use crate::database::repositories::{
-    schedule as schedule_repo, shift as shift_repo, shift_claim as shift_claim_repo,
+use crate::database::{
+    models::{
+        Action, AssignmentResponse, Shift, ShiftAssignment, ShiftAssignmentInput, ShiftClaimInput,
+        ShiftInput, ShiftQuery, ShiftQueryType, ShiftStatus,
+    },
+    repositories::{
+        schedule as schedule_repo, shift as shift_repo, shift_claim as shift_claim_repo,
+    },
 };
 use crate::error::AppError;
 use crate::handlers::shared::ApiResponse;

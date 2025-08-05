@@ -4,8 +4,10 @@ use actix_web::HttpRequest;
 use anyhow::Result;
 use uuid::Uuid;
 
-use crate::database::models::{ActivityType, CreateActivityInput, EntityType};
-use crate::database::repositories::activity as activity_repo;
+use crate::database::{
+    models::{ActivityType, CreateActivityInput, EntityType},
+    repositories::activity as activity_repo,
+};
 
 /// Extract client info from HTTP request
 fn extract_client_info(req: &HttpRequest) -> (Option<String>, Option<String>) {

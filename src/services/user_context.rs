@@ -1,7 +1,6 @@
 use actix_web::{dev::Payload, FromRequest, HttpRequest};
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
-
 use uuid::Uuid;
 
 use crate::database::repositories::{company as company_repo, user as user_repo};
@@ -29,7 +28,7 @@ impl UserContext {
         // Get the user
         let user = user_repo::find_by_id(claims.sub)
             .await?
-            .ok_or_else(|| anyhow!("User not found"))?;
+            .ok_or_else(|| AppError::Unauthorized)?;
 
         // Get the company if company_id is present in claims
         let company = if let Some(company_id) = claims.company_id {

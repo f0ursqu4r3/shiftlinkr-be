@@ -3,10 +3,10 @@ use chrono::NaiveDate;
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::database::models::{
-    Action, PtoBalanceType, TimeOffRequestInput, TimeOffStatus, TimeOffType,
+use crate::database::{
+    models::{Action, PtoBalanceType, TimeOffRequestInput, TimeOffStatus, TimeOffType},
+    repositories::{pto_balance as pto_repo, time_off as time_off_repo},
 };
-use crate::database::repositories::{pto_balance as pto_repo, time_off as time_off_repo};
 use crate::error::AppError;
 use crate::handlers::shared::ApiResponse;
 use crate::services::{activity_logger, user_context::extract_context};

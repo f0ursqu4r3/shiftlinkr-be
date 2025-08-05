@@ -1,5 +1,6 @@
-use crate::handlers::schedules;
 use actix_web::web;
+
+use crate::handlers::schedules;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(

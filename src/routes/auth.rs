@@ -1,5 +1,6 @@
-use crate::handlers::auth;
 use actix_web::web;
+
+use crate::handlers::auth;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(

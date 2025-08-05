@@ -2,8 +2,10 @@ use actix_web::{web, HttpRequest, HttpResponse, Result};
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::database::models::{AssignmentResponse, ShiftAssignmentInput, UserShiftScheduleInput};
-use crate::database::repositories::schedule as schedule_repo;
+use crate::database::{
+    models::{AssignmentResponse, ShiftAssignmentInput, UserShiftScheduleInput},
+    repositories::schedule as schedule_repo,
+};
 use crate::error::AppError;
 use crate::handlers::shared::ApiResponse;
 use crate::services::user_context::extract_context;

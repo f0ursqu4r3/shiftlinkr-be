@@ -1,5 +1,4 @@
-use actix_web::web::Path;
-use actix_web::{web, HttpRequest, HttpResponse, Result};
+use actix_web::{web, web::Path, HttpRequest, HttpResponse, Result};
 use serde;
 use serde::Serialize;
 use serde_json::json;

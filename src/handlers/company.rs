@@ -1,16 +1,18 @@
-use crate::database::models::activity::Action;
-use crate::database::models::{
-    AddEmployeeToCompanyInput, CompanyInfo, CompanyRole, CreateCompanyInput,
-};
-use crate::database::repositories::company as company_repo;
-use crate::error::AppError;
-use crate::handlers::shared::ApiResponse;
-use crate::services::{activity_logger, user_context::extract_context};
 use actix_web::{
     web::{Json, Path},
     HttpRequest, HttpResponse, Result,
 };
 use uuid::Uuid;
+
+use crate::database::{
+    models::{
+        activity::Action, AddEmployeeToCompanyInput, CompanyInfo, CompanyRole, CreateCompanyInput,
+    },
+    repositories::company as company_repo,
+};
+use crate::error::AppError;
+use crate::handlers::shared::ApiResponse;
+use crate::services::{activity_logger, user_context::extract_context};
 
 pub async fn get_user_companies(req: HttpRequest) -> Result<HttpResponse> {
     let user_context = extract_context(&req).await?;

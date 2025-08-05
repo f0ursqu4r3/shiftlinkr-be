@@ -1,3 +1,5 @@
+use std::future::{ready, Ready};
+
 use actix_web::{
     dev::Payload, error::ErrorUnauthorized, Error as ActixError, FromRequest, HttpRequest,
 };
@@ -6,13 +8,14 @@ use bcrypt::{hash, verify, DEFAULT_COST};
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
-use std::future::{ready, Ready};
 use uuid::Uuid;
 
 use crate::config::config;
-use crate::database::models::{AuthResponse, CompanyRole, CreateUserInput, LoginInput, User};
-use crate::database::repositories::{
-    company as company_repo, password_reset as password_reset_repo, user as user_repo,
+use crate::database::{
+    models::{AuthResponse, CompanyRole, CreateUserInput, LoginInput, User},
+    repositories::{
+        company as company_repo, password_reset as password_reset_repo, user as user_repo,
+    },
 };
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -1,6 +1,6 @@
+use std::{env, sync::OnceLock};
+
 use anyhow::Result;
-use std::env;
-use std::sync::OnceLock;
 
 #[derive(Debug, Clone)]
 pub struct Config {

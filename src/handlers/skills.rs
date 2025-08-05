@@ -2,11 +2,9 @@ use actix_web::{web, HttpRequest, HttpResponse, Result};
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::database::models::{
-    Action, ProficiencyLevel, ShiftRequiredSkillInput, SkillInput, UserSkillInput,
-};
-use crate::database::repositories::{
-    company as company_repo, shift as shift_repo, skill as skill_repo,
+use crate::database::{
+    models::{Action, ProficiencyLevel, ShiftRequiredSkillInput, SkillInput, UserSkillInput},
+    repositories::{company as company_repo, shift as shift_repo, skill as skill_repo},
 };
 use crate::error::AppError;
 use crate::handlers::shared::ApiResponse;

@@ -1,10 +1,11 @@
+use std::future::{ready, Ready};
+
 use actix_web::{
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
     http::header::HeaderValue,
     Error, HttpMessage,
 };
 use futures_util::future::LocalBoxFuture;
-use std::future::{ready, Ready};
 use uuid::Uuid;
 
 // Middleware for adding correlation IDs to requests

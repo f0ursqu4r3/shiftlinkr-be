@@ -1,5 +1,6 @@
-use crate::handlers::skills;
 use actix_web::web;
+
+use crate::handlers::skills;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(

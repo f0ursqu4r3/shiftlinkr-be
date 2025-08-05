@@ -2,10 +2,10 @@ use actix_web::{web, HttpRequest, HttpResponse, Result};
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::database::models::{
-    activity::Action, ShiftSwapInput, ShiftSwapResponseStatus, ShiftSwapStatus,
+use crate::database::{
+    models::{activity::Action, ShiftSwapInput, ShiftSwapResponseStatus, ShiftSwapStatus},
+    repositories::{company as company_repo, shift_swap as shift_swap_repo},
 };
-use crate::database::repositories::{company as company_repo, shift_swap as shift_swap_repo};
 use crate::error::AppError;
 use crate::handlers::shared::ApiResponse;
 use crate::services::{activity_logger, user_context::extract_context};
