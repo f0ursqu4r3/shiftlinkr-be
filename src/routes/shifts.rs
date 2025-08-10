@@ -17,7 +17,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .route("/{id}/claims", web::get().to(shifts::get_shift_claims)),
     )
     .service(
-        web::scope("/shift-claims")
+        web::scope("/shifts/claims")
             .route("", web::get().to(shifts::get_pending_claims))
             .route("/my", web::get().to(shifts::get_my_claims))
             .route("/{id}/approve", web::post().to(shifts::approve_shift_claim))

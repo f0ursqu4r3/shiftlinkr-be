@@ -130,6 +130,30 @@ pub async fn get_invites_by_inviter(
     Ok(invites)
 }
 
+pub async fn get_invites_by_email(email: &str) -> Result<Vec<InviteToken>, sqlx::Error> {
+    let invites = sqlx::query_as::<_, InviteToken>(&sql(r#"
+        SELECT
+            id,
+            email,
+            token,
+            inviter_id,
+            role,
+            company_id,
+            team_id,
+            expires_at,
+            used_at,
+            created_at
+        FROM invite_tokens
+        WHERE email = ?
+        ORDER BY created_at DESC
+    "#))
+    .bind(email)
+    .fetch_all(&get_pool().await)
+    .await?;
+
+    Ok(invites)
+}
+
 pub async fn cleanup_expired_tokens(
     tx: &mut Transaction<'_, Postgres>,
 ) -> Result<u64, sqlx::Error> {

@@ -439,17 +439,11 @@ pub async fn get_my_invites(ctx: UserContext) -> Result<HttpResponse> {
 
     ctx.requires_manager()?;
 
-    let company_id = ctx.company_id().ok_or_else(|| {
-        log::error!("User {} does not belong to any company", user_id);
-        AppError::PermissionDenied("User does not belong to any company".to_string())
-    })?;
+    let company_id = ctx.strict_company_id()?;
 
     let invites = invite_repo::get_invites_by_inviter(user_id, company_id)
         .await
-        .map_err(|e| {
-            log::error!("Failed to get invites for user {}: {}", user_id, e);
-            AppError::DatabaseError(e)
-        })?;
+        .map_err(AppError::from)?;
 
     Ok(ApiResponse::success(invites))
 }

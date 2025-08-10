@@ -7,7 +7,8 @@ use crate::{
     database::{
         models::{
             Action, AssignmentResponse, Shift, ShiftAssignment, ShiftAssignmentInput,
-            ShiftClaimInput, ShiftInput, ShiftQuery, ShiftQueryType, ShiftStatus,
+            ShiftClaimInput, ShiftClaimResponse, ShiftInput, ShiftQuery, ShiftQueryType,
+            ShiftStatus,
         },
         repositories::{
             schedule as schedule_repo, shift as shift_repo, shift_claim as shift_claim_repo,
@@ -660,16 +661,10 @@ pub async fn approve_shift_claim(
     let approver_id = ctx.user_id();
     let company_id = ctx.strict_company_id()?;
 
-    let (approved_claim, assigned_shift) = DatabaseTransaction::run(|tx| {
+    let (claim, shift) = DatabaseTransaction::run(|tx| {
         Box::pin(async move {
-            // Get the claim to approve
-            let claim = shift_claim_repo::get_claim_by_id(claim_id)
-                .await
-                .map_err(AppError::from)?
-                .ok_or_else(|| AppError::NotFound("Claim not found".to_string()))?;
-
             // Approve the claim
-            let approved_claim = shift_claim_repo::approve_claim(
+            let claim = shift_claim_repo::approve_claim(
                 tx,
                 claim_id,
                 approver_id,
@@ -681,7 +676,7 @@ pub async fn approve_shift_claim(
             })?;
 
             // Assign the shift to the user
-            let assigned_shift = shift_repo::assign_shift(tx, claim.shift_id, claim.user_id)
+            let shift = shift_repo::assign_shift(tx, claim.shift_id, claim.user_id)
                 .await?
                 .ok_or_else(|| AppError::NotFound("Shift not found".to_string()))?;
 
@@ -690,18 +685,18 @@ pub async fn approve_shift_claim(
 
             // Log the approval activity
             let metadata = activity_logger::metadata(vec![
-                ("claim_id", approved_claim.id.to_string()),
-                ("shift_id", approved_claim.shift_id.to_string()),
+                ("claim_id", claim.id.to_string()),
+                ("shift_id", claim.shift_id.to_string()),
                 ("approver_id", approver_id.to_string()),
-                ("user_id", approved_claim.user_id.to_string()),
-                ("start_time", assigned_shift.start_time.to_string()),
+                ("user_id", claim.user_id.to_string()),
+                ("start_time", shift.start_time.to_string()),
             ]);
 
             activity_logger::log_shift_activity(
                 tx,
                 company_id,
                 Some(approver_id),
-                approved_claim.shift_id,
+                claim.shift_id,
                 &Action::APPROVED,
                 "Claim approved".to_string(),
                 Some(metadata),
@@ -709,15 +704,12 @@ pub async fn approve_shift_claim(
             )
             .await?;
 
-            Ok((approved_claim, assigned_shift))
+            Ok((claim, shift))
         })
     })
     .await?;
 
-    Ok(ApiResponse::success(serde_json::json!({
-        "claim": approved_claim,
-        "shift": assigned_shift
-    })))
+    Ok(ApiResponse::success(ShiftClaimResponse { claim, shift }))
 }
 
 // Reject a shift claim (managers/admins only)
@@ -733,9 +725,9 @@ pub async fn reject_shift_claim(
     let approver_id = ctx.user_id();
     let company_id = ctx.strict_company_id()?;
 
-    let rejected_claim = DatabaseTransaction::run(|tx| {
+    let (claim, shift) = DatabaseTransaction::run(|tx| {
         Box::pin(async move {
-            let rejected_claim = shift_claim_repo::reject_claim(
+            let claim = shift_claim_repo::reject_claim(
                 tx,
                 claim_id,
                 approver_id,
@@ -746,12 +738,16 @@ pub async fn reject_shift_claim(
                 AppError::NotFound("Claim not found or already processed".to_string())
             })?;
 
+            let shift = shift_repo::assign_shift(tx, claim.shift_id, claim.user_id)
+                .await?
+                .ok_or_else(|| AppError::NotFound("Shift not found".to_string()))?;
+
             // Log the rejection activity
             let metadata = activity_logger::metadata(vec![
-                ("claim_id", rejected_claim.id.to_string()),
-                ("shift_id", rejected_claim.shift_id.to_string()),
+                ("claim_id", claim.id.to_string()),
+                ("shift_id", claim.shift_id.to_string()),
                 ("approver_id", approver_id.to_string()),
-                ("user_id", rejected_claim.user_id.to_string()),
+                ("user_id", claim.user_id.to_string()),
                 ("notes", rejection_data.notes.clone().unwrap_or_default()),
             ]);
 
@@ -759,7 +755,7 @@ pub async fn reject_shift_claim(
                 tx,
                 company_id,
                 Some(approver_id),
-                rejected_claim.shift_id,
+                claim.shift_id,
                 &Action::REJECTED,
                 "Claim rejected".to_string(),
                 Some(metadata),
@@ -767,12 +763,12 @@ pub async fn reject_shift_claim(
             )
             .await?;
 
-            Ok(rejected_claim)
+            Ok((claim, shift))
         })
     })
     .await?;
 
-    Ok(ApiResponse::success(rejected_claim))
+    Ok(ApiResponse::success(ShiftClaimResponse { claim, shift }))
 }
 
 // Cancel a shift claim (by the user who made it)
@@ -785,7 +781,7 @@ pub async fn cancel_shift_claim(
     let user_id = ctx.user_id();
     let company_id = ctx.strict_company_id()?;
 
-    let cancelled_claim = DatabaseTransaction::run(|tx| {
+    let (claim, shift) = DatabaseTransaction::run(|tx| {
         Box::pin(async move {
             let claim = shift_claim_repo::get_claim_by_id(claim_id)
                 .await
@@ -804,6 +800,10 @@ pub async fn cancel_shift_claim(
                 .ok_or_else(|| {
                     AppError::NotFound("Claim not found or not cancellable".to_string())
                 })?;
+
+            let shift = shift_repo::assign_shift(tx, claim.shift_id, claim.user_id)
+                .await?
+                .ok_or_else(|| AppError::NotFound("Shift not found".to_string()))?;
 
             // Log the cancellation activity
             let metadata = activity_logger::metadata(vec![
@@ -824,12 +824,12 @@ pub async fn cancel_shift_claim(
             )
             .await?;
 
-            Ok(cancelled_claim)
+            Ok((cancelled_claim, shift))
         })
     })
     .await?;
 
-    Ok(ApiResponse::success(cancelled_claim))
+    Ok(ApiResponse::success(ShiftClaimResponse { claim, shift }))
 }
 
 // Get pending claims for approval (managers/admins only)

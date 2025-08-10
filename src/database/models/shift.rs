@@ -113,3 +113,10 @@ pub enum ShiftQueryType {
     User(Uuid),
     Company(Uuid),
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftClaimResponse {
+    pub claim: ShiftClaim,
+    pub shift: Shift,
+}
