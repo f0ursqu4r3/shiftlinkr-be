@@ -74,7 +74,7 @@ pub struct PtoBalanceAdjustmentInput {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PtoBalanceAccrualResult {
+pub struct PtoBalanceAccrual {
     pub user_id: Uuid,
     pub company_id: Uuid,
     pub hire_date: Option<NaiveDate>,

@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::database::{
     get_pool,
     models::{
-        PtoBalance, PtoBalanceAccrualResult, PtoBalanceAdjustmentInput, PtoBalanceHistory,
+        PtoBalance, PtoBalanceAccrual, PtoBalanceAdjustmentInput, PtoBalanceHistory,
         PtoBalanceType, PtoBalanceUpdateInput, PtoChangeType,
     },
     utils::sql,
@@ -274,7 +274,7 @@ pub async fn process_accrual_for_company(
     tx: &mut Transaction<'_, Postgres>,
     user_id: Uuid,
     company_id: Uuid,
-) -> Result<Option<PtoBalanceAccrualResult>, sqlx::Error> {
+) -> Result<Option<PtoBalanceAccrual>, sqlx::Error> {
     let current_balance = get_balance_for_company(user_id, company_id).await?;
     if current_balance.is_none() {
         return Err(sqlx::Error::RowNotFound);
@@ -364,7 +364,7 @@ pub async fn process_accrual_for_company(
     .execute(&get_pool().await)
     .await?;
 
-    Ok(Some(PtoBalanceAccrualResult {
+    Ok(Some(PtoBalanceAccrual {
         user_id,
         company_id,
         hire_date: Some(hire_date),
