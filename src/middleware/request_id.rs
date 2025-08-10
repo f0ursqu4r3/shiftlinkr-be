@@ -1,16 +1,17 @@
+use std::future::{Ready, ready};
+
 use actix_web::{
-    dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
-    http::header::HeaderValue,
     Error, HttpMessage,
+    dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready},
+    http::header::HeaderValue,
 };
 use futures_util::future::LocalBoxFuture;
-use std::future::{ready, Ready};
 use uuid::Uuid;
 
-// Middleware for adding correlation IDs to requests
-pub struct RequestId;
+// Middleware factory
+pub struct RequestIdMiddleware;
 
-impl<S, B> Transform<S, ServiceRequest> for RequestId
+impl<S, B> Transform<S, ServiceRequest> for RequestIdMiddleware
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
     S::Future: 'static,
@@ -19,19 +20,19 @@ where
     type Response = ServiceResponse<B>;
     type Error = Error;
     type InitError = ();
-    type Transform = RequestIdMiddleware<S>;
+    type Transform = RequestIdMiddlewareService<S>;
     type Future = Ready<Result<Self::Transform, Self::InitError>>;
 
     fn new_transform(&self, service: S) -> Self::Future {
-        ready(Ok(RequestIdMiddleware { service }))
+        ready(Ok(RequestIdMiddlewareService { service }))
     }
 }
 
-pub struct RequestIdMiddleware<S> {
+pub struct RequestIdMiddlewareService<S> {
     service: S,
 }
 
-impl<S, B> Service<ServiceRequest> for RequestIdMiddleware<S>
+impl<S, B> Service<ServiceRequest> for RequestIdMiddlewareService<S>
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
     S::Future: 'static,

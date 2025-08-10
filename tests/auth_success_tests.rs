@@ -1,8 +1,9 @@
 use actix_web::{http::StatusCode, test, web, App};
+use be::database::repositories::activity::ActivityRepository;
 use be::database::repositories::company::CompanyRepository;
 use be::database::repositories::invite::InviteRepository;
 use be::handlers::auth;
-use be::{ActivityLogger, ActivityRepository, AppState};
+use be::services::ActivityLogger;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use serial_test::serial;
@@ -12,21 +13,14 @@ mod common;
 #[actix_web::test]
 #[serial]
 async fn test_auth_register_and_login_workflow() {
-    common::setup_test_env();
-    let ctx = common::TestContext::new().await.unwrap();
+    let (company_repo_data, config_data, activity_logger_data, ctx) =
+        common::create_test_app_services().await;
 
-    let app_state = web::Data::new(AppState {
-        auth_service: ctx.auth_service.clone(),
-        company_repository: CompanyRepository::new(ctx.pool.clone()),
-        activity_repository: ActivityRepository::new(ctx.pool.clone()),
-        activity_logger: ActivityLogger::new(ActivityRepository::new(ctx.pool.clone())),
-    });
     let invite_repo_data = web::Data::new(InviteRepository::new(ctx.pool.clone()));
-    let config_data = web::Data::new(ctx.config.clone());
 
     let app = test::init_service(
         App::new()
-            .app_data(app_state)
+            .app_data(company_repo_data)
             .app_data(invite_repo_data)
             .app_data(config_data)
             .service(

@@ -1,5 +1,6 @@
-use crate::handlers::pto_balance;
 use actix_web::web;
+
+use crate::handlers::pto_balance;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(

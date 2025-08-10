@@ -1,5 +1,6 @@
-use crate::handlers::shifts;
 use actix_web::web;
+
+use crate::handlers::shifts;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(

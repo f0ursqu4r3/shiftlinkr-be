@@ -1,116 +1,88 @@
-// TODO: refactor
-use actix_web::{web, HttpResponse, Result};
+use actix_web::{web, HttpRequest, HttpResponse, Result};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::database::repositories::stats::StatsRepository;
+use crate::database::repositories::stats as stats_repo;
+use crate::error::AppError;
 use crate::handlers::shared::ApiResponse;
-use crate::services::user_context::AsyncUserContext;
+use crate::services::user_context::extract_context;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StatsQuery {
     pub start_date: Option<DateTime<Utc>>,
     pub end_date: Option<DateTime<Utc>>,
-    pub user_id: Option<String>,
+    pub user_id: Option<Uuid>,
 }
 
 /// Get dashboard statistics
 pub async fn get_dashboard_stats(
-    AsyncUserContext(user_context): AsyncUserContext,
-    repo: web::Data<StatsRepository>,
     query: web::Query<StatsQuery>,
+    req: HttpRequest,
 ) -> Result<HttpResponse> {
-    // Determine user filter based on permissions
-    let user_id = if user_context.is_manager_or_admin() {
-        // Admins and managers can query organization-wide stats or specific users
-        query
-            .user_id
-            .as_ref()
-            .and_then(|id| id.parse::<Uuid>().ok())
-    } else {
-        // Employees can only see their own stats
-        Some(user_context.user.id)
-    };
+    let user_context = extract_context(&req).await?;
 
-    match repo
-        .get_dashboard_stats_for_user(user_id, query.start_date, query.end_date)
-        .await
-    {
-        Ok(stats) => Ok(ApiResponse::success(stats)),
-        Err(err) => {
-            log::error!("Error fetching dashboard stats: {}", err);
-            Ok(
-                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    "Failed to fetch dashboard statistics",
-                )),
-            )
-        }
-    }
+    // Determine user filter based on permissions
+    let user_id = user_context.user_id();
+
+    let target_user_id = query.user_id.or_else(|| Some(user_id)).unwrap();
+
+    user_context.requires_same_user(target_user_id)?;
+
+    let stats =
+        stats_repo::get_dashboard_stats_for_user(query.user_id, query.start_date, query.end_date)
+            .await
+            .map_err(|err| {
+                log::error!("Error fetching dashboard stats: {}", err);
+                AppError::DatabaseError(err)
+            })?;
+
+    Ok(ApiResponse::success(stats))
 }
 
 /// Get shift statistics
 pub async fn get_shift_stats(
-    AsyncUserContext(user_context): AsyncUserContext,
-    repo: web::Data<StatsRepository>,
     query: web::Query<StatsQuery>,
+    req: HttpRequest,
 ) -> Result<HttpResponse> {
-    // Determine user filter based on permissions
-    let user_id = if user_context.is_manager_or_admin() {
-        // Admins and managers can query organization-wide stats or specific users
-        query
-            .user_id
-            .as_ref()
-            .and_then(|id| id.parse::<Uuid>().ok())
-    } else {
-        // Employees can only see their own stats
-        Some(user_context.user.id)
-    };
+    let user_context = extract_context(&req).await?;
 
-    match repo
-        .get_shift_stats(user_id, query.start_date, query.end_date)
+    let user_id = user_context.user_id();
+
+    let target_user_id = query.user_id.or_else(|| Some(user_id)).unwrap();
+
+    user_context.requires_same_user(target_user_id)?;
+
+    let stats = stats_repo::get_shift_stats(query.user_id, query.start_date, query.end_date)
         .await
-    {
-        Ok(stats) => Ok(ApiResponse::success(stats)),
-        Err(err) => {
+        .map_err(|err| {
             log::error!("Error fetching shift stats: {}", err);
-            Ok(HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error("Failed to fetch shift statistics")))
-        }
-    }
+            AppError::DatabaseError(err)
+        })?;
+
+    Ok(ApiResponse::success(stats))
 }
 
 /// Get time-off statistics
 pub async fn get_time_off_stats(
-    AsyncUserContext(user_context): AsyncUserContext,
-    repo: web::Data<StatsRepository>,
     query: web::Query<StatsQuery>,
+    req: HttpRequest,
 ) -> Result<HttpResponse> {
-    // Determine user filter based on permissions
-    let user_id = if user_context.is_manager_or_admin() {
-        // Admins and managers can query organization-wide stats or specific users
-        query
-            .user_id
-            .as_ref()
-            .and_then(|id| id.parse::<Uuid>().ok())
-    } else {
-        // Employees can only see their own stats
-        Some(user_context.user.id)
-    };
+    let user_context = extract_context(&req).await?;
 
-    match repo
-        .get_time_off_stats(user_id, query.start_date, query.end_date)
+    let user_id = user_context.user_id();
+
+    let target_user_id = query.user_id.or_else(|| Some(user_id)).unwrap();
+
+    user_context.requires_same_user(target_user_id)?;
+
+    let stats = stats_repo::get_time_off_stats(query.user_id, query.start_date, query.end_date)
         .await
-    {
-        Ok(stats) => Ok(ApiResponse::success(stats)),
-        Err(err) => {
+        .map_err(|err| {
             log::error!("Error fetching time-off stats: {}", err);
-            Ok(
-                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    "Failed to fetch time-off statistics",
-                )),
-            )
-        }
-    }
+            AppError::DatabaseError(err)
+        })?;
+
+    Ok(ApiResponse::success(stats))
 }
