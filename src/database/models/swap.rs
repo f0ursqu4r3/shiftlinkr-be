@@ -60,7 +60,7 @@ pub struct ShiftSwapResponse {
     pub id: Uuid,
     pub swap_id: Option<Uuid>,
     pub responding_user_id: Uuid,
-    pub response_type: ShiftSwapResponseStatus,
+    pub status: ShiftSwapResponseStatus,
     pub notes: String,
     pub created_at: DateTime<Utc>,
 }
