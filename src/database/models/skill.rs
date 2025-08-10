@@ -80,7 +80,7 @@ impl Default for ProficiencyLevel {
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
-pub struct UserWithSkillResponse {
+pub struct UserWithSkill {
     pub id: Uuid, // UUID for user ID
     pub email: String,
     pub name: String,

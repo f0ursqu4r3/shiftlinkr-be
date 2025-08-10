@@ -62,7 +62,7 @@ pub struct ShiftAssignment {
     pub assigned_by: Uuid, // UUID for user references
     pub assignment_status: AssignmentStatus,
     pub acceptance_deadline: Option<DateTime<Utc>>, // TIMESTAMPTZ
-    pub response: Option<AssignmentResponse>,
+    pub response: AssignmentResponse,
     pub response_notes: Option<String>,
     pub created_at: DateTime<Utc>, // TIMESTAMPTZ
     pub updated_at: DateTime<Utc>, // TIMESTAMPTZ

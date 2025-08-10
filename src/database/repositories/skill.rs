@@ -4,9 +4,7 @@ use uuid::Uuid;
 
 use crate::database::{
     get_pool,
-    models::{
-        ProficiencyLevel, ShiftRequiredSkill, Skill, SkillInput, UserSkill, UserWithSkillResponse,
-    },
+    models::{ProficiencyLevel, ShiftRequiredSkill, Skill, SkillInput, UserSkill, UserWithSkill},
     utils::sql,
 };
 
@@ -343,7 +341,7 @@ pub async fn remove_shift_required_skill(
 pub async fn get_users_with_skill(
     skill_id: Uuid,
     min_level: Option<ProficiencyLevel>,
-) -> Result<Vec<UserWithSkillResponse>, sqlx::Error> {
+) -> Result<Vec<UserWithSkill>, sqlx::Error> {
     let base_query = r#"
             SELECT DISTINCT
                 users.id,
@@ -379,10 +377,10 @@ pub async fn get_users_with_skill(
     };
     let query = format!("{}{}", base_query, where_clause);
 
-    let user_ids = sqlx::query_as::<_, UserWithSkillResponse>(&sql(query.as_str()))
+    let users_with_skills = sqlx::query_as::<_, UserWithSkill>(&sql(query.as_str()))
         .bind(skill_id)
         .fetch_all(&get_pool().await)
         .await?;
 
-    Ok(user_ids)
+    Ok(users_with_skills)
 }
