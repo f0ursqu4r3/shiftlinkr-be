@@ -1,11 +1,14 @@
-use anyhow::Result;
+use sqlx::{Postgres, Transaction};
 
 use crate::database::{
     get_pool,
     models::{CreateUserCompanyInput, UpdateUserCompanyInput, UserCompany},
 };
 
-pub async fn create_balance(request: &CreateUserCompanyInput) -> Result<UserCompany> {
+pub async fn create_balance(
+    tx: &mut Transaction<'_, Postgres>,
+    request: &CreateUserCompanyInput,
+) -> Result<UserCompany, sqlx::Error> {
     let balance = sqlx::query_as::<_, UserCompany>(
         r#"
             INSERT INTO
@@ -41,7 +44,7 @@ pub async fn create_balance(request: &CreateUserCompanyInput) -> Result<UserComp
     .bind(request.personal_balance_hours.unwrap_or(0))
     .bind(request.pto_accrual_rate.unwrap_or(0.0))
     .bind(request.hire_date)
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(balance)
@@ -50,7 +53,7 @@ pub async fn create_balance(request: &CreateUserCompanyInput) -> Result<UserComp
 pub async fn get_user_balance_for_company(
     user_id: &str,
     company_id: i64,
-) -> Result<Option<UserCompany>> {
+) -> Result<Option<UserCompany>, sqlx::Error> {
     let balance = sqlx::query_as::<_, UserCompany>(
         r#"
             SELECT
@@ -74,13 +77,13 @@ pub async fn get_user_balance_for_company(
     )
     .bind(user_id)
     .bind(company_id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&get_pool().await)
     .await?;
 
     Ok(balance)
 }
 
-pub async fn get_user_balances(user_id: &str) -> Result<Vec<UserCompany>> {
+pub async fn get_user_balances(user_id: &str) -> Result<Vec<UserCompany>, sqlx::Error> {
     let balances = sqlx::query_as::<_, UserCompany>(
         r#"
             SELECT
@@ -104,17 +107,18 @@ pub async fn get_user_balances(user_id: &str) -> Result<Vec<UserCompany>> {
             "#,
     )
     .bind(user_id)
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     Ok(balances)
 }
 
 pub async fn update_balance(
+    tx: &mut Transaction<'_, Postgres>,
     user_id: &str,
     company_id: i64,
     request: &UpdateUserCompanyInput,
-) -> Result<UserCompany> {
+) -> Result<UserCompany, sqlx::Error> {
     // Build dynamic update query based on provided fields
     let mut query = "UPDATE user_company SET updated_at = CURRENT_TIMESTAMP".to_string();
     let mut params: Vec<String> = vec![];
@@ -169,25 +173,29 @@ pub async fn update_balance(
 
     query_builder = query_builder.bind(user_id).bind(company_id);
 
-    query_builder.execute(get_pool()).await?;
+    query_builder.execute(&mut **tx).await?;
 
     // Return updated balance
     get_user_balance_for_company(user_id, company_id)
         .await?
-        .ok_or_else(|| anyhow::anyhow!("Balance not found after update"))
+        .ok_or_else(|| sqlx::Error::RowNotFound)
 }
 
-pub async fn delete_balance(user_id: &str, company_id: i64) -> Result<()> {
+pub async fn delete_balance(
+    tx: &mut Transaction<'_, Postgres>,
+    user_id: &str,
+    company_id: i64,
+) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM user_company WHERE user_id = $1 AND company_id = $2")
         .bind(user_id)
         .bind(company_id)
-        .execute(get_pool())
+        .execute(&mut **tx)
         .await?;
 
     Ok(())
 }
 
-pub async fn get_company_balances(company_id: i64) -> Result<Vec<UserCompany>> {
+pub async fn get_company_balances(company_id: i64) -> Result<Vec<UserCompany>, sqlx::Error> {
     let balances = sqlx::query_as::<_, UserCompany>(
         r#"
             SELECT
@@ -211,17 +219,18 @@ pub async fn get_company_balances(company_id: i64) -> Result<Vec<UserCompany>> {
             "#,
     )
     .bind(company_id)
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     Ok(balances)
 }
 
 pub async fn create_or_update_balance(
+    tx: &mut Transaction<'_, Postgres>,
     user_id: &str,
     company_id: i64,
     request: &CreateUserCompanyInput,
-) -> Result<UserCompany> {
+) -> Result<UserCompany, sqlx::Error> {
     // Try to get existing balance
     if let Some(_) = get_user_balance_for_company(user_id, company_id).await? {
         // Update existing
@@ -233,9 +242,9 @@ pub async fn create_or_update_balance(
             hire_date: request.hire_date,
             last_accrual_date: None,
         };
-        update_balance(user_id, company_id, &update_request).await
+        update_balance(tx, user_id, company_id, &update_request).await
     } else {
         // Create new
-        create_balance(request).await
+        create_balance(tx, request).await
     }
 }

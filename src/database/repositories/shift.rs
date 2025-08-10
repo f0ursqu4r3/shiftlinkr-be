@@ -1,5 +1,5 @@
-use anyhow::Result;
 use chrono::{DateTime, Utc};
+use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::database::{
@@ -17,7 +17,10 @@ pub struct ShiftFindByFilter {
     pub end_date: DateTime<Utc>,
 }
 
-pub async fn create_shift(input: ShiftInput) -> Result<Shift> {
+pub async fn create_shift(
+    tx: &mut Transaction<'_, Postgres>,
+    input: ShiftInput,
+) -> Result<Shift, sqlx::Error> {
     let now = Utc::now();
     let row = sqlx::query_as::<_, Shift>(&sql(r#"
             INSERT INTO
@@ -66,13 +69,13 @@ pub async fn create_shift(input: ShiftInput) -> Result<Shift> {
     .bind(ShiftStatus::Open.to_string())
     .bind(now)
     .bind(now)
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(row.into())
 }
 
-pub async fn find_by_id(shift_id: Uuid, company_id: Uuid) -> Result<Option<Shift>> {
+pub async fn find_by_id(shift_id: Uuid, company_id: Uuid) -> Result<Option<Shift>, sqlx::Error> {
     let row = sqlx::query_as::<_, Shift>(&sql(r#"
             SELECT
                 id,
@@ -97,13 +100,13 @@ pub async fn find_by_id(shift_id: Uuid, company_id: Uuid) -> Result<Option<Shift
         "#))
     .bind(shift_id)
     .bind(company_id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&get_pool().await)
     .await?;
 
     Ok(row.map(|r| r.into()))
 }
 
-pub async fn find_by_company_id(company_id: Uuid) -> Result<Vec<Shift>> {
+pub async fn find_by_company_id(company_id: Uuid) -> Result<Vec<Shift>, sqlx::Error> {
     let rows = sqlx::query_as::<_, Shift>(&sql(r#"
             SELECT
                 s.id,
@@ -129,13 +132,13 @@ pub async fn find_by_company_id(company_id: Uuid) -> Result<Vec<Shift>> {
                 s.start_time
         "#))
     .bind(company_id)
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     Ok(rows.into_iter().map(|row| row.into()).collect())
 }
 
-pub async fn find_by_location_id(location_id: Uuid) -> Result<Vec<Shift>> {
+pub async fn find_by_location_id(location_id: Uuid) -> Result<Vec<Shift>, sqlx::Error> {
     let rows = sqlx::query_as::<_, Shift>(&sql(r#"
             SELECT
                 id,
@@ -160,13 +163,13 @@ pub async fn find_by_location_id(location_id: Uuid) -> Result<Vec<Shift>> {
                 start_time
         "#))
     .bind(location_id)
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     Ok(rows.into_iter().map(|row| row.into()).collect())
 }
 
-pub async fn find_by_team_id(team_id: Uuid) -> Result<Vec<Shift>> {
+pub async fn find_by_team_id(team_id: Uuid) -> Result<Vec<Shift>, sqlx::Error> {
     let rows = sqlx::query_as::<_, Shift>(&sql(r#"
             SELECT
                 id,
@@ -191,7 +194,7 @@ pub async fn find_by_team_id(team_id: Uuid) -> Result<Vec<Shift>> {
                 start_time
         "#))
     .bind(team_id)
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     Ok(rows.into_iter().map(|row| row.into()).collect())
@@ -201,7 +204,7 @@ pub async fn find_by_date_range(
     start_date: DateTime<Utc>,
     end_date: DateTime<Utc>,
     location_id: Option<Uuid>,
-) -> Result<Vec<Shift>> {
+) -> Result<Vec<Shift>, sqlx::Error> {
     let rows = if let Some(location_id) = location_id {
         sqlx::query_as::<_, Shift>(&sql(r#"
                 SELECT
@@ -231,7 +234,7 @@ pub async fn find_by_date_range(
         .bind(start_date)
         .bind(end_date)
         .bind(location_id)
-        .fetch_all(get_pool())
+        .fetch_all(&get_pool().await)
         .await?
     } else {
         sqlx::query_as::<_, Shift>(&sql(r#"
@@ -260,14 +263,14 @@ pub async fn find_by_date_range(
             "#))
         .bind(start_date)
         .bind(end_date)
-        .fetch_all(get_pool())
+        .fetch_all(&get_pool().await)
         .await?
     };
 
     Ok(rows.into_iter().map(|row| row.into()).collect())
 }
 
-pub async fn find_open_shifts_by_location(location_id: Uuid) -> Result<Vec<Shift>> {
+pub async fn find_open_shifts_by_location(location_id: Uuid) -> Result<Vec<Shift>, sqlx::Error> {
     let rows = sqlx::query_as::<_, Shift>(&sql(r#"
             SELECT
                 id,
@@ -293,13 +296,13 @@ pub async fn find_open_shifts_by_location(location_id: Uuid) -> Result<Vec<Shift
         "#))
     .bind(location_id)
     .bind(ShiftStatus::Open.to_string())
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     Ok(rows.into_iter().map(|row| row.into()).collect())
 }
 
-pub async fn find_open_shifts() -> Result<Vec<Shift>> {
+pub async fn find_open_shifts() -> Result<Vec<Shift>, sqlx::Error> {
     let rows = sqlx::query_as::<_, Shift>(&sql(r#"
             SELECT
                 id,
@@ -323,13 +326,17 @@ pub async fn find_open_shifts() -> Result<Vec<Shift>> {
                 start_time
         "#))
     .bind(ShiftStatus::Open.to_string())
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     Ok(rows.into_iter().map(|row| row.into()).collect())
 }
 
-pub async fn update_shift(id: Uuid, input: ShiftInput) -> Result<Option<Shift>> {
+pub async fn update_shift(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+    input: ShiftInput,
+) -> Result<Option<Shift>, sqlx::Error> {
     let now = Utc::now();
     let row = sqlx::query_as::<_, Shift>(&sql(r#"
             UPDATE
@@ -377,13 +384,17 @@ pub async fn update_shift(id: Uuid, input: ShiftInput) -> Result<Option<Shift>> 
     .bind(input.status.to_string())
     .bind(now)
     .bind(id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&mut **tx)
     .await?;
 
     Ok(row.map(|r| r.into()))
 }
 
-pub async fn update_shift_status(id: Uuid, status: ShiftStatus) -> Result<Option<Shift>> {
+pub async fn update_shift_status(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+    status: ShiftStatus,
+) -> Result<Option<Shift>, sqlx::Error> {
     let now = Utc::now();
     let row = sqlx::query_as::<_, Shift>(&sql(r#"
             UPDATE
@@ -412,16 +423,19 @@ pub async fn update_shift_status(id: Uuid, status: ShiftStatus) -> Result<Option
     .bind(status.to_string())
     .bind(now)
     .bind(id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&mut **tx)
     .await?;
 
     Ok(row.map(|r| r.into()))
 }
 
-pub async fn delete_shift(id: Uuid) -> Result<Option<()>> {
+pub async fn delete_shift(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+) -> Result<Option<()>, sqlx::Error> {
     let result = sqlx::query(&sql("DELETE FROM shifts WHERE id = ?"))
         .bind(id)
-        .execute(get_pool())
+        .execute(&mut **tx)
         .await?;
 
     Ok(if result.rows_affected() > 0 {
@@ -432,7 +446,7 @@ pub async fn delete_shift(id: Uuid) -> Result<Option<()>> {
 }
 
 // Get shifts assigned to a specific user through the assignment system
-pub async fn find_shifts_by_user(user_id: Uuid) -> Result<Vec<Shift>> {
+pub async fn find_shifts_by_user(user_id: Uuid) -> Result<Vec<Shift>, sqlx::Error> {
     let rows = sqlx::query_as::<_, Shift>(&sql(r#"
             SELECT DISTINCT
                 s.id,
@@ -459,25 +473,32 @@ pub async fn find_shifts_by_user(user_id: Uuid) -> Result<Vec<Shift>> {
                 s.start_time
         "#))
     .bind(user_id)
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     Ok(rows.into_iter().map(|row| row.into()).collect())
 }
 
 // Assign shift using the assignment system (creates a shift assignment)
-pub async fn assign_shift(shift_id: Uuid, _user_id: Uuid) -> Result<Option<Shift>> {
+pub async fn assign_shift(
+    tx: &mut Transaction<'_, Postgres>,
+    shift_id: Uuid,
+    _user_id: Uuid,
+) -> Result<Option<Shift>, sqlx::Error> {
     // This is a simplified direct assignment - in practice, you might want to use the schedule repository
     // For now, we'll update the shift status to assigned
-    Ok(update_shift_status(shift_id, crate::database::models::ShiftStatus::Assigned).await?)
+    Ok(update_shift_status(tx, shift_id, crate::database::models::ShiftStatus::Assigned).await?)
 }
 
 // Unassign shift by updating status back to open
-pub async fn unassign_shift(shift_id: Uuid) -> Result<Option<Shift>> {
-    Ok(update_shift_status(shift_id, crate::database::models::ShiftStatus::Open).await?)
+pub async fn unassign_shift(
+    tx: &mut Transaction<'_, Postgres>,
+    shift_id: Uuid,
+) -> Result<Option<Shift>, sqlx::Error> {
+    Ok(update_shift_status(tx, shift_id, crate::database::models::ShiftStatus::Open).await?)
 }
 
-pub async fn find_by_query(filter_query: ShiftQuery) -> Result<Vec<Shift>> {
+pub async fn find_by_query(filter_query: ShiftQuery) -> Result<Vec<Shift>, sqlx::Error> {
     let mut query = r#"
             SELECT
                 id,
@@ -545,7 +566,7 @@ pub async fn find_by_query(filter_query: ShiftQuery) -> Result<Vec<Shift>> {
     for param in params.into_iter() {
         prepared = prepared.bind(param);
     }
-    let shifts = prepared.fetch_all(get_pool()).await?;
+    let shifts = prepared.fetch_all(&get_pool().await).await?;
 
     Ok(shifts)
 }

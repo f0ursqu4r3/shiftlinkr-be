@@ -1,6 +1,6 @@
-use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::database::{
@@ -53,7 +53,10 @@ pub struct ShiftSwapDetail {
 }
 
 /// Create a new shift swap request
-pub async fn create_swap_request(input: ShiftSwapInput) -> Result<ShiftSwap> {
+pub async fn create_swap_request(
+    tx: &mut Transaction<'_, Postgres>,
+    input: ShiftSwapInput,
+) -> Result<ShiftSwap, sqlx::Error> {
     let now = Utc::now();
 
     // Determine initial status based on swap type
@@ -105,7 +108,7 @@ pub async fn create_swap_request(input: ShiftSwapInput) -> Result<ShiftSwap> {
     .bind(status_str)
     .bind(now)
     .bind(now)
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(shift_swap)
@@ -117,7 +120,7 @@ pub async fn get_swap_requests_for_company(
     company_id: Uuid,
     status: Option<ShiftSwapStatus>,
     swap_type: Option<ShiftSwapType>,
-) -> Result<Vec<ShiftSwap>> {
+) -> Result<Vec<ShiftSwap>, sqlx::Error> {
     // For simplicity, just get all and filter in memory for now
     let shift_swaps = sqlx::query_as::<_, ShiftSwap>(
         r#"
@@ -143,7 +146,7 @@ pub async fn get_swap_requests_for_company(
             "#,
     )
     .bind(company_id)
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     let mut swaps = Vec::new();
@@ -174,7 +177,7 @@ pub async fn get_swap_requests_for_company(
 }
 
 /// Get a swap request by ID
-pub async fn find_swap_request_by_id(id: Uuid) -> Result<Option<ShiftSwap>> {
+pub async fn find_swap_request_by_id(id: Uuid) -> Result<Option<ShiftSwap>, sqlx::Error> {
     let shift_swap = sqlx::query_as::<_, ShiftSwap>(
         r#"
             SELECT
@@ -197,14 +200,19 @@ pub async fn find_swap_request_by_id(id: Uuid) -> Result<Option<ShiftSwap>> {
             "#,
     )
     .bind(id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&get_pool().await)
     .await?;
 
     Ok(shift_swap)
 }
 
 /// Approve a swap request (managers/admins only)
-pub async fn approve_swap(id: Uuid, approved_by: Uuid, notes: String) -> Result<ShiftSwap> {
+pub async fn approve_swap(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+    approved_by: Uuid,
+    notes: String,
+) -> Result<ShiftSwap, sqlx::Error> {
     let now = Utc::now();
     let status_str = ShiftSwapStatus::Approved.to_string();
 
@@ -239,14 +247,19 @@ pub async fn approve_swap(id: Uuid, approved_by: Uuid, notes: String) -> Result<
     .bind(notes)
     .bind(now)
     .bind(id)
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(shift_swap)
 }
 
 /// Deny a swap request (managers/admins only)
-pub async fn deny_swap(id: Uuid, denied_by: Uuid, notes: String) -> Result<ShiftSwap> {
+pub async fn deny_swap(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+    denied_by: Uuid,
+    notes: String,
+) -> Result<ShiftSwap, sqlx::Error> {
     let now = Utc::now();
     let status_str = ShiftSwapStatus::Denied.to_string();
 
@@ -281,14 +294,17 @@ pub async fn deny_swap(id: Uuid, denied_by: Uuid, notes: String) -> Result<Shift
     .bind(notes)
     .bind(now)
     .bind(id)
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(shift_swap)
 }
 
 /// Cancel a swap request
-pub async fn cancel_swap(id: Uuid) -> Result<ShiftSwap> {
+pub async fn cancel_swap(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+) -> Result<ShiftSwap, sqlx::Error> {
     let now = Utc::now();
     let status_str = ShiftSwapStatus::Cancelled.to_string();
 
@@ -319,14 +335,17 @@ pub async fn cancel_swap(id: Uuid) -> Result<ShiftSwap> {
     .bind(status_str)
     .bind(now)
     .bind(id)
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(shift_swap)
 }
 
 /// Complete a swap request
-pub async fn complete_swap(id: Uuid) -> Result<ShiftSwap> {
+pub async fn complete_swap(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+) -> Result<ShiftSwap, sqlx::Error> {
     let now = Utc::now();
     let status_str = ShiftSwapStatus::Completed.to_string();
 
@@ -357,7 +376,7 @@ pub async fn complete_swap(id: Uuid) -> Result<ShiftSwap> {
     .bind(status_str)
     .bind(now)
     .bind(id)
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(shift_swap)
@@ -369,7 +388,7 @@ pub async fn get_swap_requests_with_details(
     company_id: Uuid,
     status: Option<ShiftSwapStatus>,
     swap_type: Option<ShiftSwapType>,
-) -> Result<Vec<ShiftSwapDetail>> {
+) -> Result<Vec<ShiftSwapDetail>, sqlx::Error> {
     let mut query = r#"
             SELECT
                 ss.id,
@@ -437,7 +456,7 @@ pub async fn get_swap_requests_with_details(
         prepared = prepared.bind(param);
     }
 
-    let rows = prepared.fetch_all(get_pool()).await?;
+    let rows = prepared.fetch_all(&get_pool().await).await?;
 
     let shift_swap_response = rows
         .into_iter()
@@ -476,7 +495,7 @@ pub async fn get_swap_requests_with_details(
 }
 
 /// Get a swap request by ID with full details
-pub async fn get_swap_by_id_with_details(id: Uuid) -> Result<ShiftSwapDetail> {
+pub async fn get_swap_by_id_with_details(id: Uuid) -> Result<ShiftSwapDetail, sqlx::Error> {
     let row = sqlx::query_as::<_, ShiftSwapDetailRaw>(&sql(r#"
             SELECT
                 ss.id,
@@ -514,7 +533,7 @@ pub async fn get_swap_by_id_with_details(id: Uuid) -> Result<ShiftSwapDetail> {
                 ss.id = $1
         "#))
     .bind(id)
-    .fetch_one(get_pool())
+    .fetch_one(&get_pool().await)
     .await?;
 
     let mut shift_swap_detail = ShiftSwapDetail {
@@ -552,7 +571,7 @@ pub async fn get_swap_by_id_with_details(id: Uuid) -> Result<ShiftSwapDetail> {
 }
 
 /// Get all responses for a specific swap request
-pub async fn get_swap_responses(swap_id: Uuid) -> Result<Vec<ShiftSwapResponse>> {
+pub async fn get_swap_responses(swap_id: Uuid) -> Result<Vec<ShiftSwapResponse>, sqlx::Error> {
     let responses = sqlx::query_as::<_, ShiftSwapResponse>(&sql(r#"
             SELECT
                 id,
@@ -567,7 +586,7 @@ pub async fn get_swap_responses(swap_id: Uuid) -> Result<Vec<ShiftSwapResponse>>
                 swap_id = ?
         "#))
     .bind(swap_id)
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     Ok(responses)
@@ -576,7 +595,7 @@ pub async fn get_swap_responses(swap_id: Uuid) -> Result<Vec<ShiftSwapResponse>>
 pub async fn get_swap_response_for_user(
     swap_id: Uuid,
     user_id: Uuid,
-) -> Result<Option<ShiftSwapResponse>> {
+) -> Result<Option<ShiftSwapResponse>, sqlx::Error> {
     let response = sqlx::query_as::<_, ShiftSwapResponse>(&sql(r#"
             SELECT
                 id,
@@ -592,18 +611,19 @@ pub async fn get_swap_response_for_user(
         "#))
     .bind(swap_id)
     .bind(user_id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&get_pool().await)
     .await?;
 
     Ok(response)
 }
 
 pub async fn create_swap_response(
+    tx: &mut Transaction<'_, Postgres>,
     swap_id: Uuid,
     user_id: Uuid,
     response_type: ShiftSwapResponseStatus,
     notes: Option<String>,
-) -> Result<ShiftSwapResponse> {
+) -> Result<ShiftSwapResponse, sqlx::Error> {
     let now = Utc::now();
 
     let shift_swap_response = sqlx::query_as::<_, ShiftSwapResponse>(&sql(r#"
@@ -633,7 +653,7 @@ pub async fn create_swap_response(
         .bind(response_type)
         .bind(notes)
         .bind(now)
-        .fetch_one(get_pool())
+        .fetch_one(&mut **tx)
         .await?;
 
     Ok(shift_swap_response)
@@ -641,10 +661,11 @@ pub async fn create_swap_response(
 
 /// Update a swap response status
 pub async fn update_swap_response_status(
+    tx: &mut Transaction<'_, Postgres>,
     response_id: Uuid,
     response_type: ShiftSwapResponseStatus,
     notes: Option<String>,
-) -> Result<ShiftSwapResponse> {
+) -> Result<ShiftSwapResponse, sqlx::Error> {
     let now = Utc::now();
 
     let shift_swap_response = sqlx::query_as::<_, ShiftSwapResponse>(&sql(r#"
@@ -668,7 +689,7 @@ pub async fn update_swap_response_status(
     .bind(notes)
     .bind(now)
     .bind(response_id)
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(shift_swap_response)

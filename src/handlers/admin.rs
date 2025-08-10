@@ -1,16 +1,21 @@
-use actix_web::{web, HttpRequest, HttpResponse, Result};
+use actix_web::{HttpResponse, Result, web};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::database::models::{
-    Action, CompanyRole, CreateUpdateLocationInput, LocationInput, TeamInput,
+use crate::{
+    database::{
+        models::{Action, CompanyRole, CreateUpdateLocationInput, LocationInput, TeamInput},
+        repositories::{
+            company as company_repo, location as location_repo, team as team_repo,
+            user as user_repo,
+        },
+        transaction::DatabaseTransaction,
+    },
+    error::AppError,
+    handlers::shared::ApiResponse,
+    middleware::request_info::RequestInfo,
+    services::{activity_logger, user_context::UserContext},
 };
-use crate::database::repositories::{
-    company as company_repo, location as location_repo, team as team_repo, user as user_repo,
-};
-use crate::error::AppError;
-use crate::handlers::shared::ApiResponse;
-use crate::services::{activity_logger, user_context::extract_context};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -36,62 +41,62 @@ pub struct UserResponse {
 // Location handlers
 pub async fn create_location(
     input: web::Json<CreateUpdateLocationInput>,
-    req: HttpRequest,
+    ctx: UserContext,
+    req_info: RequestInfo,
 ) -> Result<HttpResponse> {
-    let user_context = extract_context(&req).await?;
+    ctx.requires_manager()?;
 
-    let user_id = user_context.user_id();
-
-    user_context.requires_manager()?;
-
-    let company_id = user_context
-        .company_id()
-        .ok_or_else(|| AppError::BadRequest("User does not belong to any company".to_string()))?;
-
+    let user_id = ctx.user_id();
+    let company_id = ctx.strict_company_id()?;
     let location_input = input.into_inner();
 
-    let location_name = location_input.name.clone();
+    // Extract values that need to be moved
+    let name = location_input.name;
+    let address = location_input.address;
+    let phone = location_input.phone;
+    let email = location_input.email;
 
-    let location = location_repo::create_location(LocationInput {
-        name: location_input.name,
-        address: location_input.address,
-        phone: location_input.phone,
-        email: location_input.email,
-        company_id,
+    let location = DatabaseTransaction::run(|tx| {
+        Box::pin(async move {
+            let location = location_repo::create_location(
+                tx,
+                LocationInput {
+                    name: name.clone(),
+                    address,
+                    phone,
+                    email,
+                    company_id,
+                },
+            )
+            .await?;
+
+            // Log the activity
+            let metadata = activity_logger::metadata(vec![
+                ("location_name", location.name.clone()),
+                ("location_id", location.id.to_string()),
+            ]);
+            activity_logger::log_location_activity(
+                tx,
+                company_id,
+                Some(user_id),
+                location.id,
+                Action::CREATED,
+                format!("Location '{}' created", location.name),
+                Some(metadata),
+                &req_info,
+            )
+            .await?;
+
+            Ok(location)
+        })
     })
-    .await
-    .map_err(|err| {
-        log::error!("Error creating location: {}", err);
-        AppError::DatabaseError(err)
-    })?;
+    .await?;
 
-    // Log location creation activity
-    let metadata = activity_logger::metadata(vec![
-        ("location_name", location_name),
-        ("location_id", location.id.to_string()),
-    ]);
-
-    if let Err(e) = activity_logger::log_location_activity(
-        company_id,
-        Some(user_id),
-        location.id,
-        Action::CREATED,
-        format!("Location '{}' created", location.name),
-        Some(metadata),
-        &req,
-    )
-    .await
-    {
-        log::warn!("Failed to log location creation activity: {}", e);
-    }
-
-    Ok(ApiResponse::success(location))
+    Ok(ApiResponse::created(location))
 }
 
-pub async fn get_locations(req: HttpRequest) -> Result<HttpResponse> {
-    let user_context = extract_context(&req).await?;
-
-    let user_id = user_context.user_id();
+pub async fn get_locations(ctx: UserContext) -> Result<HttpResponse> {
+    let user_id = ctx.user_id();
 
     let companies = company_repo::get_companies_for_user(user_id)
         .await
@@ -116,11 +121,9 @@ pub async fn get_locations(req: HttpRequest) -> Result<HttpResponse> {
     Ok(ApiResponse::success(all_locations))
 }
 
-pub async fn get_location(path: web::Path<Uuid>, req: HttpRequest) -> Result<HttpResponse> {
-    let user_context = extract_context(&req).await?;
-
+pub async fn get_location(path: web::Path<Uuid>, ctx: UserContext) -> Result<HttpResponse> {
     let location_id = path.into_inner();
-    let user_id = user_context.user_id();
+    let user_id = ctx.user_id();
 
     let location = location_repo::find_by_id(location_id)
         .await
@@ -160,42 +163,67 @@ pub async fn get_location(path: web::Path<Uuid>, req: HttpRequest) -> Result<Htt
 pub async fn update_location(
     path: web::Path<Uuid>,
     input: web::Json<CreateUpdateLocationInput>,
-    req: HttpRequest,
+    ctx: UserContext,
+    req_info: RequestInfo,
 ) -> Result<HttpResponse> {
-    let user_context = extract_context(&req).await?;
+    let company_id = ctx.strict_company_id()?;
 
-    let company_id = user_context.strict_company_id()?;
-
-    user_context.requires_manager()?;
+    ctx.requires_manager()?;
 
     let location_id = path.into_inner();
 
-    let location = location_repo::update_location(
-        location_id,
-        LocationInput {
-            name: input.name.clone(),
-            address: input.address.clone(),
-            phone: input.phone.clone(),
-            email: input.email.clone(),
-            company_id,
-        },
-    )
-    .await
-    .map_err(|err| {
-        log::error!("Error updating location {}: {}", location_id, err);
-        AppError::DatabaseError(err)
-    })?
-    .ok_or_else(|| {
-        log::warn!("Location {} not found", location_id);
-        AppError::NotFound("Location not found".to_string())
-    })?;
+    let location = DatabaseTransaction::run(|tx| {
+        Box::pin(async move {
+            let location = location_repo::update_location(
+                tx,
+                location_id,
+                LocationInput {
+                    name: input.name.clone(),
+                    address: input.address.clone(),
+                    phone: input.phone.clone(),
+                    email: input.email.clone(),
+                    company_id,
+                },
+            )
+            .await
+            .map_err(|err| {
+                log::error!("Error updating location {}: {}", location_id, err);
+                AppError::DatabaseError(err)
+            })?
+            .ok_or_else(|| {
+                log::warn!("Location {} not found", location_id);
+                AppError::NotFound("Location not found".to_string())
+            })?;
+
+            // Log the activity
+            let metadata = activity_logger::metadata(vec![
+                ("location_name", location.name.clone()),
+                ("location_id", location.id.to_string()),
+            ]);
+            activity_logger::log_location_activity(
+                tx,
+                company_id,
+                Some(ctx.user_id()),
+                location.id,
+                Action::UPDATED,
+                format!("Location '{}' updated", location.name),
+                Some(metadata),
+                &req_info,
+            )
+            .await?;
+            Ok(location)
+        })
+    })
+    .await?;
 
     Ok(ApiResponse::success(location))
 }
 
-pub async fn delete_location(path: web::Path<Uuid>, req: HttpRequest) -> Result<HttpResponse> {
-    let user_context = extract_context(&req).await?;
-
+pub async fn delete_location(
+    path: web::Path<Uuid>,
+    ctx: UserContext,
+    req_info: RequestInfo,
+) -> Result<HttpResponse> {
     let location_id = path.into_inner();
 
     // Get the location to check permissions
@@ -210,19 +238,46 @@ pub async fn delete_location(path: web::Path<Uuid>, req: HttpRequest) -> Result<
             AppError::NotFound("Location not found".to_string())
         })?;
 
-    user_context.requires_same_company(location.company_id)?;
+    ctx.requires_same_company(location.company_id)?;
 
-    // Proceed with deletion
-    location_repo::delete_location(location_id)
-        .await
-        .map_err(|e| {
-            log::error!("Error deleting location {}: {}", location_id, e);
-            AppError::DatabaseError(e)
-        })?
-        .ok_or_else(|| {
-            log::warn!("Location {} not found for deletion", location_id);
-            AppError::NotFound("Location not found".to_string())
-        })?;
+    DatabaseTransaction::run(|tx| {
+        Box::pin(async move {
+            // Check if the location has any teams
+            let teams = team_repo::get_teams_by_location(location_id)
+                .await
+                .map_err(|e| {
+                    log::error!("Error fetching teams for location {}: {}", location_id, e);
+                    AppError::DatabaseError(e)
+                })?;
+
+            if !teams.is_empty() {
+                return Err(AppError::BadRequest(
+                    "Cannot delete location with existing teams".to_string(),
+                ));
+            }
+
+            // Proceed with deletion
+            location_repo::delete_location(tx, location_id).await?;
+
+            // Log the activity
+            let metadata =
+                activity_logger::metadata(vec![("location_id", location_id.to_string())]);
+
+            activity_logger::log_location_activity(
+                tx,
+                location.company_id,
+                Some(ctx.user_id()),
+                location.id,
+                Action::DELETED,
+                format!("Location '{}' deleted", location.name),
+                Some(metadata),
+                &req_info,
+            )
+            .await?;
+            Ok(())
+        })
+    })
+    .await?;
 
     Ok(ApiResponse::success_message(
         "Location deleted successfully",
@@ -230,14 +285,16 @@ pub async fn delete_location(path: web::Path<Uuid>, req: HttpRequest) -> Result<
 }
 
 // Team handlers
-pub async fn create_team(input: web::Json<TeamInput>, req: HttpRequest) -> Result<HttpResponse> {
-    let user_context = extract_context(&req).await?;
-
+pub async fn create_team(
+    input: web::Json<TeamInput>,
+    ctx: UserContext,
+    req_info: RequestInfo,
+) -> Result<HttpResponse> {
     // Get the location to determine which company it belongs to
     let location_id = input.location_id;
     let team_input = input.into_inner();
     let team_name = team_input.name.clone();
-    let user_id = user_context.user_id();
+    let user_id = ctx.user_id();
 
     let location = location_repo::find_by_id(location_id)
         .await
@@ -250,39 +307,42 @@ pub async fn create_team(input: web::Json<TeamInput>, req: HttpRequest) -> Resul
             AppError::NotFound("Location not found".to_string())
         })?;
 
-    user_context.requires_same_company(location.company_id)?;
+    ctx.requires_same_company(location.company_id)?;
 
-    let team = team_repo::create_team(team_input).await.map_err(|e| {
-        log::error!("Error creating team: {}", e);
-        AppError::DatabaseError(e)
-    })?;
+    let team = DatabaseTransaction::run(|tx| {
+        Box::pin(async move {
+            let team = team_repo::create_team(tx, team_input).await.map_err(|e| {
+                log::error!("Error creating team: {}", e);
+                AppError::DatabaseError(e)
+            })?;
 
-    let metadata = activity_logger::metadata(vec![
-        ("team_name", team_name),
-        ("team_id", team.id.to_string()),
-        ("location_id", location_id.to_string()),
-    ]);
+            let metadata = activity_logger::metadata(vec![
+                ("team_name", team_name),
+                ("team_id", team.id.to_string()),
+                ("location_id", location_id.to_string()),
+            ]);
 
-    if let Err(e) = activity_logger::log_team_activity(
-        location.company_id,
-        Some(user_id),
-        team.id,
-        Action::CREATED,
-        format!("Team '{}' created in location {}", team.name, location_id),
-        Some(metadata),
-        &req,
-    )
-    .await
-    {
-        log::warn!("Failed to log team creation activity: {}", e);
-    }
+            activity_logger::log_team_activity(
+                tx,
+                location.company_id,
+                Some(user_id),
+                team.id,
+                Action::CREATED,
+                format!("Team '{}' created in location {}", team.name, location_id),
+                Some(metadata),
+                &req_info,
+            )
+            .await?;
+
+            Ok(team)
+        })
+    })
+    .await?;
 
     Ok(ApiResponse::success(team))
 }
 
-pub async fn get_teams(query: web::Query<TeamQuery>, req: HttpRequest) -> Result<HttpResponse> {
-    let user_context = extract_context(&req).await?;
-
+pub async fn get_teams(query: web::Query<TeamQuery>, ctx: UserContext) -> Result<HttpResponse> {
     let teams = if let Some(location_id) = query.location_id {
         let location = location_repo::find_by_id(location_id)
             .await
@@ -295,7 +355,7 @@ pub async fn get_teams(query: web::Query<TeamQuery>, req: HttpRequest) -> Result
                 AppError::NotFound("Location not found".to_string())
             })?;
 
-        user_context.requires_same_company(location.company_id)?;
+        ctx.requires_same_company(location.company_id)?;
 
         team_repo::get_teams_by_location(location_id)
             .await
@@ -304,8 +364,8 @@ pub async fn get_teams(query: web::Query<TeamQuery>, req: HttpRequest) -> Result
                 AppError::DatabaseError(e)
             })?
     } else {
-        user_context.requires_manager()?;
-        let company_id = user_context.strict_company_id()?;
+        ctx.requires_manager()?;
+        let company_id = ctx.strict_company_id()?;
 
         team_repo::get_all_teams_for_company(company_id)
             .await
@@ -318,16 +378,14 @@ pub async fn get_teams(query: web::Query<TeamQuery>, req: HttpRequest) -> Result
     Ok(ApiResponse::success(teams))
 }
 
-pub async fn get_team(path: web::Path<Uuid>, req: HttpRequest) -> Result<HttpResponse> {
-    let user_context = extract_context(&req).await?;
-
+pub async fn get_team(path: web::Path<Uuid>, ctx: UserContext) -> Result<HttpResponse> {
     let team_id = path.into_inner();
 
-    user_context.requires_manager()?;
+    ctx.requires_manager()?;
 
     let location = get_location_for_team(team_id).await?;
 
-    user_context.requires_same_company(location.company_id)?;
+    ctx.requires_same_company(location.company_id)?;
 
     let team = team_repo::get_team_by_id(team_id)
         .await
@@ -346,13 +404,14 @@ pub async fn get_team(path: web::Path<Uuid>, req: HttpRequest) -> Result<HttpRes
 pub async fn update_team(
     path: web::Path<Uuid>,
     input: web::Json<TeamInput>,
-    req: HttpRequest,
+    ctx: UserContext,
+    req_info: RequestInfo,
 ) -> Result<HttpResponse> {
-    let user_context = extract_context(&req).await?;
+    let user_id = ctx.user_id();
 
     let team_id = path.into_inner();
 
-    user_context.requires_manager()?;
+    ctx.requires_manager()?;
 
     let location = location_repo::find_by_team_id(team_id)
         .await
@@ -365,82 +424,145 @@ pub async fn update_team(
             AppError::NotFound("Location not found".to_string())
         })?;
 
-    user_context.requires_same_company(location.company_id)?;
+    ctx.requires_same_company(location.company_id)?;
 
-    let team = team_repo::update_team(team_id, input.into_inner())
-        .await
-        .map_err(|e| {
-            log::error!("Error fetching team {}: {}", team_id, e);
-            AppError::DatabaseError(e)
-        })?
-        .ok_or_else(|| {
-            log::warn!("Team {} not found", team_id);
-            AppError::NotFound("Team not found".to_string())
-        })?;
+    let team = DatabaseTransaction::run(|tx| {
+        Box::pin(async move {
+            let team = team_repo::update_team(tx, team_id, input.into_inner())
+                .await?
+                .ok_or_else(|| {
+                    log::warn!("Team {} not found", team_id);
+                    AppError::NotFound("Team not found".to_string())
+                })?;
 
+            // Log the activity
+            let metadata = activity_logger::metadata(vec![
+                ("team_name", team.name.clone()),
+                ("team_id", team.id.to_string()),
+                ("location_id", location.id.to_string()),
+            ]);
+
+            activity_logger::log_team_activity(
+                tx,
+                location.company_id,
+                Some(user_id),
+                team.id,
+                Action::UPDATED,
+                format!("Team '{}' updated in location {}", team.name, location.id),
+                Some(metadata),
+                &req_info,
+            )
+            .await?;
+
+            Ok(team)
+        })
+    })
+    .await?;
     Ok(ApiResponse::success(team))
 }
 
-pub async fn delete_team(path: web::Path<Uuid>, req: HttpRequest) -> Result<HttpResponse> {
-    let user_context = extract_context(&req).await?;
-
+pub async fn delete_team(
+    path: web::Path<Uuid>,
+    ctx: UserContext,
+    req_info: RequestInfo,
+) -> Result<HttpResponse> {
     let team_id = path.into_inner();
 
-    user_context.requires_manager()?;
+    ctx.requires_manager()?;
 
     let location = get_location_for_team(team_id).await?;
 
-    user_context.requires_same_company(location.company_id)?;
+    ctx.requires_same_company(location.company_id)?;
 
-    team_repo::delete_team(team_id)
-        .await
-        .map_err(|e| {
-            log::error!("Error deleting team {}: {}", team_id, e);
-            AppError::DatabaseError(e)
-        })?
-        .ok_or_else(|| {
-            log::warn!("Team {} not found for deletion", team_id);
-            AppError::NotFound("Team not found".to_string())
-        })?;
+    DatabaseTransaction::run(|tx| {
+        Box::pin(async move {
+            team_repo::delete_team(tx, team_id).await?.ok_or_else(|| {
+                log::warn!("Team {} not found for deletion", team_id);
+                AppError::NotFound("Team not found".to_string())
+            })?;
 
+            // Log the activity
+            let metadata = activity_logger::metadata(vec![
+                ("team_id", team_id.to_string()),
+                ("location_id", location.id.to_string()),
+            ]);
+
+            activity_logger::log_team_activity(
+                tx,
+                location.company_id,
+                Some(ctx.user_id()),
+                team_id,
+                Action::DELETED,
+                format!("Team with ID {} deleted", team_id),
+                Some(metadata),
+                &req_info,
+            )
+            .await?;
+
+            Ok(())
+        })
+    })
+    .await?;
     Ok(ApiResponse::success_message("Team deleted successfully"))
 }
 
 // Team member handlers
 pub async fn add_team_member(
     path: web::Path<(Uuid, Uuid)>,
-    req: HttpRequest,
+    ctx: UserContext,
+    req_info: RequestInfo,
 ) -> Result<HttpResponse> {
-    let user_context = extract_context(&req).await?;
-
     let (team_id, user_id) = path.into_inner();
 
-    user_context.requires_manager()?;
+    ctx.requires_manager()?;
 
     let location = get_location_for_team(team_id).await?;
 
-    user_context.requires_same_company(location.company_id)?;
+    ctx.requires_same_company(location.company_id)?;
 
-    let team_member = team_repo::add_team_member(team_id, user_id)
-        .await
-        .map_err(|e| {
-            log::error!("Error adding team member to team {}: {}", team_id, e);
-            AppError::DatabaseError(e)
-        })?;
+    let team_member = DatabaseTransaction::run(|tx| {
+        Box::pin(async move {
+            let team_member = team_repo::add_team_member(tx, team_id, user_id)
+                .await
+                .map_err(|e| {
+                    log::error!("Error adding team member to team {}: {}", team_id, e);
+                    AppError::DatabaseError(e)
+                })?;
+
+            // Log the activity
+            let metadata = activity_logger::metadata(vec![
+                ("team_id", team_id.to_string()),
+                ("user_id", user_id.to_string()),
+            ]);
+
+            activity_logger::log_team_activity(
+                tx,
+                location.company_id,
+                Some(ctx.user_id()),
+                team_id,
+                Action::MEMBER_ADDED,
+                format!("User {} added to team {}", user_id, team_id),
+                Some(metadata),
+                &req_info,
+            )
+            .await?;
+
+            Ok(team_member)
+        })
+    })
+    .await?;
 
     Ok(ApiResponse::success(team_member))
 }
 
-pub async fn get_team_members(path: web::Path<Uuid>, req: HttpRequest) -> Result<HttpResponse> {
-    let user_context = extract_context(&req).await?;
-
+pub async fn get_team_members(path: web::Path<Uuid>, ctx: UserContext) -> Result<HttpResponse> {
     let team_id = path.into_inner();
 
-    user_context.requires_manager()?;
+    ctx.requires_manager()?;
 
     let location = get_location_for_team(team_id).await?;
 
-    user_context.requires_same_company(location.company_id)?;
+    ctx.requires_same_company(location.company_id)?;
 
     let members = team_repo::get_team_members(team_id).await.map_err(|e| {
         log::error!("Error fetching team members for team {}: {}", team_id, e);
@@ -452,28 +574,52 @@ pub async fn get_team_members(path: web::Path<Uuid>, req: HttpRequest) -> Result
 
 pub async fn remove_team_member(
     path: web::Path<(Uuid, Uuid)>,
-    req: HttpRequest,
+    ctx: UserContext,
+    req_info: RequestInfo,
 ) -> Result<HttpResponse> {
-    let user_context = extract_context(&req).await?;
-
     let (team_id, user_id) = path.into_inner();
 
-    user_context.requires_manager()?;
+    ctx.requires_manager()?;
 
     let location = get_location_for_team(team_id).await?;
 
-    user_context.requires_same_company(location.company_id)?;
+    ctx.requires_same_company(location.company_id)?;
 
-    team_repo::remove_team_member(team_id, user_id)
-        .await
-        .map_err(|e| {
-            log::error!("Error removing team member: {}", e);
-            AppError::DatabaseError(e)
-        })?
-        .ok_or_else(|| {
-            log::warn!("Team member not found in team {}", team_id);
-            AppError::NotFound("Team member not found".to_string())
-        })?;
+    DatabaseTransaction::run(|tx| {
+        Box::pin(async move {
+            team_repo::remove_team_member(tx, team_id, user_id)
+                .await
+                .map_err(|e| {
+                    log::error!("Error removing team member from team {}: {}", team_id, e);
+                    AppError::DatabaseError(e)
+                })?
+                .ok_or_else(|| {
+                    log::warn!("Team member {} not found in team {}", user_id, team_id);
+                    AppError::NotFound("Team member not found".to_string())
+                })?;
+
+            // Log the activity
+            let metadata = activity_logger::metadata(vec![
+                ("team_id", team_id.to_string()),
+                ("user_id", user_id.to_string()),
+            ]);
+
+            activity_logger::log_team_activity(
+                tx,
+                location.company_id,
+                Some(ctx.user_id()),
+                team_id,
+                Action::MEMBER_REMOVED,
+                format!("User {} removed from team {}", user_id, team_id),
+                Some(metadata),
+                &req_info,
+            )
+            .await?;
+
+            Ok(())
+        })
+    })
+    .await?;
 
     Ok(ApiResponse::success_message(
         "Team member removed successfully",
@@ -487,12 +633,10 @@ pub struct TeamQuery {
 }
 
 // User management handlers
-pub async fn get_users(req: HttpRequest) -> Result<HttpResponse> {
-    let user_context = extract_context(&req).await?;
+pub async fn get_users(ctx: UserContext) -> Result<HttpResponse> {
+    ctx.requires_manager()?;
 
-    user_context.requires_manager()?;
-
-    let company_id = user_context.strict_company_id()?;
+    let company_id = ctx.strict_company_id()?;
 
     let employees: Vec<UserResponse> = company_repo::get_company_employees(company_id)
         .await
@@ -525,25 +669,22 @@ pub async fn get_users(req: HttpRequest) -> Result<HttpResponse> {
 pub async fn update_user(
     path: web::Path<Uuid>,
     input: web::Json<UpdateUserRequest>,
-    req: HttpRequest,
+    ctx: UserContext,
+    req_info: RequestInfo,
 ) -> Result<HttpResponse, AppError> {
-    let user_context = extract_context(&req).await?;
-
     let user_id_to_update = path.into_inner();
-    let user_id = user_context.user_id();
+    let user_id = ctx.user_id();
     let update_request = input.into_inner();
 
     // Check permissions based on whether role is being updated
     if update_request.role.is_some() {
-        user_context.requires_manager()?;
+        ctx.requires_manager()?;
     } else {
-        user_context.requires_same_user(user_id_to_update)?;
+        ctx.requires_same_user(user_id_to_update)?;
     }
 
     // Get the company ID from user context
-    let company_id = user_context
-        .company_id()
-        .ok_or_else(|| AppError::BadRequest("User does not belong to any company".to_string()))?;
+    let company_id = ctx.strict_company_id()?;
 
     // Check if the user to update belongs to requesting user's company
     let user_company_info =
@@ -553,32 +694,60 @@ pub async fn update_user(
                 AppError::PermissionDenied("User does not belong to the same company".to_string())
             })?;
 
-    // Update basic user information
-    let updated_user = user_repo::update_user(
-        user_id_to_update,
-        &update_request.name,
-        &update_request.email,
-    )
+    let (updated_user, final_role) = DatabaseTransaction::run(|tx| {
+        Box::pin(async move {
+            // Update basic user information
+            let updated_user = user_repo::update_user(
+                tx,
+                user_id_to_update,
+                &update_request.name,
+                &update_request.email,
+            )
+            .await?;
+
+            let final_role = if let Some(new_role) = update_request.role {
+                // If the user is trying to change their own role, ensure they are not demoting themselves from admin
+                if user_id == user_id_to_update
+                    && user_company_info.role == CompanyRole::Admin
+                    && new_role != CompanyRole::Admin
+                {
+                    return Err(AppError::PermissionDenied(
+                        "You cannot demote yourself from admin role".to_string(),
+                    ));
+                }
+
+                // Update the user's role in the company
+                company_repo::update_employee_role(tx, company_id, user_id_to_update, &new_role)
+                    .await?;
+
+                new_role
+            } else {
+                user_company_info.role
+            };
+
+            // Log the activity
+            let metadata = activity_logger::metadata(vec![
+                ("user_id", user_id_to_update.to_string()),
+                ("updated_by", user_id.to_string()),
+                ("role", final_role.to_string()),
+            ]);
+
+            activity_logger::log_user_activity(
+                tx,
+                company_id,
+                Some(user_id),
+                user_id_to_update,
+                Action::UPDATED,
+                format!("User {} updated", user_id_to_update),
+                Some(metadata),
+                &req_info,
+            )
+            .await?;
+
+            Ok((updated_user, final_role))
+        })
+    })
     .await?;
-
-    let final_role = if let Some(new_role) = update_request.role {
-        // If the user is trying to change their own role, ensure they are not demoting themselves from admin
-        if user_id == user_id_to_update
-            && user_company_info.role == CompanyRole::Admin
-            && new_role != CompanyRole::Admin
-        {
-            return Err(AppError::PermissionDenied(
-                "You cannot demote yourself from admin role".to_string(),
-            ));
-        }
-
-        // Update the user's role in the company
-        company_repo::update_employee_role(company_id, user_id_to_update, &new_role).await?;
-
-        new_role
-    } else {
-        user_company_info.role
-    };
 
     Ok(ApiResponse::success(UserResponse {
         id: updated_user.id,
@@ -600,16 +769,18 @@ pub async fn update_user(
     }))
 }
 
-pub async fn delete_user(path: web::Path<Uuid>, req: HttpRequest) -> Result<HttpResponse> {
-    let user_context = extract_context(&req).await?;
-
+pub async fn delete_user(
+    path: web::Path<Uuid>,
+    ctx: UserContext,
+    req_info: RequestInfo,
+) -> Result<HttpResponse> {
     let user_id_to_delete = path.into_inner();
 
     // Only admins can delete users - check company-specific admin role
-    user_context.requires_manager()?;
+    ctx.requires_manager()?;
 
     // Get the company ID from user context
-    let company_id = user_context.strict_company_id()?;
+    let company_id = ctx.strict_company_id()?;
 
     // Check if user is admin in the specific company
     let employees = company_repo::get_company_employees(company_id)
@@ -630,12 +801,30 @@ pub async fn delete_user(path: web::Path<Uuid>, req: HttpRequest) -> Result<Http
         );
     }
 
-    user_repo::delete_user(user_id_to_delete)
-        .await
-        .map_err(|e| {
-            log::error!("Error deleting user {}: {}", user_id_to_delete, e);
-            AppError::DatabaseError(e)
-        })?;
+    // Proceed with deletion
+    DatabaseTransaction::run(|tx| {
+        Box::pin(async move {
+            user_repo::delete_user(tx, user_id_to_delete).await?;
+
+            // Log the activity
+            let metadata =
+                activity_logger::metadata(vec![("user_id", user_id_to_delete.to_string())]);
+            activity_logger::log_user_activity(
+                tx,
+                company_id,
+                Some(ctx.user_id()),
+                user_id_to_delete,
+                Action::DELETED,
+                format!("User with ID {} deleted", user_id_to_delete),
+                Some(metadata),
+                &req_info,
+            )
+            .await?;
+
+            Ok(())
+        })
+    })
+    .await?;
 
     Ok(ApiResponse::success_message("User deleted successfully"))
 }

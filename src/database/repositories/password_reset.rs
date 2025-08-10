@@ -1,5 +1,5 @@
-use anyhow::Result;
 use chrono::{Duration, Utc};
+use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::database::{get_pool, models::PasswordResetToken, utils::sql};
@@ -22,7 +22,10 @@ fn generate_secure_token() -> String {
 }
 
 /// Create a new password reset token
-pub async fn create_token(user_id: Uuid) -> Result<PasswordResetToken> {
+pub async fn create_token(
+    tx: &mut Transaction<'_, Postgres>,
+    user_id: Uuid,
+) -> Result<PasswordResetToken, sqlx::Error> {
     let token_id = Uuid::new_v4();
     let token = generate_secure_token();
     let expires_at = Utc::now() + Duration::hours(1); // 1 hour expiration
@@ -46,14 +49,14 @@ pub async fn create_token(user_id: Uuid) -> Result<PasswordResetToken> {
     .bind(&token.clone())
     .bind(&expires_at)
     .bind(&created_at)
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(reset_token)
 }
 
 /// Find a valid (unused and not expired) token
-pub async fn find_valid_token(token: &str) -> Result<Option<PasswordResetToken>> {
+pub async fn find_valid_token(token: &str) -> Result<Option<PasswordResetToken>, sqlx::Error> {
     let now = Utc::now();
 
     let result = sqlx::query_as::<_, PasswordResetToken>(&sql(r#"
@@ -73,14 +76,17 @@ pub async fn find_valid_token(token: &str) -> Result<Option<PasswordResetToken>>
     "#))
     .bind(token)
     .bind(now)
-    .fetch_optional(get_pool())
+    .fetch_optional(&get_pool().await)
     .await?;
 
     Ok(result)
 }
 
 /// Mark a token as used
-pub async fn mark_token_used(token: &str) -> Result<PasswordResetToken> {
+pub async fn mark_token_used(
+    tx: &mut Transaction<'_, Postgres>,
+    token: &str,
+) -> Result<PasswordResetToken, sqlx::Error> {
     let now = Utc::now();
 
     let result = sqlx::query_as::<_, PasswordResetToken>(&sql(r#"
@@ -100,14 +106,16 @@ pub async fn mark_token_used(token: &str) -> Result<PasswordResetToken> {
     "#))
     .bind(now)
     .bind(token)
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(result)
 }
 
 /// Clean up expired tokens (optional cleanup method)
-pub async fn cleanup_expired_tokens() -> Result<u64> {
+pub async fn cleanup_expired_tokens(
+    tx: &mut Transaction<'_, Postgres>,
+) -> Result<u64, sqlx::Error> {
     let now = Utc::now();
 
     let result = sqlx::query(&sql(r#"
@@ -116,14 +124,17 @@ pub async fn cleanup_expired_tokens() -> Result<u64> {
             expires_at < ?
     "#))
     .bind(now)
-    .execute(get_pool())
+    .execute(&mut **tx)
     .await?;
 
     Ok(result.rows_affected())
 }
 
 /// Invalidate all tokens for a user (when password is reset)
-pub async fn invalidate_user_tokens(user_id: Uuid) -> Result<()> {
+pub async fn invalidate_user_tokens(
+    tx: &mut Transaction<'_, Postgres>,
+    user_id: Uuid,
+) -> Result<(), sqlx::Error> {
     let now = Utc::now();
 
     sqlx::query(&sql(r#"
@@ -134,7 +145,7 @@ pub async fn invalidate_user_tokens(user_id: Uuid) -> Result<()> {
     "#))
     .bind(now)
     .bind(user_id)
-    .execute(get_pool())
+    .execute(&mut **tx)
     .await?;
 
     Ok(())

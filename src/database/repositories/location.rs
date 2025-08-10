@@ -1,5 +1,5 @@
-use anyhow::Result;
 use chrono::Utc;
+use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::database::{
@@ -9,7 +9,10 @@ use crate::database::{
 };
 
 // Location management methods
-pub async fn create_location(location: LocationInput) -> Result<Location> {
+pub async fn create_location(
+    tx: &mut Transaction<'_, Postgres>,
+    location: LocationInput,
+) -> Result<Location, sqlx::Error> {
     let now = Utc::now();
     let location = sqlx::query_as::<_, Location>(&sql(r#"
         INSERT INTO
@@ -41,13 +44,13 @@ pub async fn create_location(location: LocationInput) -> Result<Location> {
     .bind(location.company_id)
     .bind(now)
     .bind(now)
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(location)
 }
 
-pub async fn find_by_id(id: Uuid) -> Result<Option<Location>> {
+pub async fn find_by_id(id: Uuid) -> Result<Option<Location>, sqlx::Error> {
     let location = sqlx::query_as::<_, Location>(&sql(r#"
         SELECT
             id,
@@ -64,13 +67,13 @@ pub async fn find_by_id(id: Uuid) -> Result<Option<Location>> {
             id = ?
     "#))
     .bind(id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&get_pool().await)
     .await?;
 
     Ok(location)
 }
 
-pub async fn find_by_team_id(team_id: Uuid) -> Result<Option<Location>> {
+pub async fn find_by_team_id(team_id: Uuid) -> Result<Option<Location>, sqlx::Error> {
     let location = sqlx::query_as::<_, Location>(&sql(r#"
         SELECT
             l.id,
@@ -88,13 +91,13 @@ pub async fn find_by_team_id(team_id: Uuid) -> Result<Option<Location>> {
             t.id = ?
     "#))
     .bind(team_id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&get_pool().await)
     .await?;
 
     Ok(location)
 }
 
-pub async fn get_locations_by_company(company_id: Uuid) -> Result<Vec<Location>> {
+pub async fn get_locations_by_company(company_id: Uuid) -> Result<Vec<Location>, sqlx::Error> {
     let locations = sqlx::query_as::<_, Location>(&sql(r#"
         SELECT
             id,
@@ -113,13 +116,15 @@ pub async fn get_locations_by_company(company_id: Uuid) -> Result<Vec<Location>>
             name
     "#))
     .bind(company_id)
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     Ok(locations)
 }
 
-pub async fn get_locations_by_company_ids(company_ids: Vec<Uuid>) -> Result<Vec<Location>> {
+pub async fn get_locations_by_company_ids(
+    company_ids: Vec<Uuid>,
+) -> Result<Vec<Location>, sqlx::Error> {
     if company_ids.is_empty() {
         return Ok(Vec::new());
     }
@@ -142,13 +147,17 @@ pub async fn get_locations_by_company_ids(company_ids: Vec<Uuid>) -> Result<Vec<
                 name
         "#))
     .bind(&company_ids)
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     Ok(locations)
 }
 
-pub async fn update_location(id: Uuid, input: LocationInput) -> Result<Option<Location>> {
+pub async fn update_location(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+    input: LocationInput,
+) -> Result<Option<Location>, sqlx::Error> {
     let now = Utc::now();
     let location = sqlx::query_as::<_, Location>(&sql(r#"
         UPDATE
@@ -179,16 +188,19 @@ pub async fn update_location(id: Uuid, input: LocationInput) -> Result<Option<Lo
     .bind(input.company_id)
     .bind(now)
     .bind(id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&mut **tx)
     .await?;
 
     Ok(location)
 }
 
-pub async fn delete_location(id: Uuid) -> Result<Option<()>> {
+pub async fn delete_location(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+) -> Result<Option<()>, sqlx::Error> {
     let result = sqlx::query(&sql("DELETE FROM locations WHERE id = ?"))
         .bind(id)
-        .execute(get_pool())
+        .execute(&mut **tx)
         .await?;
 
     Ok(if result.rows_affected() > 0 {

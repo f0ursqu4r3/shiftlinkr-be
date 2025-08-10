@@ -1,5 +1,5 @@
-use anyhow::Result;
 use chrono::Utc;
+use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::database::{
@@ -9,7 +9,10 @@ use crate::database::{
 };
 
 /// Create a new shift claim
-pub async fn create_claim(input: &ShiftClaimInput) -> Result<ShiftClaim> {
+pub async fn create_claim(
+    tx: &mut Transaction<'_, Postgres>,
+    input: &ShiftClaimInput,
+) -> Result<ShiftClaim, sqlx::Error> {
     let now = Utc::now();
     let status = "pending";
 
@@ -39,14 +42,14 @@ pub async fn create_claim(input: &ShiftClaimInput) -> Result<ShiftClaim> {
     .bind(status)
     .bind(now)
     .bind(now)
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(claim)
 }
 
 /// Get a specific shift claim by ID
-pub async fn get_claim_by_id(id: Uuid) -> Result<Option<ShiftClaim>> {
+pub async fn get_claim_by_id(id: Uuid) -> Result<Option<ShiftClaim>, sqlx::Error> {
     let claim = sqlx::query_as::<_, ShiftClaim>(&sql(r#"
         SELECT
             id,
@@ -63,14 +66,14 @@ pub async fn get_claim_by_id(id: Uuid) -> Result<Option<ShiftClaim>> {
             id = ?
     "#))
     .bind(id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&get_pool().await)
     .await?;
 
     Ok(claim)
 }
 
 /// Get all claims for a specific shift
-pub async fn get_claims_by_shift(shift_id: Uuid) -> Result<Vec<ShiftClaim>> {
+pub async fn get_claims_by_shift(shift_id: Uuid) -> Result<Vec<ShiftClaim>, sqlx::Error> {
     let claims = sqlx::query_as::<_, ShiftClaim>(&sql(r#"
         SELECT
             id,
@@ -89,14 +92,14 @@ pub async fn get_claims_by_shift(shift_id: Uuid) -> Result<Vec<ShiftClaim>> {
             created_at DESC
     "#))
     .bind(shift_id)
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     Ok(claims)
 }
 
 /// Get all claims by a specific user
-pub async fn get_claims_by_user(user_id: Uuid) -> Result<Vec<ShiftClaim>> {
+pub async fn get_claims_by_user(user_id: Uuid) -> Result<Vec<ShiftClaim>, sqlx::Error> {
     let claims = sqlx::query_as::<_, ShiftClaim>(&sql(r#"
         SELECT
             id,
@@ -115,14 +118,14 @@ pub async fn get_claims_by_user(user_id: Uuid) -> Result<Vec<ShiftClaim>> {
             created_at DESC
     "#))
     .bind(user_id)
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     Ok(claims)
 }
 
 /// Get all claims
-pub async fn get_all_claims_by_company(company_id: Uuid) -> Result<Vec<ShiftClaim>> {
+pub async fn get_all_claims_by_company(company_id: Uuid) -> Result<Vec<ShiftClaim>, sqlx::Error> {
     let claims = sqlx::query_as::<_, ShiftClaim>(&sql(r#"
         SELECT
             id,
@@ -141,14 +144,16 @@ pub async fn get_all_claims_by_company(company_id: Uuid) -> Result<Vec<ShiftClai
             created_at DESC
     "#))
     .bind(company_id)
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     Ok(claims)
 }
 
 /// Get pending claims for approval (managers/admins)
-pub async fn get_pending_claims_by_company(company_id: Uuid) -> Result<Vec<ShiftClaim>> {
+pub async fn get_pending_claims_by_company(
+    company_id: Uuid,
+) -> Result<Vec<ShiftClaim>, sqlx::Error> {
     let claims = sqlx::query_as::<_, ShiftClaim>(&sql(r#"
         SELECT
             id,
@@ -168,7 +173,7 @@ pub async fn get_pending_claims_by_company(company_id: Uuid) -> Result<Vec<Shift
             created_at ASC
     "#))
     .bind(company_id)
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     Ok(claims)
@@ -176,10 +181,11 @@ pub async fn get_pending_claims_by_company(company_id: Uuid) -> Result<Vec<Shift
 
 /// Approve a shift claim
 pub async fn approve_claim(
+    tx: &mut Transaction<'_, Postgres>,
     claim_id: Uuid,
     approved_by: Uuid,
     approval_notes: Option<String>,
-) -> Result<Option<ShiftClaim>> {
+) -> Result<Option<ShiftClaim>, sqlx::Error> {
     let now = Utc::now();
 
     let claim = sqlx::query_as::<_, ShiftClaim>(&sql(r#"
@@ -207,7 +213,7 @@ pub async fn approve_claim(
     .bind(approval_notes)
     .bind(now)
     .bind(claim_id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&mut **tx)
     .await?;
 
     Ok(claim)
@@ -215,10 +221,11 @@ pub async fn approve_claim(
 
 /// Reject a shift claim
 pub async fn reject_claim(
+    tx: &mut Transaction<'_, Postgres>,
     claim_id: Uuid,
     approved_by: Uuid,
     approval_notes: Option<String>,
-) -> Result<Option<ShiftClaim>> {
+) -> Result<Option<ShiftClaim>, sqlx::Error> {
     let now = Utc::now();
 
     let claim = sqlx::query_as::<_, ShiftClaim>(&sql(r#"
@@ -246,14 +253,18 @@ pub async fn reject_claim(
     .bind(approval_notes)
     .bind(now)
     .bind(claim_id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&mut **tx)
     .await?;
 
     Ok(claim)
 }
 
 /// Cancel a shift claim (can only be done by the claim owner)
-pub async fn cancel_claim(claim_id: Uuid, user_id: Uuid) -> Result<Option<ShiftClaim>> {
+pub async fn cancel_claim(
+    tx: &mut Transaction<'_, Postgres>,
+    claim_id: Uuid,
+    user_id: Uuid,
+) -> Result<Option<ShiftClaim>, sqlx::Error> {
     let now = Utc::now();
 
     let claim = sqlx::query_as::<_, ShiftClaim>(&sql(r#"
@@ -279,14 +290,17 @@ pub async fn cancel_claim(claim_id: Uuid, user_id: Uuid) -> Result<Option<ShiftC
     .bind(now)
     .bind(claim_id)
     .bind(user_id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&mut **tx)
     .await?;
 
     Ok(claim)
 }
 
 /// Cancel all pending claims for a shift (when shift is assigned manually)
-pub async fn cancel_pending_claims_for_shift(shift_id: Uuid) -> Result<u64> {
+pub async fn cancel_pending_claims_for_shift(
+    tx: &mut Transaction<'_, Postgres>,
+    shift_id: Uuid,
+) -> Result<u64, sqlx::Error> {
     let now = Utc::now();
 
     let result = sqlx::query(&sql(r#"
@@ -301,14 +315,14 @@ pub async fn cancel_pending_claims_for_shift(shift_id: Uuid) -> Result<u64> {
     "#))
     .bind(now)
     .bind(shift_id)
-    .execute(get_pool())
+    .execute(&mut **tx)
     .await?;
 
     Ok(result.rows_affected())
 }
 
 /// Check if a user has an active (non-cancelled) claim for a shift
-pub async fn has_active_claim(shift_id: Uuid, user_id: Uuid) -> Result<Option<()>> {
+pub async fn has_active_claim(shift_id: Uuid, user_id: Uuid) -> Result<Option<()>, sqlx::Error> {
     let count: i64 = sqlx::query_scalar(&sql(r#"
         SELECT
             COUNT(*)
@@ -321,7 +335,7 @@ pub async fn has_active_claim(shift_id: Uuid, user_id: Uuid) -> Result<Option<()
     "#))
     .bind(shift_id)
     .bind(user_id)
-    .fetch_one(get_pool())
+    .fetch_one(&get_pool().await)
     .await?;
 
     if count > 0 {
@@ -332,7 +346,7 @@ pub async fn has_active_claim(shift_id: Uuid, user_id: Uuid) -> Result<Option<()
 }
 
 /// Check if a user has a pending claim for a shift
-pub async fn has_pending_claim(shift_id: Uuid, user_id: Uuid) -> Result<Option<()>> {
+pub async fn has_pending_claim(shift_id: Uuid, user_id: Uuid) -> Result<Option<()>, sqlx::Error> {
     let count: i64 = sqlx::query_scalar(&sql(r#"
         SELECT
             COUNT(*)
@@ -345,7 +359,7 @@ pub async fn has_pending_claim(shift_id: Uuid, user_id: Uuid) -> Result<Option<(
     "#))
     .bind(shift_id)
     .bind(user_id)
-    .fetch_one(get_pool())
+    .fetch_one(&get_pool().await)
     .await?;
 
     if count > 0 {
@@ -356,7 +370,10 @@ pub async fn has_pending_claim(shift_id: Uuid, user_id: Uuid) -> Result<Option<(
 }
 
 /// Check if a user has already claimed a specific shift (pending or approved)
-pub async fn has_user_claimed_shift(shift_id: Uuid, user_id: Uuid) -> Result<Option<()>> {
+pub async fn has_user_claimed_shift(
+    shift_id: Uuid,
+    user_id: Uuid,
+) -> Result<Option<()>, sqlx::Error> {
     let count: i64 = sqlx::query_scalar(&sql(r#"
         SELECT
             COUNT(*)
@@ -372,7 +389,7 @@ pub async fn has_user_claimed_shift(shift_id: Uuid, user_id: Uuid) -> Result<Opt
     "#))
     .bind(shift_id)
     .bind(user_id)
-    .fetch_one(get_pool())
+    .fetch_one(&get_pool().await)
     .await?;
 
     if count > 0 {
@@ -383,7 +400,9 @@ pub async fn has_user_claimed_shift(shift_id: Uuid, user_id: Uuid) -> Result<Opt
 }
 
 /// Get the approved claim for a shift (if any)
-pub async fn get_approved_claim_for_shift(shift_id: Uuid) -> Result<Option<ShiftClaim>> {
+pub async fn get_approved_claim_for_shift(
+    shift_id: Uuid,
+) -> Result<Option<ShiftClaim>, sqlx::Error> {
     let claim = sqlx::query_as::<_, ShiftClaim>(&sql(r#"
         SELECT
             id,
@@ -401,14 +420,14 @@ pub async fn get_approved_claim_for_shift(shift_id: Uuid) -> Result<Option<Shift
             AND status = 'approved'
     "#))
     .bind(shift_id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&get_pool().await)
     .await?;
 
     Ok(claim)
 }
 
 /// Check if a shift already has an approved claim
-pub async fn has_approved_claim(shift_id: Uuid) -> Result<Option<()>> {
+pub async fn has_approved_claim(shift_id: Uuid) -> Result<Option<()>, sqlx::Error> {
     let count: i64 = sqlx::query_scalar(&sql(r#"
         SELECT
             COUNT(*)
@@ -419,7 +438,7 @@ pub async fn has_approved_claim(shift_id: Uuid) -> Result<Option<()>> {
             AND status = 'approved'
     "#))
     .bind(shift_id)
-    .fetch_one(get_pool())
+    .fetch_one(&get_pool().await)
     .await?;
 
     if count > 0 {
@@ -430,7 +449,7 @@ pub async fn has_approved_claim(shift_id: Uuid) -> Result<Option<()>> {
 }
 
 /// Check if user is a team member for the shift's team
-pub async fn is_user_team_member(shift_id: Uuid, user_id: Uuid) -> Result<Option<()>> {
+pub async fn is_user_team_member(shift_id: Uuid, user_id: Uuid) -> Result<Option<()>, sqlx::Error> {
     let count: i64 = sqlx::query_scalar(&sql(r#"
         SELECT
             COUNT(*)
@@ -443,7 +462,7 @@ pub async fn is_user_team_member(shift_id: Uuid, user_id: Uuid) -> Result<Option
     "#))
     .bind(shift_id)
     .bind(user_id)
-    .fetch_one(get_pool())
+    .fetch_one(&get_pool().await)
     .await?;
 
     if count > 0 {

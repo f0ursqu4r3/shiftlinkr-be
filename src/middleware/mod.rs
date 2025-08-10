@@ -1,3 +1,5 @@
 pub mod request_id;
+pub mod request_info;
 
-pub use request_id::{RequestId, RequestIdExt};
+pub use request_id::{RequestIdExt, RequestIdMiddleware, RequestIdMiddlewareService};
+pub use request_info::{RequestInfo, RequestInfoMiddleware};

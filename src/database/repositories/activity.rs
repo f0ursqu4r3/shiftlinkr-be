@@ -1,13 +1,16 @@
 use anyhow::Result;
+use sqlx::{Postgres, Transaction};
 
 use crate::database::{
-    get_pool,
     models::{CompanyActivity, CreateActivityInput},
     utils::sql,
 };
 
 /// Log a new activity  
-pub async fn log_activity(request: CreateActivityInput) -> Result<CompanyActivity> {
+pub async fn log_activity(
+    tx: &mut Transaction<'_, Postgres>,
+    request: CreateActivityInput,
+) -> Result<CompanyActivity, sqlx::Error> {
     let metadata_json = request
         .metadata
         .map(|m| serde_json::to_value(&m).unwrap_or_default());
@@ -51,7 +54,7 @@ pub async fn log_activity(request: CreateActivityInput) -> Result<CompanyActivit
     .bind(metadata_json)
     .bind(request.ip_address)
     .bind(request.user_agent)
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(company_activity)

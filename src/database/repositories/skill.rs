@@ -1,5 +1,5 @@
-use anyhow::Result;
 use chrono::Utc;
+use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::database::{
@@ -10,7 +10,11 @@ use crate::database::{
     utils::sql,
 };
 
-pub async fn create_skill(company_id: Uuid, input: SkillInput) -> Result<Skill> {
+pub async fn create_skill(
+    tx: &mut Transaction<'_, Postgres>,
+    company_id: Uuid,
+    input: SkillInput,
+) -> Result<Skill, sqlx::Error> {
     let now = Utc::now().naive_utc();
     let skill = sqlx::query_as::<_, Skill>(&sql(r#"
             INSERT INTO
@@ -36,13 +40,13 @@ pub async fn create_skill(company_id: Uuid, input: SkillInput) -> Result<Skill> 
     .bind(input.description)
     .bind(now)
     .bind(now)
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(skill)
 }
 
-pub async fn find_by_id(skill_id: Uuid, company_id: Uuid) -> Result<Option<Skill>> {
+pub async fn find_by_id(skill_id: Uuid, company_id: Uuid) -> Result<Option<Skill>, sqlx::Error> {
     let skill = sqlx::query_as::<_, Skill>(&sql(r#"
             SELECT
                 id,
@@ -59,13 +63,13 @@ pub async fn find_by_id(skill_id: Uuid, company_id: Uuid) -> Result<Option<Skill
         "#))
     .bind(skill_id)
     .bind(company_id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&get_pool().await)
     .await?;
 
     Ok(skill)
 }
 
-pub async fn get_all_skills(company_id: Uuid) -> Result<Vec<Skill>> {
+pub async fn get_all_skills(company_id: Uuid) -> Result<Vec<Skill>, sqlx::Error> {
     let skills = sqlx::query_as::<_, Skill>(&sql(r#"
             SELECT
                 id,
@@ -82,13 +86,17 @@ pub async fn get_all_skills(company_id: Uuid) -> Result<Vec<Skill>> {
                 name
         "#))
     .bind(company_id)
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     Ok(skills)
 }
 
-pub async fn update_skill(id: Uuid, input: SkillInput) -> Result<Option<Skill>> {
+pub async fn update_skill(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+    input: SkillInput,
+) -> Result<Option<Skill>, sqlx::Error> {
     let now = Utc::now().naive_utc();
     let skill = sqlx::query_as::<_, Skill>(&sql(r#"
             UPDATE
@@ -111,16 +119,19 @@ pub async fn update_skill(id: Uuid, input: SkillInput) -> Result<Option<Skill>> 
     .bind(input.description)
     .bind(now)
     .bind(id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&mut **tx)
     .await?;
 
     Ok(skill)
 }
 
-pub async fn delete_skill(id: Uuid) -> Result<bool> {
+pub async fn delete_skill(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+) -> Result<bool, sqlx::Error> {
     let result = sqlx::query(&sql("DELETE FROM skills WHERE id = ?"))
         .bind(id)
-        .execute(get_pool())
+        .execute(&mut **tx)
         .await?;
 
     Ok(result.rows_affected() > 0)
@@ -128,10 +139,11 @@ pub async fn delete_skill(id: Uuid) -> Result<bool> {
 
 // User Skills
 pub async fn add_skill_to_user(
+    tx: &mut Transaction<'_, Postgres>,
     skill_id: Uuid,
     user_id: Uuid,
     proficiency_level: ProficiencyLevel,
-) -> Result<UserSkill> {
+) -> Result<UserSkill, sqlx::Error> {
     let now = Utc::now().naive_utc();
     let user_skill = sqlx::query_as::<_, UserSkill>(&sql(r#"
             INSERT INTO
@@ -157,13 +169,16 @@ pub async fn add_skill_to_user(
     .bind(proficiency_level)
     .bind(now)
     .bind(now)
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(user_skill)
 }
 
-pub async fn get_user_skills(user_id: Uuid, company_id: Uuid) -> Result<Vec<UserSkill>> {
+pub async fn get_user_skills(
+    user_id: Uuid,
+    company_id: Uuid,
+) -> Result<Vec<UserSkill>, sqlx::Error> {
     let user_skills = sqlx::query_as::<_, UserSkill>(&sql(r#"
             SELECT
                 id,
@@ -180,17 +195,18 @@ pub async fn get_user_skills(user_id: Uuid, company_id: Uuid) -> Result<Vec<User
         "#))
     .bind(user_id)
     .bind(company_id)
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     Ok(user_skills)
 }
 
 pub async fn update_user_skill(
+    tx: &mut Transaction<'_, Postgres>,
     user_id: Uuid,
     skill_id: Uuid,
     proficiency_level: ProficiencyLevel,
-) -> Result<Option<UserSkill>> {
+) -> Result<Option<UserSkill>, sqlx::Error> {
     let now = Utc::now().naive_utc();
     let user_skill = sqlx::query_as::<_, UserSkill>(&sql(r#"
             UPDATE
@@ -213,13 +229,17 @@ pub async fn update_user_skill(
     .bind(now)
     .bind(user_id)
     .bind(skill_id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&mut **tx)
     .await?;
 
     Ok(user_skill)
 }
 
-pub async fn remove_skill_from_user(skill_id: Uuid, user_id: Uuid) -> Result<Option<()>> {
+pub async fn remove_skill_from_user(
+    tx: &mut Transaction<'_, Postgres>,
+    skill_id: Uuid,
+    user_id: Uuid,
+) -> Result<Option<()>, sqlx::Error> {
     let result = sqlx::query(&sql(r#"
             DELETE FROM
                 user_skills
@@ -229,7 +249,7 @@ pub async fn remove_skill_from_user(skill_id: Uuid, user_id: Uuid) -> Result<Opt
         "#))
     .bind(user_id)
     .bind(skill_id)
-    .execute(get_pool())
+    .execute(&mut **tx)
     .await?;
 
     if result.rows_affected() > 0 {
@@ -241,10 +261,11 @@ pub async fn remove_skill_from_user(skill_id: Uuid, user_id: Uuid) -> Result<Opt
 
 // Shift Required Skills
 pub async fn add_shift_required_skill(
+    tx: &mut Transaction<'_, Postgres>,
     shift_id: Uuid,
     skill_id: Uuid,
     required_level: ProficiencyLevel,
-) -> Result<ShiftRequiredSkill> {
+) -> Result<ShiftRequiredSkill, sqlx::Error> {
     let now = Utc::now().naive_utc();
     let shift_skill = sqlx::query_as::<_, ShiftRequiredSkill>(&sql(r#"
             INSERT INTO
@@ -267,13 +288,15 @@ pub async fn add_shift_required_skill(
     .bind(skill_id)
     .bind(required_level.to_string())
     .bind(now)
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(shift_skill)
 }
 
-pub async fn get_shift_required_skills(shift_id: Uuid) -> Result<Vec<ShiftRequiredSkill>> {
+pub async fn get_shift_required_skills(
+    shift_id: Uuid,
+) -> Result<Vec<ShiftRequiredSkill>, sqlx::Error> {
     let shift_skills = sqlx::query_as::<_, ShiftRequiredSkill>(&sql(r#"
             SELECT
                 id,
@@ -287,13 +310,17 @@ pub async fn get_shift_required_skills(shift_id: Uuid) -> Result<Vec<ShiftRequir
                 shift_id = ?
         "#))
     .bind(shift_id)
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     Ok(shift_skills)
 }
 
-pub async fn remove_shift_required_skill(shift_id: Uuid, skill_id: Uuid) -> Result<bool> {
+pub async fn remove_shift_required_skill(
+    tx: &mut Transaction<'_, Postgres>,
+    shift_id: Uuid,
+    skill_id: Uuid,
+) -> Result<Option<()>, sqlx::Error> {
     let result = sqlx::query(&sql(r#"
             DELETE FROM
                 shift_required_skills
@@ -303,16 +330,20 @@ pub async fn remove_shift_required_skill(shift_id: Uuid, skill_id: Uuid) -> Resu
         "#))
     .bind(shift_id)
     .bind(skill_id)
-    .execute(get_pool())
+    .execute(&mut **tx)
     .await?;
 
-    Ok(result.rows_affected() > 0)
+    if result.rows_affected() > 0 {
+        Ok(Some(()))
+    } else {
+        Ok(None)
+    }
 }
 
 pub async fn get_users_with_skill(
     skill_id: Uuid,
     min_level: Option<ProficiencyLevel>,
-) -> Result<Vec<UserWithSkillResponse>> {
+) -> Result<Vec<UserWithSkillResponse>, sqlx::Error> {
     let base_query = r#"
             SELECT DISTINCT
                 users.id,
@@ -350,7 +381,7 @@ pub async fn get_users_with_skill(
 
     let user_ids = sqlx::query_as::<_, UserWithSkillResponse>(&sql(query.as_str()))
         .bind(skill_id)
-        .fetch_all(get_pool())
+        .fetch_all(&get_pool().await)
         .await?;
 
     Ok(user_ids)

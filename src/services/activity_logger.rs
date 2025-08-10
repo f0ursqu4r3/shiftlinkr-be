@@ -1,36 +1,17 @@
 use std::collections::HashMap;
 
-use actix_web::HttpRequest;
-use anyhow::Result;
+use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::database::{
     models::{ActivityType, CreateActivityInput, EntityType},
     repositories::activity as activity_repo,
 };
-
-/// Extract client info from HTTP request
-fn extract_client_info(req: &HttpRequest) -> (Option<String>, Option<String>) {
-    let ip_address = req.connection_info().peer_addr().map(|addr| {
-        // Remove port if present
-        if addr.contains(':') {
-            addr.split(':').next().unwrap_or(addr).to_string()
-        } else {
-            addr.to_string()
-        }
-    });
-
-    let user_agent = req
-        .headers()
-        .get("user-agent")
-        .and_then(|h| h.to_str().ok())
-        .map(|s| s.to_string());
-
-    (ip_address, user_agent)
-}
+use crate::middleware::request_info::RequestInfo;
 
 /// Generic activity logging for custom cases
 pub async fn log_activity(
+    tx: &mut Transaction<'_, Postgres>,
     company_id: Uuid,
     user_id: Option<Uuid>,
     activity_type: String,
@@ -39,10 +20,8 @@ pub async fn log_activity(
     action: String,
     description: String,
     metadata: Option<HashMap<String, serde_json::Value>>,
-    req: &HttpRequest,
-) -> Result<()> {
-    let (ip_address, user_agent) = extract_client_info(req);
-
+    req: &RequestInfo,
+) -> Result<(), sqlx::Error> {
     let request = CreateActivityInput {
         company_id,
         user_id,
@@ -52,26 +31,25 @@ pub async fn log_activity(
         action,
         description,
         metadata,
-        ip_address,
-        user_agent,
+        ip_address: req.ip_address.clone(),
+        user_agent: req.user_agent.clone(),
     };
 
-    activity_repo::log_activity(request).await?;
+    activity_repo::log_activity(tx, request).await?;
     Ok(())
 }
 
 /// Log user management activity
 pub async fn log_user_activity(
+    tx: &mut Transaction<'_, Postgres>,
     company_id: Uuid,
     user_id: Option<Uuid>,
     target_user_id: Uuid,
     action: &str,
     description: String,
     metadata: Option<HashMap<String, serde_json::Value>>,
-    req: &HttpRequest,
-) -> Result<()> {
-    let (ip_address, user_agent) = extract_client_info(req);
-
+    req: &RequestInfo,
+) -> Result<(), sqlx::Error> {
     let request = CreateActivityInput {
         company_id,
         user_id,
@@ -81,25 +59,24 @@ pub async fn log_user_activity(
         action: action.to_string(),
         description,
         metadata,
-        ip_address,
-        user_agent,
+        ip_address: req.ip_address.clone(),
+        user_agent: req.user_agent.clone(),
     };
 
-    activity_repo::log_activity(request).await?;
+    activity_repo::log_activity(tx, request).await?;
     Ok(())
 }
 
 /// Log authentication activity
 pub async fn log_auth_activity(
+    tx: &mut Transaction<'_, Postgres>,
     company_id: Uuid,
     user_id: Option<Uuid>,
     action: &str,
     description: String,
     metadata: Option<HashMap<String, serde_json::Value>>,
-    req: &HttpRequest,
-) -> Result<()> {
-    let (ip_address, user_agent) = extract_client_info(req);
-
+    req: &RequestInfo,
+) -> Result<(), sqlx::Error> {
     let request = CreateActivityInput {
         company_id,
         user_id,
@@ -109,26 +86,25 @@ pub async fn log_auth_activity(
         action: action.to_string(),
         description,
         metadata,
-        ip_address,
-        user_agent,
+        ip_address: req.ip_address.clone(),
+        user_agent: req.user_agent.clone(),
     };
 
-    activity_repo::log_activity(request).await?;
+    activity_repo::log_activity(tx, request).await?;
     Ok(())
 }
 
 /// Log location management activity
 pub async fn log_location_activity(
+    tx: &mut Transaction<'_, Postgres>,
     company_id: Uuid,
     user_id: Option<Uuid>,
     location_id: Uuid,
     action: &str,
     description: String,
     metadata: Option<HashMap<String, serde_json::Value>>,
-    req: &HttpRequest,
-) -> Result<()> {
-    let (ip_address, user_agent) = extract_client_info(req);
-
+    req: &RequestInfo,
+) -> Result<(), sqlx::Error> {
     let request = CreateActivityInput {
         company_id,
         user_id,
@@ -138,26 +114,25 @@ pub async fn log_location_activity(
         action: action.to_string(),
         description,
         metadata,
-        ip_address,
-        user_agent,
+        ip_address: req.ip_address.clone(),
+        user_agent: req.user_agent.clone(),
     };
 
-    activity_repo::log_activity(request).await?;
+    activity_repo::log_activity(tx, request).await?;
     Ok(())
 }
 
 /// Log team management activity
 pub async fn log_team_activity(
+    tx: &mut Transaction<'_, Postgres>,
     company_id: Uuid,
     user_id: Option<Uuid>,
     team_id: Uuid,
     action: &str,
     description: String,
     metadata: Option<HashMap<String, serde_json::Value>>,
-    req: &HttpRequest,
-) -> Result<()> {
-    let (ip_address, user_agent) = extract_client_info(req);
-
+    req: &RequestInfo,
+) -> Result<(), sqlx::Error> {
     let request = CreateActivityInput {
         company_id,
         user_id,
@@ -167,26 +142,25 @@ pub async fn log_team_activity(
         action: action.to_string(),
         description,
         metadata,
-        ip_address,
-        user_agent,
+        ip_address: req.ip_address.clone(),
+        user_agent: req.user_agent.clone(),
     };
 
-    activity_repo::log_activity(request).await?;
+    activity_repo::log_activity(tx, request).await?;
     Ok(())
 }
 
 /// Log shift management activity
 pub async fn log_shift_activity(
+    tx: &mut Transaction<'_, Postgres>,
     company_id: Uuid,
     user_id: Option<Uuid>,
     shift_id: Uuid,
     action: &str,
     description: String,
     metadata: Option<HashMap<String, serde_json::Value>>,
-    req: &HttpRequest,
-) -> Result<()> {
-    let (ip_address, user_agent) = extract_client_info(req);
-
+    req: &RequestInfo,
+) -> Result<(), sqlx::Error> {
     let request = CreateActivityInput {
         company_id,
         user_id,
@@ -196,26 +170,25 @@ pub async fn log_shift_activity(
         action: action.to_string(),
         description,
         metadata,
-        ip_address,
-        user_agent,
+        ip_address: req.ip_address.clone(),
+        user_agent: req.user_agent.clone(),
     };
 
-    activity_repo::log_activity(request).await?;
+    activity_repo::log_activity(tx, request).await?;
     Ok(())
 }
 
 /// Log time off management activity
 pub async fn log_time_off_activity(
+    tx: &mut Transaction<'_, Postgres>,
     company_id: Uuid,
     user_id: Option<Uuid>,
     time_off_id: Uuid,
     action: &str,
     description: String,
     metadata: Option<HashMap<String, serde_json::Value>>,
-    req: &HttpRequest,
-) -> Result<()> {
-    let (ip_address, user_agent) = extract_client_info(req);
-
+    req: &RequestInfo,
+) -> Result<(), sqlx::Error> {
     let request = CreateActivityInput {
         company_id,
         user_id,
@@ -225,26 +198,25 @@ pub async fn log_time_off_activity(
         action: action.to_string(),
         description,
         metadata,
-        ip_address,
-        user_agent,
+        ip_address: req.ip_address.clone(),
+        user_agent: req.user_agent.clone(),
     };
 
-    activity_repo::log_activity(request).await?;
+    activity_repo::log_activity(tx, request).await?;
     Ok(())
 }
 
 /// Log shift swap activity
 pub async fn log_shift_swap_activity(
+    tx: &mut Transaction<'_, Postgres>,
     company_id: Uuid,
     user_id: Option<Uuid>,
     swap_id: Uuid,
     action: &str,
     description: String,
     metadata: Option<HashMap<String, serde_json::Value>>,
-    req: &HttpRequest,
-) -> Result<()> {
-    let (ip_address, user_agent) = extract_client_info(req);
-
+    req: &RequestInfo,
+) -> Result<(), sqlx::Error> {
     let request = CreateActivityInput {
         company_id,
         user_id,
@@ -254,25 +226,24 @@ pub async fn log_shift_swap_activity(
         action: action.to_string(),
         description,
         metadata,
-        ip_address,
-        user_agent,
+        ip_address: req.ip_address.clone(),
+        user_agent: req.user_agent.clone(),
     };
 
-    activity_repo::log_activity(request).await?;
+    activity_repo::log_activity(tx, request).await?;
     Ok(())
 }
 
 pub async fn log_skill_activity(
+    tx: &mut Transaction<'_, Postgres>,
     company_id: Uuid,
     user_id: Option<Uuid>,
     skill_id: Uuid,
     action: &str,
     description: String,
     metadata: Option<HashMap<String, serde_json::Value>>,
-    req: &HttpRequest,
-) -> Result<()> {
-    let (ip_address, user_agent) = extract_client_info(req);
-
+    req: &RequestInfo,
+) -> Result<(), sqlx::Error> {
     let request = CreateActivityInput {
         company_id,
         user_id,
@@ -282,11 +253,11 @@ pub async fn log_skill_activity(
         action: action.to_string(),
         description,
         metadata,
-        ip_address,
-        user_agent,
+        ip_address: req.ip_address.clone(),
+        user_agent: req.user_agent.clone(),
     };
 
-    activity_repo::log_activity(request).await?;
+    activity_repo::log_activity(tx, request).await?;
     Ok(())
 }
 

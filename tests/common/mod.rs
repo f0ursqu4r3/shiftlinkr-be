@@ -61,6 +61,7 @@ impl TestContext {
             .await;
         let _ = sqlx::query("DELETE FROM companies").execute(pool).await;
         let _ = sqlx::query("DELETE FROM users").execute(pool).await;
+        let _ = sqlx::query("DELETE FROM shifts").execute(pool).await;
         Ok(())
     }
 }

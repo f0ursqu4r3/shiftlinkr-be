@@ -1,4 +1,4 @@
-use anyhow::Result;
+use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::database::{
@@ -10,7 +10,10 @@ use crate::database::{
     utils::sql,
 };
 
-pub async fn create_company(request: &CreateCompanyInput) -> Result<Company> {
+pub async fn create_company(
+    tx: &mut Transaction<'_, Postgres>,
+    request: &CreateCompanyInput,
+) -> Result<Company, sqlx::Error> {
     let company = sqlx::query_as::<_, Company>(&sql(r#"
         INSERT INTO
             companies (
@@ -46,13 +49,13 @@ pub async fn create_company(request: &CreateCompanyInput) -> Result<Company> {
     .bind(&request.address)
     .bind(&request.logo_url)
     .bind(request.timezone.as_deref().unwrap_or("UTC"))
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(company)
 }
 
-pub async fn find_by_id(company_id: Uuid) -> Result<Option<Company>> {
+pub async fn find_by_id(company_id: Uuid) -> Result<Option<Company>, sqlx::Error> {
     let company = sqlx::query_as::<_, Company>(&sql(r#"
         SELECT
             *
@@ -62,7 +65,7 @@ pub async fn find_by_id(company_id: Uuid) -> Result<Option<Company>> {
             id = ?
     "#))
     .bind(company_id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&get_pool().await)
     .await?;
 
     Ok(company)
@@ -71,7 +74,7 @@ pub async fn find_by_id(company_id: Uuid) -> Result<Option<Company>> {
 pub async fn find_user_company_info_by_id(
     user_id: Uuid,
     company_id: Uuid,
-) -> Result<Option<CompanyInfo>> {
+) -> Result<Option<CompanyInfo>, sqlx::Error> {
     let company_info = sqlx::query_as::<_, CompanyInfo>(&sql(r#"
         SELECT
             c.id,
@@ -98,13 +101,13 @@ pub async fn find_user_company_info_by_id(
     "#))
     .bind(user_id)
     .bind(company_id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&get_pool().await)
     .await?;
 
     Ok(company_info)
 }
 
-pub async fn get_companies_for_user(user_id: Uuid) -> Result<Vec<CompanyInfo>> {
+pub async fn get_companies_for_user(user_id: Uuid) -> Result<Vec<CompanyInfo>, sqlx::Error> {
     let company_infos = sqlx::query_as::<_, CompanyInfo>(&sql(r#"
         SELECT
             c.id,
@@ -131,13 +134,15 @@ pub async fn get_companies_for_user(user_id: Uuid) -> Result<Vec<CompanyInfo>> {
             c.name ASC
     "#))
     .bind(user_id)
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     Ok(company_infos)
 }
 
-pub async fn get_primary_company_for_user(user_id: Uuid) -> Result<Option<CompanyInfo>> {
+pub async fn get_primary_company_for_user(
+    user_id: Uuid,
+) -> Result<Option<CompanyInfo>, sqlx::Error> {
     let company_info = sqlx::query_as::<_, CompanyInfo>(&sql(r#"
         SELECT
             c.id,
@@ -159,16 +164,17 @@ pub async fn get_primary_company_for_user(user_id: Uuid) -> Result<Option<Compan
             uc.user_id = $1 AND uc.is_primary = true
     "#))
     .bind(user_id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&get_pool().await)
     .await?;
 
     Ok(company_info)
 }
 
 pub async fn add_employee_to_company(
+    tx: &mut Transaction<'_, Postgres>,
     company_id: Uuid,
     request: &AddEmployeeToCompanyInput,
-) -> Result<CompanyEmployee> {
+) -> Result<CompanyEmployee, sqlx::Error> {
     // If this should be the primary company, unset other primary companies for this user
     if request.is_primary.unwrap_or(false) {
         sqlx::query(&sql(r#"
@@ -179,7 +185,7 @@ pub async fn add_employee_to_company(
                 user_id = ?
         "#))
         .bind(request.user_id)
-        .execute(get_pool())
+        .execute(&mut **tx)
         .await?;
     }
 
@@ -214,13 +220,15 @@ pub async fn add_employee_to_company(
     .bind(&request.role)
     .bind(request.is_primary.unwrap_or(false))
     .bind(&request.hire_date)
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(company_employee)
 }
 
-pub async fn get_company_employees(company_id: Uuid) -> Result<Vec<CompanyEmployeeInfo>> {
+pub async fn get_company_employees(
+    company_id: Uuid,
+) -> Result<Vec<CompanyEmployeeInfo>, sqlx::Error> {
     let employess_infos = sqlx::query_as::<_, CompanyEmployeeInfo>(&sql(r#"
         SELECT
             u.id,
@@ -240,13 +248,17 @@ pub async fn get_company_employees(company_id: Uuid) -> Result<Vec<CompanyEmploy
             u.name ASC
     "#))
     .bind(company_id)
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     Ok(employess_infos)
 }
 
-pub async fn remove_employee_from_company(company_id: Uuid, user_id: Uuid) -> Result<Option<()>> {
+pub async fn remove_employee_from_company(
+    tx: &mut Transaction<'_, Postgres>,
+    company_id: Uuid,
+    user_id: Uuid,
+) -> Result<Option<()>, sqlx::Error> {
     let result = sqlx::query(&sql(r#"
         DELETE FROM user_company
         WHERE
@@ -255,7 +267,7 @@ pub async fn remove_employee_from_company(company_id: Uuid, user_id: Uuid) -> Re
     "#))
     .bind(company_id)
     .bind(user_id)
-    .execute(get_pool())
+    .execute(&mut **tx)
     .await?;
 
     if result.rows_affected() == 0 {
@@ -266,10 +278,11 @@ pub async fn remove_employee_from_company(company_id: Uuid, user_id: Uuid) -> Re
 }
 
 pub async fn update_employee_role(
+    tx: &mut Transaction<'_, Postgres>,
     company_id: Uuid,
     user_id: Uuid,
     role: &CompanyRole,
-) -> Result<Option<()>> {
+) -> Result<Option<()>, sqlx::Error> {
     let result = sqlx::query(&sql(r#"
         UPDATE user_company
         SET
@@ -279,23 +292,22 @@ pub async fn update_employee_role(
             company_id = ?
             AND user_id = ?
     "#))
-    .bind(role)
+    .bind(role.to_string())
     .bind(company_id)
     .bind(user_id)
-    .execute(get_pool())
+    .execute(&mut **tx)
     .await?;
 
-    if result.rows_affected() == 0 {
-        return Ok(None);
-    }
-
-    Ok(Some(()))
+    Ok(if result.rows_affected() > 0 {
+        Some(())
+    } else {
+        None
+    })
 }
-
 pub async fn check_user_company_access(
     user_id: Uuid,
     company_id: Uuid,
-) -> Result<Option<CompanyRole>> {
+) -> Result<Option<CompanyRole>, sqlx::Error> {
     let role = sqlx::query_scalar::<_, CompanyRole>(&sql(r#"
         SELECT
             role
@@ -307,18 +319,24 @@ pub async fn check_user_company_access(
     "#))
     .bind(user_id)
     .bind(company_id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&get_pool().await)
     .await?;
 
     Ok(role)
 }
 
-pub async fn check_user_company_admin(user_id: Uuid, company_id: Uuid) -> Result<bool> {
+pub async fn check_user_company_admin(
+    user_id: Uuid,
+    company_id: Uuid,
+) -> Result<bool, sqlx::Error> {
     let role = check_user_company_access(user_id, company_id).await?;
     Ok(matches!(role, Some(CompanyRole::Admin)))
 }
 
-pub async fn check_user_company_manager_or_admin(user_id: Uuid, company_id: Uuid) -> Result<bool> {
+pub async fn check_user_company_manager_or_admin(
+    user_id: Uuid,
+    company_id: Uuid,
+) -> Result<bool, sqlx::Error> {
     let role = check_user_company_access(user_id, company_id).await?;
     Ok(matches!(
         role,
@@ -326,7 +344,7 @@ pub async fn check_user_company_manager_or_admin(user_id: Uuid, company_id: Uuid
     ))
 }
 
-pub async fn has_primary_company(user_id: Uuid) -> Result<bool> {
+pub async fn has_primary_company(user_id: Uuid) -> Result<bool, sqlx::Error> {
     let count = sqlx::query_scalar::<_, i64>(&sql(r#"
         SELECT
             COUNT(*)
@@ -337,7 +355,7 @@ pub async fn has_primary_company(user_id: Uuid) -> Result<bool> {
             AND is_primary = TRUE
     "#))
     .bind(user_id)
-    .fetch_one(get_pool())
+    .fetch_one(&get_pool().await)
     .await?;
 
     Ok(count > 0)

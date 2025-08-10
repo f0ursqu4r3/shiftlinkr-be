@@ -1,8 +1,13 @@
 use actix_cors::Cors;
-use actix_web::{get, middleware::Logger, App, HttpResponse, HttpServer, Responder};
+use actix_web::{App, HttpResponse, HttpServer, Responder, get, middleware::Logger};
 use anyhow::Result;
 
-use be::{config::Config, database::init_database, middleware::RequestId, routes};
+use be::{
+    config::Config,
+    database::init_database,
+    middleware::{RequestIdMiddleware, RequestInfoMiddleware},
+    routes,
+};
 
 #[get("/")]
 async fn hello() -> impl Responder {
@@ -60,7 +65,8 @@ async fn main() -> Result<()> {
                     ])
                     .max_age(3600),
             )
-            .wrap(RequestId)
+            .wrap(RequestIdMiddleware)
+            .wrap(RequestInfoMiddleware)
             .wrap(Logger::new(
                 r#"%a "%r" %s %b "%{Referer}i" "%{User-Agent}i" %T correlation_id=%{x-correlation-id}o"#
             ))

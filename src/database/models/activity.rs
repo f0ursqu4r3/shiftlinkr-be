@@ -32,8 +32,8 @@ pub struct CreateActivityInput {
     pub action: String,
     pub description: String,
     pub metadata: Option<HashMap<String, serde_json::Value>>,
-    pub ip_address: Option<String>,
-    pub user_agent: Option<String>,
+    pub ip_address: String,
+    pub user_agent: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -98,4 +98,12 @@ pub mod Action {
     pub const CANCELLED: &str = "cancelled";
     pub const SWITCH_COMPANY: &str = "switch_company";
     pub const ACCEPTED: &str = "accepted";
+    pub const DECLINED: &str = "declined";
+    pub const MEMBER_ADDED: &str = "member_added";
+    pub const MEMBER_REMOVED: &str = "member_removed";
+    pub const SKILL_ADDED: &str = "skill_added";
+    pub const SKILL_REMOVED: &str = "skill_removed";
+    pub const SKILL_UPDATED: &str = "skill_updated";
+    pub const SKILL_ASSIGNED: &str = "skill_assigned";
+    pub const SKILL_UNASSIGNED: &str = "skill_unassigned";
 }

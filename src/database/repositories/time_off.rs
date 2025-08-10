@@ -1,5 +1,5 @@
-use anyhow::Result;
 use chrono::{NaiveDate, Utc};
+use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::database::{
@@ -8,7 +8,10 @@ use crate::database::{
     utils::sql,
 };
 /// Create a new time-off request
-pub async fn create_request(input: TimeOffRequestInput) -> Result<TimeOffRequest> {
+pub async fn create_request(
+    tx: &mut Transaction<'_, Postgres>,
+    input: TimeOffRequestInput,
+) -> Result<TimeOffRequest, sqlx::Error> {
     let now = Utc::now();
     let request_type_str = input.request_type.to_string();
     let status_str = TimeOffStatus::Pending.to_string();
@@ -51,7 +54,7 @@ pub async fn create_request(input: TimeOffRequestInput) -> Result<TimeOffRequest
     .bind(status_str)
     .bind(now)
     .bind(now)
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(time_off_request)
@@ -63,7 +66,7 @@ pub async fn get_requests(
     status: Option<TimeOffStatus>,
     start_date: Option<NaiveDate>,
     end_date: Option<NaiveDate>,
-) -> Result<Vec<TimeOffRequest>> {
+) -> Result<Vec<TimeOffRequest>, sqlx::Error> {
     let mut query = r#"
             SELECT
                 id,
@@ -117,13 +120,13 @@ pub async fn get_requests(
         prepared = prepared.bind(param);
     }
 
-    let requests = prepared.fetch_all(get_pool()).await?;
+    let requests = prepared.fetch_all(&get_pool().await).await?;
 
     Ok(requests)
 }
 
 /// Get a specific time-off request by ID
-pub async fn get_request_by_id(id: Uuid) -> Result<Option<TimeOffRequest>> {
+pub async fn get_request_by_id(id: Uuid) -> Result<Option<TimeOffRequest>, sqlx::Error> {
     let time_off_request = sqlx::query_as::<_, TimeOffRequest>(
         r#"
             SELECT
@@ -145,14 +148,18 @@ pub async fn get_request_by_id(id: Uuid) -> Result<Option<TimeOffRequest>> {
             "#,
     )
     .bind(id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&get_pool().await)
     .await?;
 
     Ok(time_off_request)
 }
 
 /// Update a time-off request
-pub async fn update_request(id: Uuid, input: TimeOffRequestInput) -> Result<TimeOffRequest> {
+pub async fn update_request(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+    input: TimeOffRequestInput,
+) -> Result<TimeOffRequest, sqlx::Error> {
     let now = Utc::now();
     let request_type_str = input.request_type.to_string();
 
@@ -188,7 +195,7 @@ pub async fn update_request(id: Uuid, input: TimeOffRequestInput) -> Result<Time
     .bind(request_type_str)
     .bind(now)
     .bind(id)
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(time_off_request)
@@ -196,10 +203,11 @@ pub async fn update_request(id: Uuid, input: TimeOffRequestInput) -> Result<Time
 
 /// Approve a time-off request
 pub async fn approve_request(
+    tx: &mut Transaction<'_, Postgres>,
     id: Uuid,
     approved_by: Uuid,
     notes: Option<String>,
-) -> Result<TimeOffRequest> {
+) -> Result<TimeOffRequest, sqlx::Error> {
     let now = Utc::now();
     let status_str = TimeOffStatus::Approved.to_string();
 
@@ -232,7 +240,7 @@ pub async fn approve_request(
     .bind(notes)
     .bind(now)
     .bind(id)
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(time_off_request)
@@ -240,10 +248,11 @@ pub async fn approve_request(
 
 /// Deny a time-off request
 pub async fn deny_request(
+    tx: &mut Transaction<'_, Postgres>,
     id: Uuid,
     denied_by: Uuid,
     notes: Option<String>,
-) -> Result<TimeOffRequest> {
+) -> Result<TimeOffRequest, sqlx::Error> {
     let now = Utc::now();
     let status_str = TimeOffStatus::Denied.to_string();
 
@@ -277,14 +286,17 @@ pub async fn deny_request(
     .bind(notes)
     .bind(now)
     .bind(id)
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(time_off_request)
 }
 
 /// Cancel a time-off request
-pub async fn cancel_request(id: Uuid) -> Result<TimeOffRequest> {
+pub async fn cancel_request(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+) -> Result<TimeOffRequest, sqlx::Error> {
     let now = Utc::now();
     let status_str = TimeOffStatus::Cancelled.to_string();
 
@@ -313,17 +325,20 @@ pub async fn cancel_request(id: Uuid) -> Result<TimeOffRequest> {
     .bind(status_str)
     .bind(now)
     .bind(id)
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(time_off_request)
 }
 
 /// Delete a time-off request
-pub async fn delete_request(id: Uuid) -> Result<()> {
+pub async fn delete_request(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM time_off_requests WHERE id = $1")
         .bind(id)
-        .execute(get_pool())
+        .execute(&mut **tx)
         .await?;
 
     Ok(())

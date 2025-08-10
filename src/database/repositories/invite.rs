@@ -1,5 +1,5 @@
-use anyhow::Result;
 use chrono::{Duration, Utc};
+use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::database::{
@@ -9,12 +9,13 @@ use crate::database::{
 };
 
 pub async fn create_invite_token(
+    tx: &mut Transaction<'_, Postgres>,
     email: &str,
     inviter_id: Uuid, // Now takes UUID directly
     role: CompanyRole,
     company_id: Uuid,      // UUID for company references
     team_id: Option<Uuid>, // Now takes UUID directly
-) -> Result<InviteToken> {
+) -> Result<InviteToken, sqlx::Error> {
     let token = Uuid::new_v4().to_string();
     let expires_at = Utc::now() + Duration::days(7); // 7 days to accept
     let created_at = Utc::now();
@@ -53,13 +54,13 @@ pub async fn create_invite_token(
     .bind(team_id)
     .bind(expires_at)
     .bind(created_at)
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(invite_token)
 }
 
-pub async fn get_invite_token(token: &str) -> Result<Option<InviteToken>> {
+pub async fn get_invite_token(token: &str) -> Result<Option<InviteToken>, sqlx::Error> {
     let invite_token = sqlx::query_as::<_, InviteToken>(&sql(r#"
         SELECT
             id,
@@ -79,19 +80,22 @@ pub async fn get_invite_token(token: &str) -> Result<Option<InviteToken>> {
             AND used_at IS NULL
     "#))
     .bind(token)
-    .fetch_optional(get_pool())
+    .fetch_optional(&get_pool().await)
     .await?;
 
     Ok(invite_token)
 }
 
-pub async fn mark_invite_token_as_used(token: &str) -> Result<()> {
+pub async fn mark_invite_token_as_used(
+    tx: &mut Transaction<'_, Postgres>,
+    token: &str,
+) -> Result<(), sqlx::Error> {
     let used_at = Utc::now();
 
     sqlx::query(&sql("UPDATE invite_tokens SET used_at = ? WHERE token = ?"))
         .bind(used_at)
         .bind(token)
-        .execute(get_pool())
+        .execute(&mut **tx)
         .await?;
 
     Ok(())
@@ -100,7 +104,7 @@ pub async fn mark_invite_token_as_used(token: &str) -> Result<()> {
 pub async fn get_invites_by_inviter(
     inviter_id: Uuid,
     company_id: Uuid,
-) -> Result<Vec<InviteToken>> {
+) -> Result<Vec<InviteToken>, sqlx::Error> {
     let invites = sqlx::query_as::<_, InviteToken>(&sql(r#"
         SELECT
             id,
@@ -120,25 +124,31 @@ pub async fn get_invites_by_inviter(
     "#))
     .bind(inviter_id)
     .bind(company_id)
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     Ok(invites)
 }
 
-pub async fn cleanup_expired_tokens() -> Result<u64> {
+pub async fn cleanup_expired_tokens(
+    tx: &mut Transaction<'_, Postgres>,
+) -> Result<u64, sqlx::Error> {
     let now = Utc::now();
     let result = sqlx::query(&sql(
         r#"DELETE FROM invite_tokens WHERE expires_at < ? AND used_at IS NULL"#,
     ))
     .bind(now)
-    .execute(get_pool())
+    .execute(&mut **tx)
     .await?;
 
     Ok(result.rows_affected())
 }
 
-pub async fn revoke_invite_token(token: &str, inviter_id: Uuid) -> Result<bool> {
+pub async fn revoke_invite_token(
+    tx: &mut Transaction<'_, Postgres>,
+    token: &str,
+    inviter_id: Uuid,
+) -> Result<bool, sqlx::Error> {
     let result = sqlx::query(&sql(r#"
         DELETE FROM invite_tokens
         WHERE
@@ -148,7 +158,7 @@ pub async fn revoke_invite_token(token: &str, inviter_id: Uuid) -> Result<bool> 
     "#))
     .bind(token)
     .bind(inviter_id)
-    .execute(get_pool())
+    .execute(&mut **tx)
     .await?;
 
     Ok(result.rows_affected() > 0)

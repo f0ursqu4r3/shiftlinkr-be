@@ -1,9 +1,11 @@
+use std::future::Future;
+use std::pin::Pin;
+
 use actix_web::{dev::Payload, FromRequest, HttpRequest};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::database::repositories::{company as company_repo, user as user_repo};
 use crate::services::auth::Claims;
 use crate::user_context;
 use crate::{
@@ -12,6 +14,7 @@ use crate::{
         user::User,
     },
     error::AppError,
+    repositories::{company as company_repo, user as user_repo},
 };
 
 /// User context that contains the current user and their company information
@@ -242,4 +245,15 @@ pub async fn get_user_context(
     };
 
     Ok(UserContext { user, company })
+}
+
+impl FromRequest for UserContext {
+    type Error = crate::error::AppError;
+    type Future = Pin<Box<dyn Future<Output = Result<Self, Self::Error>>>>;
+
+    fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
+        let req = req.clone();
+
+        Box::pin(async move { extract_context(&req).await })
+    }
 }

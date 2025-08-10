@@ -1,6 +1,6 @@
-use anyhow::Result;
 use bigdecimal::BigDecimal;
 use chrono::{Datelike, Utc};
+use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::database::{
@@ -13,7 +13,7 @@ use crate::database::{
 };
 
 macro_rules! update_field {
-    ($field_value:expr, $field_name:literal, $user_id:expr, $company_id:expr, $now:expr) => {
+    ($tx:expr, $field_value:expr, $field_name:literal, $user_id:expr, $company_id:expr, $now:expr) => {
         if let Some(value) = $field_value {
             let query = format!(
                 r#"
@@ -33,7 +33,7 @@ macro_rules! update_field {
                 .bind($now)
                 .bind($user_id)
                 .bind($company_id)
-                .execute(get_pool())
+                .execute(&mut **$tx)
                 .await?;
         }
     };
@@ -43,7 +43,7 @@ macro_rules! update_field {
 pub async fn get_balance_for_company(
     user_id: Uuid,
     company_id: Uuid,
-) -> Result<Option<PtoBalance>> {
+) -> Result<Option<PtoBalance>, sqlx::Error> {
     let pto_balance = sqlx::query_as::<_, PtoBalance>(&sql(r#"
         SELECT
             user_id,
@@ -61,7 +61,7 @@ pub async fn get_balance_for_company(
     "#))
     .bind(user_id)
     .bind(company_id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&get_pool().await)
     .await?;
 
     Ok(pto_balance)
@@ -69,20 +69,22 @@ pub async fn get_balance_for_company(
 
 /// Update PTO balance for a user in a specific company
 pub async fn update_balance_for_company(
+    tx: &mut Transaction<'_, Postgres>,
     user_id: Uuid,
     company_id: Uuid,
     update: PtoBalanceUpdateInput,
-) -> Result<PtoBalance> {
+) -> Result<PtoBalance, sqlx::Error> {
     let now = Utc::now();
 
     // Get current balance first
     let current = get_balance_for_company(user_id, company_id).await?;
     if current.is_none() {
-        return Err(anyhow::anyhow!("User not found in company"));
+        return Err(sqlx::Error::RowNotFound);
     }
 
     // Execute updates for each field that's provided
     update_field!(
+        tx,
         update.pto_balance_hours,
         "pto_balance_hours",
         user_id,
@@ -90,6 +92,7 @@ pub async fn update_balance_for_company(
         now
     );
     update_field!(
+        tx,
         update.sick_balance_hours,
         "sick_balance_hours",
         user_id,
@@ -97,6 +100,7 @@ pub async fn update_balance_for_company(
         now
     );
     update_field!(
+        tx,
         update.personal_balance_hours,
         "personal_balance_hours",
         user_id,
@@ -104,34 +108,34 @@ pub async fn update_balance_for_company(
         now
     );
     update_field!(
+        tx,
         update.pto_accrual_rate,
         "pto_accrual_rate",
         user_id,
         company_id,
         now
     );
-    update_field!(update.hire_date, "hire_date", user_id, company_id, now);
+    update_field!(tx, update.hire_date, "hire_date", user_id, company_id, now);
 
     // Return updated balance
     get_balance_for_company(user_id, company_id)
         .await?
-        .ok_or_else(|| anyhow::anyhow!("Failed to retrieve updated balance"))
+        .ok_or_else(|| sqlx::Error::RowNotFound)
 }
 
 /// Adjust PTO balance and create history record for a specific company
 pub async fn adjust_balance_for_company(
+    tx: &mut Transaction<'_, Postgres>,
     user_id: Uuid,
     company_id: Uuid,
     adjustment: PtoBalanceAdjustmentInput,
-) -> Result<PtoBalanceHistory> {
+) -> Result<PtoBalanceHistory, sqlx::Error> {
     let now = Utc::now();
 
     // Get current balance
-    let current_balance = get_balance_for_company(user_id, company_id).await?;
-    if current_balance.is_none() {
-        return Err(anyhow::anyhow!("User not found in company"));
-    }
-    let current_balance = current_balance.unwrap();
+    let current_balance = get_balance_for_company(user_id, company_id)
+        .await?
+        .ok_or_else(|| sqlx::Error::RowNotFound)?;
 
     // Calculate new balance
     let (previous_balance, new_balance, field_name) = match adjustment.balance_type {
@@ -154,7 +158,7 @@ pub async fn adjust_balance_for_company(
 
     // Prevent negative balances
     if new_balance < 0 {
-        return Err(anyhow::anyhow!("Insufficient balance"));
+        return Err(sqlx::Error::RowNotFound);
     }
 
     // Update balance in user_company table
@@ -176,7 +180,7 @@ pub async fn adjust_balance_for_company(
         .bind(now)
         .bind(user_id)
         .bind(company_id)
-        .execute(get_pool())
+        .execute(&get_pool().await)
         .await?;
 
     // Create history record
@@ -220,7 +224,7 @@ pub async fn adjust_balance_for_company(
     .bind(new_balance)
     .bind(adjustment.description)
     .bind(now)
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(history_row)
@@ -231,7 +235,7 @@ pub async fn get_balance_history(
     user_id: Uuid,
     company_id: Uuid,
     limit: Option<i32>,
-) -> Result<Vec<PtoBalanceHistory>> {
+) -> Result<Vec<PtoBalanceHistory>, sqlx::Error> {
     let limit = limit.unwrap_or(50);
 
     let history = sqlx::query_as::<_, PtoBalanceHistory>(&sql(r#"
@@ -259,7 +263,7 @@ pub async fn get_balance_history(
     .bind(user_id)
     .bind(company_id)
     .bind(limit as i64)
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     Ok(history)
@@ -267,12 +271,13 @@ pub async fn get_balance_history(
 
 /// Process PTO accrual for a user in a specific company
 pub async fn process_accrual_for_company(
+    tx: &mut Transaction<'_, Postgres>,
     user_id: Uuid,
     company_id: Uuid,
-) -> Result<Option<PtoBalanceAccrualResult>> {
+) -> Result<Option<PtoBalanceAccrualResult>, sqlx::Error> {
     let current_balance = get_balance_for_company(user_id, company_id).await?;
     if current_balance.is_none() {
-        return Err(anyhow::anyhow!("User balance not found for company"));
+        return Err(sqlx::Error::RowNotFound);
     }
     let current_balance = current_balance.unwrap();
 
@@ -325,7 +330,7 @@ pub async fn process_accrual_for_company(
     .bind(now)
     .bind(user_id)
     .bind(company_id)
-    .execute(get_pool())
+    .execute(&mut **tx)
     .await?;
 
     // Create history record
@@ -356,7 +361,7 @@ pub async fn process_accrual_for_company(
     .bind(new_balance)
     .bind(description)
     .bind(now)
-    .execute(get_pool())
+    .execute(&get_pool().await)
     .await?;
 
     Ok(Some(PtoBalanceAccrualResult {
@@ -372,18 +377,19 @@ pub async fn process_accrual_for_company(
 
 /// Use PTO balance for a time-off request in a specific company
 pub async fn use_balance_for_time_off_for_company(
+    tx: &mut Transaction<'_, Postgres>,
     user_id: Uuid,
     company_id: Uuid,
     time_off_id: Uuid,
     balance_type: PtoBalanceType,
     hours_used: i32,
-) -> Result<PtoBalanceHistory> {
+) -> Result<PtoBalanceHistory, sqlx::Error> {
     let now = Utc::now();
 
     // Get current balance
     let current_balance = get_balance_for_company(user_id, company_id).await?;
     if current_balance.is_none() {
-        return Err(anyhow::anyhow!("User not found in company"));
+        return Err(sqlx::Error::RowNotFound);
     }
     let current_balance = current_balance.unwrap();
 
@@ -408,7 +414,7 @@ pub async fn use_balance_for_time_off_for_company(
 
     // Check if sufficient balance
     if new_balance < 0 {
-        return Err(anyhow::anyhow!("Insufficient balance"));
+        return Err(sqlx::Error::RowNotFound);
     }
 
     // Update balance in user_company table
@@ -429,7 +435,7 @@ pub async fn use_balance_for_time_off_for_company(
         .bind(now)
         .bind(user_id)
         .bind(company_id)
-        .execute(get_pool())
+        .execute(&get_pool().await)
         .await?;
 
     // Create history record
@@ -473,7 +479,7 @@ pub async fn use_balance_for_time_off_for_company(
     .bind("Time-off request usage")
     .bind(time_off_id)
     .bind(now)
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(history_row)

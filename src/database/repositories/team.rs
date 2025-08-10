@@ -1,5 +1,5 @@
-use anyhow::Result;
 use chrono::Utc;
+use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::database::{
@@ -9,7 +9,10 @@ use crate::database::{
 };
 
 // Team management methods
-pub async fn create_team(input: TeamInput) -> Result<Team> {
+pub async fn create_team(
+    tx: &mut Transaction<'_, Postgres>,
+    input: TeamInput,
+) -> Result<Team, sqlx::Error> {
     let now = Utc::now();
     let team = sqlx::query_as::<_, Team>(&sql(r#"
             INSERT INTO
@@ -35,13 +38,13 @@ pub async fn create_team(input: TeamInput) -> Result<Team> {
     .bind(input.location_id)
     .bind(now)
     .bind(now)
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(team)
 }
 
-pub async fn get_team_by_id(id: Uuid) -> Result<Option<Team>> {
+pub async fn get_team_by_id(id: Uuid) -> Result<Option<Team>, sqlx::Error> {
     let team = sqlx::query_as::<_, Team>(&sql(r#"
             SELECT
                 id,
@@ -56,13 +59,13 @@ pub async fn get_team_by_id(id: Uuid) -> Result<Option<Team>> {
                 id = ?
         "#))
     .bind(id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&get_pool().await)
     .await?;
 
     Ok(team)
 }
 
-pub async fn get_teams_by_location(location_id: Uuid) -> Result<Vec<Team>> {
+pub async fn get_teams_by_location(location_id: Uuid) -> Result<Vec<Team>, sqlx::Error> {
     let teams = sqlx::query_as::<_, Team>(&sql(r#"
             SELECT
                 id,
@@ -79,13 +82,13 @@ pub async fn get_teams_by_location(location_id: Uuid) -> Result<Vec<Team>> {
                 name
         "#))
     .bind(location_id)
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     Ok(teams)
 }
 
-pub async fn get_all_teams_for_company(company_id: Uuid) -> Result<Vec<Team>> {
+pub async fn get_all_teams_for_company(company_id: Uuid) -> Result<Vec<Team>, sqlx::Error> {
     let teams = sqlx::query_as::<_, Team>(&sql(r#"
             SELECT
                 t.id,
@@ -103,13 +106,17 @@ pub async fn get_all_teams_for_company(company_id: Uuid) -> Result<Vec<Team>> {
                 t.name
         "#))
     .bind(company_id)
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     Ok(teams)
 }
 
-pub async fn update_team(id: Uuid, input: TeamInput) -> Result<Option<Team>> {
+pub async fn update_team(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+    input: TeamInput,
+) -> Result<Option<Team>, sqlx::Error> {
     let now = Utc::now();
     let team = sqlx::query_as::<_, Team>(&sql(r#"
             UPDATE
@@ -134,16 +141,19 @@ pub async fn update_team(id: Uuid, input: TeamInput) -> Result<Option<Team>> {
     .bind(input.location_id)
     .bind(now)
     .bind(id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&mut **tx)
     .await?;
 
     Ok(team)
 }
 
-pub async fn delete_team(id: Uuid) -> Result<Option<()>> {
+pub async fn delete_team(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+) -> Result<Option<()>, sqlx::Error> {
     let result = sqlx::query(&sql("DELETE FROM teams WHERE id = ?"))
         .bind(id)
-        .execute(get_pool())
+        .execute(&mut **tx)
         .await?;
 
     Ok(if result.rows_affected() > 0 {
@@ -154,7 +164,11 @@ pub async fn delete_team(id: Uuid) -> Result<Option<()>> {
 }
 
 // Team member management
-pub async fn add_team_member(team_id: Uuid, user_id: Uuid) -> Result<TeamMember> {
+pub async fn add_team_member(
+    tx: &mut Transaction<'_, Postgres>,
+    team_id: Uuid,
+    user_id: Uuid,
+) -> Result<TeamMember, sqlx::Error> {
     let now = Utc::now();
     let team_member = sqlx::query_as::<_, TeamMember>(&sql(r#"
             INSERT INTO
@@ -174,13 +188,13 @@ pub async fn add_team_member(team_id: Uuid, user_id: Uuid) -> Result<TeamMember>
     .bind(team_id)
     .bind(user_id)
     .bind(now)
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(team_member)
 }
 
-pub async fn get_team_members(team_id: Uuid) -> Result<Vec<TeamMember>> {
+pub async fn get_team_members(team_id: Uuid) -> Result<Vec<TeamMember>, sqlx::Error> {
     let team_members = sqlx::query_as::<_, TeamMember>(&sql(r#"
             SELECT
                 id,
@@ -193,13 +207,17 @@ pub async fn get_team_members(team_id: Uuid) -> Result<Vec<TeamMember>> {
                 team_id = ?
         "#))
     .bind(team_id)
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     Ok(team_members)
 }
 
-pub async fn remove_team_member(team_id: Uuid, user_id: Uuid) -> Result<Option<()>> {
+pub async fn remove_team_member(
+    tx: &mut Transaction<'_, Postgres>,
+    team_id: Uuid,
+    user_id: Uuid,
+) -> Result<Option<()>, sqlx::Error> {
     let result = sqlx::query(&sql(r#"
             DELETE FROM team_members
             WHERE
@@ -208,7 +226,7 @@ pub async fn remove_team_member(team_id: Uuid, user_id: Uuid) -> Result<Option<(
             "#))
     .bind(team_id)
     .bind(user_id)
-    .execute(get_pool())
+    .execute(&mut **tx)
     .await?;
 
     Ok(if result.rows_affected() > 0 {
@@ -218,7 +236,7 @@ pub async fn remove_team_member(team_id: Uuid, user_id: Uuid) -> Result<Option<(
     })
 }
 
-pub async fn get_user_teams(user_id: Uuid) -> Result<Vec<Team>> {
+pub async fn get_user_teams(user_id: Uuid) -> Result<Vec<Team>, sqlx::Error> {
     let teams = sqlx::query_as::<_, Team>(&sql(r#"
             SELECT
                 t.id,
@@ -236,7 +254,7 @@ pub async fn get_user_teams(user_id: Uuid) -> Result<Vec<Team>> {
                 t.name
         "#))
     .bind(user_id)
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     Ok(teams)

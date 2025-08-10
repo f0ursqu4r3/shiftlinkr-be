@@ -1,5 +1,5 @@
-use anyhow::Result;
 use chrono::Utc;
+use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::database::{
@@ -12,7 +12,10 @@ use crate::database::{
 };
 
 // User Shift Schedules
-pub async fn create_user_schedule(input: UserShiftScheduleInput) -> Result<UserShiftSchedule> {
+pub async fn create_user_schedule(
+    tx: &mut Transaction<'_, Postgres>,
+    input: UserShiftScheduleInput,
+) -> Result<UserShiftSchedule, sqlx::Error> {
     let now = Utc::now().naive_utc();
     let schedule = sqlx::query_as::<_, UserShiftSchedule>(&sql(r#"
         INSERT INTO
@@ -83,13 +86,13 @@ pub async fn create_user_schedule(input: UserShiftScheduleInput) -> Result<UserS
     .bind(input.is_available_for_overtime)
     .bind(now)
     .bind(now)
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(schedule)
 }
 
-pub async fn get_user_schedule(user_id: Uuid) -> Result<Option<UserShiftSchedule>> {
+pub async fn get_user_schedule(user_id: Uuid) -> Result<Option<UserShiftSchedule>, sqlx::Error> {
     let schedule = sqlx::query_as::<_, UserShiftSchedule>(&sql(r#"
         SELECT
             id,
@@ -120,16 +123,17 @@ pub async fn get_user_schedule(user_id: Uuid) -> Result<Option<UserShiftSchedule
         LIMIT 1
     "#))
     .bind(user_id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&get_pool().await)
     .await?;
 
     Ok(schedule)
 }
 
 pub async fn update_user_schedule(
+    tx: &mut Transaction<'_, Postgres>,
     user_id: Uuid,
     input: UserShiftScheduleInput,
-) -> Result<Option<UserShiftSchedule>> {
+) -> Result<Option<UserShiftSchedule>, sqlx::Error> {
     let now = Utc::now().naive_utc();
     let schedule = sqlx::query_as::<_, UserShiftSchedule>(&sql(r#"
         UPDATE
@@ -197,20 +201,23 @@ pub async fn update_user_schedule(
     .bind(input.is_available_for_overtime)
     .bind(now)
     .bind(user_id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&mut **tx)
     .await?;
 
     Ok(schedule)
 }
 
-pub async fn delete_user_schedule(user_id: Uuid) -> Result<Option<()>> {
+pub async fn delete_user_schedule(
+    tx: &mut Transaction<'_, Postgres>,
+    user_id: Uuid,
+) -> Result<Option<()>, sqlx::Error> {
     let result = sqlx::query(&sql(r#"
         DELETE FROM user_shift_schedules
         WHERE
             user_id = ?
     "#))
     .bind(user_id)
-    .execute(get_pool())
+    .execute(&mut **tx)
     .await?;
 
     if result.rows_affected() > 0 {
@@ -222,9 +229,10 @@ pub async fn delete_user_schedule(user_id: Uuid) -> Result<Option<()>> {
 
 // Shift Assignments
 pub async fn create_shift_assignment(
+    tx: &mut Transaction<'_, Postgres>,
     assigned_by_user_id: Uuid,
     input: ShiftAssignmentInput,
-) -> Result<ShiftAssignment> {
+) -> Result<ShiftAssignment, sqlx::Error> {
     let now = Utc::now().naive_utc();
     let assignment = sqlx::query_as::<_, ShiftAssignment>(&sql(r#"
         INSERT INTO
@@ -262,13 +270,13 @@ pub async fn create_shift_assignment(
     .bind(None::<String>)
     .bind(now)
     .bind(now)
-    .fetch_one(get_pool())
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(assignment)
 }
 
-pub async fn get_user_shift_suggestions(user_id: Uuid) -> Result<Vec<Shift>> {
+pub async fn get_user_shift_suggestions(user_id: Uuid) -> Result<Vec<Shift>, sqlx::Error> {
     // This function finds open shifts that match a user's availability and don't conflict with their existing schedule.
     // A more advanced implementation could also factor in user skills, location preferences, and other constraints.
     let suggestions = sqlx::query_as::<_, Shift>(&sql(r#"
@@ -320,13 +328,15 @@ pub async fn get_user_shift_suggestions(user_id: Uuid) -> Result<Vec<Shift>> {
             LIMIT 20
         "#))
         .bind(user_id)
-        .fetch_all(get_pool())
+        .fetch_all(&get_pool().await)
         .await?;
 
     Ok(suggestions)
 }
 
-pub async fn get_shift_assignment(assignment_id: Uuid) -> Result<Option<ShiftAssignment>> {
+pub async fn get_shift_assignment(
+    assignment_id: Uuid,
+) -> Result<Option<ShiftAssignment>, sqlx::Error> {
     let assignment = sqlx::query_as::<_, ShiftAssignment>(&sql(r#"
         SELECT
             id,
@@ -345,13 +355,15 @@ pub async fn get_shift_assignment(assignment_id: Uuid) -> Result<Option<ShiftAss
             id = ?
     "#))
     .bind(assignment_id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&get_pool().await)
     .await?;
 
     Ok(assignment)
 }
 
-pub async fn get_shift_assignments_by_shift(shift_id: Uuid) -> Result<Vec<ShiftAssignment>> {
+pub async fn get_shift_assignments_by_shift(
+    shift_id: Uuid,
+) -> Result<Vec<ShiftAssignment>, sqlx::Error> {
     let assignments = sqlx::query_as::<_, ShiftAssignment>(&sql(r#"
         SELECT
             id,
@@ -372,13 +384,15 @@ pub async fn get_shift_assignments_by_shift(shift_id: Uuid) -> Result<Vec<ShiftA
             created_at
     "#))
     .bind(shift_id)
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     Ok(assignments)
 }
 
-pub async fn get_shift_assignments_by_user(user_id: Uuid) -> Result<Vec<ShiftAssignment>> {
+pub async fn get_shift_assignments_by_user(
+    user_id: Uuid,
+) -> Result<Vec<ShiftAssignment>, sqlx::Error> {
     let assignments = sqlx::query_as::<_, ShiftAssignment>(&sql(r#"
         SELECT
             id,
@@ -399,13 +413,15 @@ pub async fn get_shift_assignments_by_user(user_id: Uuid) -> Result<Vec<ShiftAss
             created_at DESC
     "#))
     .bind(user_id)
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     Ok(assignments)
 }
 
-pub async fn get_pending_assignments_for_user(user_id: Uuid) -> Result<Vec<ShiftAssignment>> {
+pub async fn get_pending_assignments_for_user(
+    user_id: Uuid,
+) -> Result<Vec<ShiftAssignment>, sqlx::Error> {
     let assignments = sqlx::query_as::<_, ShiftAssignment>(&sql(r#"
         SELECT
             id,
@@ -427,17 +443,18 @@ pub async fn get_pending_assignments_for_user(user_id: Uuid) -> Result<Vec<Shift
             acceptance_deadline ASC, created_at
     "#))
     .bind(user_id)
-    .fetch_all(get_pool())
+    .fetch_all(&get_pool().await)
     .await?;
 
     Ok(assignments)
 }
 
 pub async fn respond_to_assignment(
+    tx: &mut Transaction<'_, Postgres>,
     assignment_id: Uuid,
     response: AssignmentResponse,
     response_notes: Option<String>,
-) -> Result<Option<ShiftAssignment>> {
+) -> Result<Option<ShiftAssignment>, sqlx::Error> {
     let now = Utc::now().naive_utc();
     let status = match response {
         AssignmentResponse::Accept => AssignmentStatus::Accepted,
@@ -471,13 +488,16 @@ pub async fn respond_to_assignment(
     .bind(response_notes)
     .bind(now)
     .bind(assignment_id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&mut **tx)
     .await?;
 
     Ok(assignment)
 }
 
-pub async fn cancel_assignment(assignment_id: Uuid) -> Result<Option<ShiftAssignment>> {
+pub async fn cancel_assignment(
+    tx: &mut Transaction<'_, Postgres>,
+    assignment_id: Uuid,
+) -> Result<Option<ShiftAssignment>, sqlx::Error> {
     let now = Utc::now().naive_utc();
     let assignment = sqlx::query_as::<_, ShiftAssignment>(&sql(r#"
         UPDATE
@@ -501,13 +521,15 @@ pub async fn cancel_assignment(assignment_id: Uuid) -> Result<Option<ShiftAssign
     "#))
     .bind(now)
     .bind(assignment_id)
-    .fetch_optional(get_pool())
+    .fetch_optional(&mut **tx)
     .await?;
 
     Ok(assignment)
 }
 
-pub async fn expire_overdue_assignments() -> Result<Vec<ShiftAssignment>> {
+pub async fn expire_overdue_assignments(
+    tx: &mut Transaction<'_, Postgres>,
+) -> Result<Vec<ShiftAssignment>, sqlx::Error> {
     let now = Utc::now().naive_utc();
     let assignments = sqlx::query_as::<_, ShiftAssignment>(&sql(r#"
         UPDATE
@@ -533,7 +555,7 @@ pub async fn expire_overdue_assignments() -> Result<Vec<ShiftAssignment>> {
     "#))
     .bind(now)
     .bind(now)
-    .fetch_all(get_pool())
+    .fetch_all(&mut **tx)
     .await?;
 
     Ok(assignments)

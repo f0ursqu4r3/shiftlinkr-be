@@ -11,12 +11,14 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::config::config;
+use crate::database::transaction::DatabaseTransaction;
 use crate::database::{
     models::{AuthResponse, CompanyRole, CreateUserInput, LoginInput, User},
     repositories::{
         company as company_repo, password_reset as password_reset_repo, user as user_repo,
     },
 };
+use crate::error::AppError;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
@@ -80,28 +82,37 @@ impl FromRequest for Claims {
     }
 }
 
-pub async fn register(request: CreateUserInput) -> Result<AuthResponse> {
+pub async fn register(request: CreateUserInput) -> Result<AuthResponse, AppError> {
     // Check if email already exists
     if user_repo::email_exists(&request.email).await? {
-        return Err(anyhow!("Email already exists"));
+        return Err(AppError::BadRequest("Email already exists".into()));
     }
 
     // Hash password
-    let password_hash = hash(&request.password, DEFAULT_COST)?;
+    let password_hash = hash(&request.password, DEFAULT_COST).map_err(|_| {
+        log::error!("Failed to hash password");
+        AppError::internal_server_error_message("Failed to hash password")
+    })?;
 
     // Create user
     let user = User::new(request.email, password_hash, request.name);
 
-    // Save to database
-    user_repo::create_user(&user).await?;
+    let created_user = DatabaseTransaction::run(|tx| {
+        Box::pin(async move {
+            // Save to database
+            Ok(user_repo::create_user(tx, &user).await?)
+        })
+    })
+    .await?;
 
-    // Generate JWT token - for now we'll need to handle this differently since role is company-specific
-    // TODO: Update this to handle company-specific roles
-    let token = generate_token(&user, None, None)?;
+    let token = generate_token(&created_user, None, None).map_err(|e| {
+        log::error!("Failed to generate token: {}", e);
+        AppError::internal_server_error_message(e.to_string())
+    })?;
 
     Ok(AuthResponse {
         token,
-        user: user.into(),
+        user: created_user.into(),
         company: None, // No company info on registration
     })
 }
@@ -217,8 +228,13 @@ pub async fn forgot_password(email: &str) -> Result<String> {
         .await?
         .ok_or_else(|| anyhow!("User not found"))?;
 
-    // Generate reset token
-    let reset_token = password_reset_repo::create_token(user.id).await?;
+    let reset_token = DatabaseTransaction::run(|tx| {
+        Box::pin(async move {
+            // Generate reset token
+            Ok(password_reset_repo::create_token(tx, user.id).await?)
+        })
+    })
+    .await?;
 
     // In a real application, you would send this token via email
     // For development, we'll return it directly
@@ -243,15 +259,23 @@ pub async fn reset_password(token: &str, new_password: &str) -> Result<()> {
 
     // Hash the new password
     let password_hash = hash(new_password, DEFAULT_COST)?;
+    let token_string = token.to_string();
 
-    // Update user's password
-    user_repo::update_password(reset_token.user_id, &password_hash).await?;
+    DatabaseTransaction::run(|tx| {
+        Box::pin(async move {
+            // Update user's password
+            user_repo::update_password(tx, reset_token.user_id, &password_hash).await?;
 
-    // Mark token as used
-    password_reset_repo::mark_token_used(token).await?;
+            // Mark token as used
+            password_reset_repo::mark_token_used(tx, &token_string).await?;
 
-    // Invalidate all other reset tokens for this user
-    password_reset_repo::invalidate_user_tokens(reset_token.user_id).await?;
+            // Invalidate all other reset tokens for this user
+            password_reset_repo::invalidate_user_tokens(tx, reset_token.user_id).await?;
+
+            Ok(())
+        })
+    })
+    .await?;
 
     Ok(())
 }
