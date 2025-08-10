@@ -2,8 +2,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::database::models::User;
+
 use super::company::CompanyRole;
-use super::user::UserInfo;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
@@ -64,5 +65,5 @@ pub struct AcceptInviteInput {
 #[derive(Debug, Serialize)]
 pub struct AcceptInviteResponse {
     pub token: String,
-    pub user: UserInfo,
+    pub user: User,
 }

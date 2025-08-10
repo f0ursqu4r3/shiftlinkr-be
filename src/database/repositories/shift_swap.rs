@@ -7,7 +7,7 @@ use crate::database::{
     get_pool,
     models::{
         Shift, ShiftSwap, ShiftSwapInput, ShiftSwapResponse, ShiftSwapResponseStatus,
-        ShiftSwapStatus, ShiftSwapType, UserInfo,
+        ShiftSwapStatus, ShiftSwapType,
     },
     utils::sql,
 };
@@ -38,6 +38,13 @@ struct ShiftSwapDetailRaw {
     // Additional fields for user details
     requesting_user_email: String,
     requesting_user_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserInfo {
+    pub id: Uuid,
+    pub email: String,
+    pub name: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, sqlx::FromRow)]

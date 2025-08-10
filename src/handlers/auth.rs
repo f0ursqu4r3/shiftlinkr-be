@@ -9,7 +9,7 @@ use crate::{
     database::{
         models::{
             Action, AddEmployeeToCompanyInput, CompanyInfo, CreateInviteInput, CreateUserInput,
-            ForgotPasswordInput, GetInviteResponse, LoginInput, ResetPasswordInput, UserInfo,
+            ForgotPasswordInput, GetInviteResponse, LoginInput, ResetPasswordInput, User,
         },
         repositories::{company as company_repo, invite as invite_repo, user as user_repo},
         transaction::DatabaseTransaction,
@@ -24,7 +24,7 @@ use crate::{
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MeResponse {
-    pub user: UserInfo,
+    pub user: User,
     pub companies: Vec<CompanyInfo>,
 }
 
@@ -60,7 +60,7 @@ pub async fn login(request: web::Json<LoginInput>) -> Result<HttpResponse> {
 pub async fn me(ctx: UserContext) -> Result<HttpResponse> {
     let user_id = ctx.user_id();
     // Get the user's information
-    let user_info = UserInfo::from(ctx.user.clone());
+    let user = ctx.user.clone();
 
     // Get user's companies
     let companies = company_repo::get_companies_for_user(user_id)
@@ -70,10 +70,7 @@ pub async fn me(ctx: UserContext) -> Result<HttpResponse> {
             AppError::DatabaseError(e)
         })?;
 
-    let response = MeResponse {
-        user: user_info,
-        companies,
-    };
+    let response = MeResponse { user, companies };
 
     Ok(ApiResponse::success(response))
 }
@@ -350,20 +347,17 @@ pub async fn accept_invite(
 
     // Log successful invite acceptance
     // Return an Ok response with user info
-    let user_info = UserInfo::from(accepting_user);
+    let user = accepting_user;
 
     // Get user's companies
-    let companies = company_repo::get_companies_for_user(user_info.id)
+    let companies = company_repo::get_companies_for_user(user.id)
         .await
         .map_err(|e| {
-            log::error!("Failed to get companies for user {}: {}", user_info.id, e);
+            log::error!("Failed to get companies for user {}: {}", user.id, e);
             AppError::DatabaseError(e)
         })?;
 
-    let response = MeResponse {
-        user: user_info,
-        companies,
-    };
+    let response = MeResponse { user, companies };
 
     Ok(ApiResponse::success(response))
 }

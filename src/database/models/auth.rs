@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::database::models::CompanyInfo;
 
-use super::user::UserInfo;
+use super::user::User;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -21,7 +21,7 @@ pub struct AuthResponse {
     /// JWT authentication token
     pub token: String,
     /// User information
-    pub user: UserInfo,
+    pub user: User,
     // Company information if available
     pub company: Option<CompanyInfo>,
 }

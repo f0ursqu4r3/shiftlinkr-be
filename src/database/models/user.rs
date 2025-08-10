@@ -41,16 +41,6 @@ pub struct CreateUserInput {
     pub name: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct UserInfo {
-    /// User's unique identifier
-    pub id: Uuid, // UUID type
-    /// User's email address
-    pub email: String,
-    /// User's full name
-    pub name: String,
-}
-
 impl User {
     pub fn new(email: String, password_hash: String, name: String) -> Self {
         Self {
@@ -60,16 +50,6 @@ impl User {
             name,
             created_at: Utc::now(), // Use DateTime<Utc>
             updated_at: Utc::now(),
-        }
-    }
-}
-
-impl From<User> for UserInfo {
-    fn from(user: User) -> Self {
-        Self {
-            id: user.id,
-            email: user.email,
-            name: user.name,
         }
     }
 }
