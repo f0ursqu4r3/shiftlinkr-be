@@ -1,15 +1,18 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
-use crate::database::{
-    get_pool,
-    models::{
-        Shift, ShiftSwap, ShiftSwapInput, ShiftSwapResponse, ShiftSwapResponseStatus,
-        ShiftSwapStatus, ShiftSwapType,
+use crate::{
+    database::{
+        get_pool,
+        models::{
+            CompanyRole, Shift, ShiftSwap, ShiftSwapInput, ShiftSwapResponse,
+            ShiftSwapResponseStatus, ShiftSwapStatus, ShiftSwapType,
+        },
+        utils::sql,
     },
-    utils::sql,
+    handlers::admin::UserResponse,
 };
 
 #[derive(sqlx::FromRow)]
@@ -38,20 +41,18 @@ struct ShiftSwapDetailRaw {
     // Additional fields for user details
     requesting_user_email: String,
     requesting_user_name: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UserInfo {
-    pub id: Uuid,
-    pub email: String,
-    pub name: String,
+    requesting_user_role: CompanyRole,
+    requesting_user_company_id: Uuid,
+    requesting_user_hire_date: Option<NaiveDate>,
+    requesting_user_created_at: DateTime<Utc>,
+    requesting_user_updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, sqlx::FromRow)]
 pub struct ShiftSwapDetail {
     pub id: Uuid,
     pub swap_type: ShiftSwapType,
-    pub requested_by: UserInfo,
+    pub requested_by: UserResponse,
     pub original_shift: Shift,
     pub status: ShiftSwapStatus,
     pub reason: String,
@@ -423,12 +424,18 @@ pub async fn get_swap_requests_with_details(
                 -- Additional fields for user details
                 u.id AS requesting_user_id,
                 u.email AS requesting_user_email,
-                u.name AS requesting_user_name
-
+                u.name AS requesting_user_name,
+                uc.role AS requesting_user_role,
+                uc.company_id AS requesting_user_company_id,
+                uc.hire_date AS requesting_user_hire_date,
+                uc.created_at AS requesting_user_created_at,
+                uc.updated_at AS requesting_user_updated_at
             FROM
                 shift_swaps ss
                 JOIN users u ON u.id = ss.requesting_user_id
                 JOIN shifts s ON s.id = ss.original_shift_id
+                JOIN user_company uc ON uc.user_id = u.id
+                  AND uc.company_id = s.company_id
         "#
     .to_string();
 
@@ -470,10 +477,15 @@ pub async fn get_swap_requests_with_details(
         .map(|row| ShiftSwapDetail {
             id: row.id,
             swap_type: row.swap_type,
-            requested_by: UserInfo {
+            requested_by: UserResponse {
                 id: row.requesting_user_id,
                 name: row.requesting_user_name,
                 email: row.requesting_user_email,
+                role: row.requesting_user_role,
+                company_id: row.requesting_user_company_id,
+                hire_date: row.requesting_user_hire_date,
+                created_at: row.requesting_user_created_at,
+                updated_at: row.requesting_user_updated_at,
             },
             original_shift: Shift {
                 id: row.shift_id,
@@ -530,12 +542,18 @@ pub async fn get_swap_by_id_with_details(id: Uuid) -> Result<ShiftSwapDetail, sq
                 -- Additional fields for user details
                 u.id AS requesting_user_id,
                 u.email AS requesting_user_email,
-                u.name AS requesting_user_name
-
+                u.name AS requesting_user_name,
+                uc.role AS requesting_user_role,
+                uc.company_id AS requesting_user_company_id,
+                uc.hire_date AS requesting_user_hire_date,
+                uc.created_at AS requesting_user_created_at,
+                uc.updated_at AS requesting_user_updated_at
             FROM
                 shift_swaps ss
                 JOIN users u ON u.id = ss.requesting_user_id
                 JOIN shifts s ON s.id = ss.original_shift_id
+                JOIN user_company uc ON uc.user_id = u.id
+                  AND uc.company_id = s.company_id
             WHERE
                 ss.id = $1
         "#))
@@ -546,10 +564,15 @@ pub async fn get_swap_by_id_with_details(id: Uuid) -> Result<ShiftSwapDetail, sq
     let mut shift_swap_detail = ShiftSwapDetail {
         id: row.id,
         swap_type: row.swap_type,
-        requested_by: UserInfo {
+        requested_by: UserResponse {
             id: row.requesting_user_id,
+            email: row.requesting_user_email,
             name: row.requesting_user_name,
-            email: "".to_string(), // Will be filled by join query
+            role: row.requesting_user_role,
+            company_id: row.requesting_user_company_id,
+            hire_date: row.requesting_user_hire_date,
+            created_at: row.requesting_user_created_at,
+            updated_at: row.requesting_user_updated_at,
         },
         original_shift: Shift {
             id: row.shift_id,

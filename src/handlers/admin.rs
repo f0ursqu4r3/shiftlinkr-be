@@ -1,4 +1,5 @@
 use actix_web::{HttpResponse, Result, web};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -25,7 +26,7 @@ pub struct UpdateUserRequest {
     pub role: Option<CompanyRole>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserResponse {
     pub id: Uuid,
@@ -33,9 +34,9 @@ pub struct UserResponse {
     pub name: String,
     pub role: CompanyRole,
     pub company_id: Uuid,
-    pub hire_date: Option<String>,
-    pub created_at: String,
-    pub updated_at: String,
+    pub hire_date: Option<NaiveDate>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 // Location handlers
@@ -651,15 +652,9 @@ pub async fn get_users(ctx: UserContext) -> Result<HttpResponse> {
             name: employee.name,
             role: employee.role,
             company_id,
-            hire_date: employee.hire_date.map(|d| d.format("%Y-%m-%d").to_string()),
-            created_at: employee
-                .created_at
-                .map(|dt| dt.format("%Y-%m-%dT%H:%M:%SZ").to_string())
-                .unwrap_or_else(|| chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()),
-            updated_at: employee
-                .updated_at
-                .map(|dt| dt.format("%Y-%m-%dT%H:%M:%SZ").to_string())
-                .unwrap_or_else(|| chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()),
+            hire_date: employee.hire_date,
+            created_at: employee.created_at.unwrap_or_else(|| chrono::Utc::now()),
+            updated_at: employee.updated_at.unwrap_or_else(|| chrono::Utc::now()),
         })
         .collect();
 
@@ -755,17 +750,9 @@ pub async fn update_user(
         name: updated_user.name,
         role: final_role,
         company_id,
-        hire_date: user_company_info
-            .hire_date
-            .map(|d| d.format("%Y-%m-%d").to_string()),
-        created_at: updated_user
-            .created_at
-            .format("%Y-%m-%dT%H:%M:%SZ")
-            .to_string(),
-        updated_at: updated_user
-            .updated_at
-            .format("%Y-%m-%dT%H:%M:%SZ")
-            .to_string(),
+        hire_date: user_company_info.hire_date,
+        created_at: updated_user.created_at,
+        updated_at: updated_user.updated_at,
     }))
 }
 
