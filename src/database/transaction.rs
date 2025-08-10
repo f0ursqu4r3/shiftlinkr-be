@@ -24,8 +24,9 @@ impl DatabaseTransaction {
                 Ok(value)
             }
             Err(err) => {
+                log::warn!("Transaction failed with error: {}, rolling back", err);
                 if let Err(rollback_err) = tx.rollback().await {
-                    log::warn!(
+                    log::error!(
                         "Rollback failed after error (orig: {}, rollback: {})",
                         err,
                         rollback_err

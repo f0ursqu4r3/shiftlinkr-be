@@ -15,7 +15,7 @@ pub struct CompanyActivity {
     pub entity_id: Uuid,
     pub action: String,
     pub description: String,
-    pub metadata: Option<String>, // JSON as String in SQLite
+    pub metadata: Option<serde_json::Value>, // JSONB in PostgreSQL
     pub ip_address: Option<String>,
     pub user_agent: Option<String>,
     pub created_at: DateTime<Utc>,
