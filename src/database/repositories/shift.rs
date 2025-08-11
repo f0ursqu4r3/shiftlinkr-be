@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::database::{
     get_pool,
-    models::{Shift, ShiftInput, ShiftQuery, ShiftQueryType, ShiftStatus},
+    models::{Shift, CreateUpdateShiftInput, ShiftQuery, ShiftQueryType, ShiftStatus},
     utils::sql,
 };
 
@@ -19,7 +19,7 @@ pub struct ShiftFindByFilter {
 
 pub async fn create_shift(
     tx: &mut Transaction<'_, Postgres>,
-    input: ShiftInput,
+    input: CreateUpdateShiftInput,
 ) -> Result<Shift, sqlx::Error> {
     let now = Utc::now();
     let row = sqlx::query_as::<_, Shift>(&sql(r#"
@@ -335,7 +335,7 @@ pub async fn find_open_shifts() -> Result<Vec<Shift>, sqlx::Error> {
 pub async fn update_shift(
     tx: &mut Transaction<'_, Postgres>,
     id: Uuid,
-    input: ShiftInput,
+    input: CreateUpdateShiftInput,
 ) -> Result<Option<Shift>, sqlx::Error> {
     let now = Utc::now();
     let row = sqlx::query_as::<_, Shift>(&sql(r#"

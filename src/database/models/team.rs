@@ -15,7 +15,7 @@ pub struct Team {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TeamInput {
+pub struct CreateUpdateTeamInput {
     pub name: String,
     pub description: Option<String>,
     pub location_id: Uuid, // UUID type

@@ -25,7 +25,7 @@ pub struct Shift {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ShiftInput {
+pub struct CreateUpdateShiftInput {
     pub company_id: Uuid, // UUID for company references
     pub title: String,
     pub description: Option<String>,

@@ -4,14 +4,14 @@ use uuid::Uuid;
 
 use crate::database::{
     get_pool,
-    models::{Team, TeamInput, TeamMember},
+    models::{Team, CreateUpdateTeamInput, TeamMember},
     utils::sql,
 };
 
 // Team management methods
 pub async fn create_team(
     tx: &mut Transaction<'_, Postgres>,
-    input: TeamInput,
+    input: CreateUpdateTeamInput,
 ) -> Result<Team, sqlx::Error> {
     let now = Utc::now();
     let team = sqlx::query_as::<_, Team>(&sql(r#"
@@ -115,7 +115,7 @@ pub async fn get_all_teams_for_company(company_id: Uuid) -> Result<Vec<Team>, sq
 pub async fn update_team(
     tx: &mut Transaction<'_, Postgres>,
     id: Uuid,
-    input: TeamInput,
+    input: CreateUpdateTeamInput,
 ) -> Result<Option<Team>, sqlx::Error> {
     let now = Utc::now();
     let team = sqlx::query_as::<_, Team>(&sql(r#"

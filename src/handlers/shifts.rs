@@ -6,8 +6,8 @@ use uuid::Uuid;
 use crate::{
     database::{
         models::{
-            Action, AssignmentResponse, Shift, ShiftAssignment, ShiftAssignmentInput,
-            ShiftClaimInput, ShiftClaimResponse, ShiftInput, ShiftQuery, ShiftQueryType,
+            Action, AssignmentResponse, CreateUpdateShiftInput, Shift, ShiftAssignment,
+            ShiftAssignmentInput, ShiftClaimInput, ShiftClaimResponse, ShiftQuery, ShiftQueryType,
             ShiftStatus,
         },
         repositories::{
@@ -23,7 +23,7 @@ use crate::{
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AssignShiftRequest {
+pub struct AssignShiftInput {
     pub user_id: Uuid,
     pub acceptance_deadline: Option<DateTime<Utc>>,
 }
@@ -37,29 +37,29 @@ pub struct ShiftAssignResponse {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DirectAssignShiftRequest {
+pub struct DirectAssignShiftInput {
     pub user_id: Uuid,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct UpdateShiftStatusRequest {
+pub struct UpdateShiftStatusInput {
     pub status: ShiftStatus,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct ApprovalRequest {
+pub struct ApprovalInput {
     pub notes: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct AssignmentResponseRequest {
+pub struct AssignmentResponseInput {
     pub response: AssignmentResponse, // "accepted" or "declined"
     pub notes: Option<String>,
 }
 
 // Shift handlers
 pub async fn create_shift(
-    input: web::Json<ShiftInput>,
+    input: web::Json<CreateUpdateShiftInput>,
     ctx: UserContext,
     req_info: RequestInfo,
 ) -> Result<HttpResponse> {
@@ -143,7 +143,7 @@ pub async fn get_shift(path: web::Path<Uuid>, ctx: UserContext) -> Result<HttpRe
 
 pub async fn update_shift(
     path: web::Path<Uuid>,
-    input: web::Json<ShiftInput>,
+    input: web::Json<CreateUpdateShiftInput>,
     ctx: UserContext,
     req_info: RequestInfo,
 ) -> Result<HttpResponse> {
@@ -210,7 +210,7 @@ pub async fn update_shift(
 
 pub async fn assign_shift(
     path: web::Path<Uuid>,
-    input: web::Json<AssignShiftRequest>,
+    input: web::Json<AssignShiftInput>,
     ctx: UserContext,
     req_info: RequestInfo,
 ) -> Result<HttpResponse> {
@@ -333,7 +333,7 @@ pub async fn unassign_shift(
 
 pub async fn update_shift_status(
     path: web::Path<Uuid>,
-    input: web::Json<UpdateShiftStatusRequest>,
+    input: web::Json<UpdateShiftStatusInput>,
     ctx: UserContext,
     req_info: RequestInfo,
 ) -> Result<HttpResponse> {
@@ -457,7 +457,7 @@ pub async fn get_my_pending_assignments(ctx: UserContext) -> Result<HttpResponse
 // Respond to a shift assignment
 pub async fn respond_to_assignment(
     path: web::Path<Uuid>,
-    input: web::Json<AssignmentResponseRequest>,
+    input: web::Json<AssignmentResponseInput>,
     ctx: UserContext,
     _req_info: RequestInfo,
 ) -> Result<HttpResponse> {
@@ -651,7 +651,7 @@ pub async fn get_my_claims(ctx: UserContext) -> Result<HttpResponse> {
 // Approve a shift claim (managers/admins only)
 pub async fn approve_shift_claim(
     path: web::Path<Uuid>,
-    approval_data: web::Json<ApprovalRequest>,
+    approval_data: web::Json<ApprovalInput>,
     ctx: UserContext,
     req_info: RequestInfo,
 ) -> Result<HttpResponse> {
@@ -715,7 +715,7 @@ pub async fn approve_shift_claim(
 // Reject a shift claim (managers/admins only)
 pub async fn reject_shift_claim(
     path: web::Path<Uuid>,
-    rejection_data: web::Json<ApprovalRequest>,
+    rejection_data: web::Json<ApprovalInput>,
     ctx: UserContext,
     req_info: RequestInfo,
 ) -> Result<HttpResponse> {

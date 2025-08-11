@@ -1,5 +1,5 @@
 use be::database::models::{
-    LocationInput, ShiftClaimInput, ShiftClaimStatus, ShiftInput, ShiftStatus, User,
+    CreateUpdateShiftInput, LocationInput, ShiftClaimInput, ShiftClaimStatus, ShiftStatus, User,
 };
 use be::database::repositories::location::LocationRepository;
 use be::database::repositories::shift::ShiftRepository;
@@ -80,7 +80,7 @@ async fn test_shift_claim_repository(pool: PgPool) -> Result<(), sqlx::Error> {
     };
 
     // Create test shift
-    let shift_input = ShiftInput {
+    let shift_input = CreateUpdateShiftInput {
         title: "Test Shift".to_string(),
         description: Some("Test shift description".to_string()),
         location_id: location.id,
@@ -285,7 +285,7 @@ async fn test_shift_claim_cancel_and_reject(pool: PgPool) -> Result<(), sqlx::Er
     let location = location_repo.create_location(location_input).await.unwrap();
 
     // Create test shift
-    let shift_input = ShiftInput {
+    let shift_input = CreateUpdateShiftInput {
         title: "Test Shift 2".to_string(),
         description: Some("Test shift 2 description".to_string()),
         location_id: location.id,

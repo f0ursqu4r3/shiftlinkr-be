@@ -5,7 +5,9 @@ use uuid::Uuid;
 
 use crate::{
     database::{
-        models::{Action, CompanyRole, CreateUpdateLocationInput, LocationInput, TeamInput},
+        models::{
+            Action, CompanyRole, CreateUpdateLocationInput, CreateUpdateTeamInput, LocationInput,
+        },
         repositories::{
             company as company_repo, location as location_repo, team as team_repo,
             user as user_repo,
@@ -20,7 +22,7 @@ use crate::{
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct UpdateUserRequest {
+pub struct UpdateUserInput {
     pub name: String,
     pub email: String,
     pub role: Option<CompanyRole>,
@@ -287,7 +289,7 @@ pub async fn delete_location(
 
 // Team handlers
 pub async fn create_team(
-    input: web::Json<TeamInput>,
+    input: web::Json<CreateUpdateTeamInput>,
     ctx: UserContext,
     req_info: RequestInfo,
 ) -> Result<HttpResponse> {
@@ -404,7 +406,7 @@ pub async fn get_team(path: web::Path<Uuid>, ctx: UserContext) -> Result<HttpRes
 
 pub async fn update_team(
     path: web::Path<Uuid>,
-    input: web::Json<TeamInput>,
+    input: web::Json<CreateUpdateTeamInput>,
     ctx: UserContext,
     req_info: RequestInfo,
 ) -> Result<HttpResponse> {
@@ -663,7 +665,7 @@ pub async fn get_users(ctx: UserContext) -> Result<HttpResponse> {
 
 pub async fn update_user(
     path: web::Path<Uuid>,
-    input: web::Json<UpdateUserRequest>,
+    input: web::Json<UpdateUserInput>,
     ctx: UserContext,
     req_info: RequestInfo,
 ) -> Result<HttpResponse, AppError> {
