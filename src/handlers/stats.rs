@@ -1,4 +1,4 @@
-use actix_web::{web, HttpRequest, HttpResponse, Result};
+use actix_web::{HttpResponse, Result, web};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use uuid::Uuid;
@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::database::repositories::stats as stats_repo;
 use crate::error::AppError;
 use crate::handlers::shared::ApiResponse;
-use crate::services::user_context::extract_context;
+use crate::user_context::UserContext;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,16 +19,13 @@ pub struct StatsQuery {
 /// Get dashboard statistics
 pub async fn get_dashboard_stats(
     query: web::Query<StatsQuery>,
-    req: HttpRequest,
+    ctx: UserContext,
 ) -> Result<HttpResponse> {
-    let user_context = extract_context(&req).await?;
-
-    // Determine user filter based on permissions
-    let user_id = user_context.user_id();
+    let user_id = ctx.user_id();
 
     let target_user_id = query.user_id.or_else(|| Some(user_id)).unwrap();
 
-    user_context.requires_same_user(target_user_id)?;
+    ctx.requires_same_user(target_user_id)?;
 
     let stats =
         stats_repo::get_dashboard_stats_for_user(query.user_id, query.start_date, query.end_date)
@@ -44,15 +41,13 @@ pub async fn get_dashboard_stats(
 /// Get shift statistics
 pub async fn get_shift_stats(
     query: web::Query<StatsQuery>,
-    req: HttpRequest,
+    ctx: UserContext,
 ) -> Result<HttpResponse> {
-    let user_context = extract_context(&req).await?;
-
-    let user_id = user_context.user_id();
+    let user_id = ctx.user_id();
 
     let target_user_id = query.user_id.or_else(|| Some(user_id)).unwrap();
 
-    user_context.requires_same_user(target_user_id)?;
+    ctx.requires_same_user(target_user_id)?;
 
     let stats = stats_repo::get_shift_stats(query.user_id, query.start_date, query.end_date)
         .await
@@ -67,15 +62,13 @@ pub async fn get_shift_stats(
 /// Get time-off statistics
 pub async fn get_time_off_stats(
     query: web::Query<StatsQuery>,
-    req: HttpRequest,
+    ctx: UserContext,
 ) -> Result<HttpResponse> {
-    let user_context = extract_context(&req).await?;
-
-    let user_id = user_context.user_id();
+    let user_id = ctx.user_id();
 
     let target_user_id = query.user_id.or_else(|| Some(user_id)).unwrap();
 
-    user_context.requires_same_user(target_user_id)?;
+    ctx.requires_same_user(target_user_id)?;
 
     let stats = stats_repo::get_time_off_stats(query.user_id, query.start_date, query.end_date)
         .await
