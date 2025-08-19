@@ -1,6 +1,7 @@
+use actix_web::body::to_bytes;
 use actix_web::{
     Error, HttpResponse,
-    body::{BoxBody, MessageBody, to_bytes},
+    body::{BoxBody, MessageBody},
     dev::{Service, ServiceRequest, ServiceResponse, Transform},
     http::{
         Method, StatusCode,
