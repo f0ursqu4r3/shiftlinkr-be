@@ -137,7 +137,6 @@ async fn test_reset_password_used_token() {
 #[tokio::test]
 async fn test_multiple_reset_tokens_invalidated() {
     common::setup_test_env();
-    let ctx = common::TestContext::new().await.unwrap();
 
     // Create a user
     let register_request = CreateUserInput {

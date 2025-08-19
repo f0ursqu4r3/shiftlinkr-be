@@ -8,7 +8,6 @@ mod common;
 #[actix_web::test]
 async fn test_register_endpoint() {
     common::setup_test_env();
-    let ctx = common::TestContext::new().await.unwrap();
 
     let app = test::init_service(
         App::new()
@@ -47,7 +46,6 @@ async fn test_register_endpoint() {
 #[actix_web::test]
 async fn test_login_endpoint() {
     common::setup_test_env();
-    let _ctx = common::TestContext::new().await.unwrap();
 
     let app = test::init_service(
         App::new()
@@ -345,7 +343,6 @@ async fn test_reset_password_invalid_token() {
 #[actix_web::test]
 async fn test_complete_password_reset_flow() {
     common::setup_test_env();
-    let ctx = common::TestContext::new().await.unwrap();
 
     let app = test::init_service(
         App::new()

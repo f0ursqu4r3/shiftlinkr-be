@@ -112,8 +112,8 @@ pub async fn create_shift(
 
 // In shifts.rs handler
 pub async fn get_shifts(
-    query: web::Query<ShiftQuery>,
     ctx: UserContext,
+    query: web::Query<ShiftQuery>,
 ) -> Result<HttpResponse, AppError> {
     match &query.query_type {
         ShiftQueryType::User(user_id) => ctx.requires_same_user(*user_id)?,
