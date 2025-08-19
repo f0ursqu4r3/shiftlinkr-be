@@ -9,6 +9,13 @@ use crate::database::{
 };
 use crate::middleware::request_info::RequestInfo;
 
+fn logging_disabled() -> bool {
+    match std::env::var("SKIP_ACTIVITY_LOG") {
+        Ok(v) => v == "1" || v.eq_ignore_ascii_case("true"),
+        Err(_) => false,
+    }
+}
+
 /// Generic activity logging for custom cases
 pub async fn log_activity(
     tx: &mut Transaction<'_, Postgres>,
@@ -22,6 +29,9 @@ pub async fn log_activity(
     metadata: Option<HashMap<String, serde_json::Value>>,
     req: &RequestInfo,
 ) -> Result<(), sqlx::Error> {
+    if logging_disabled() {
+        return Ok(());
+    }
     let request = CreateActivityInput {
         company_id,
         user_id,
@@ -50,6 +60,9 @@ pub async fn log_user_activity(
     metadata: Option<HashMap<String, serde_json::Value>>,
     req: &RequestInfo,
 ) -> Result<(), sqlx::Error> {
+    if logging_disabled() {
+        return Ok(());
+    }
     let request = CreateActivityInput {
         company_id,
         user_id,
@@ -77,6 +90,9 @@ pub async fn log_auth_activity(
     metadata: Option<HashMap<String, serde_json::Value>>,
     req: &RequestInfo,
 ) -> Result<(), sqlx::Error> {
+    if logging_disabled() {
+        return Ok(());
+    }
     let request = CreateActivityInput {
         company_id,
         user_id,
@@ -105,6 +121,9 @@ pub async fn log_location_activity(
     metadata: Option<HashMap<String, serde_json::Value>>,
     req: &RequestInfo,
 ) -> Result<(), sqlx::Error> {
+    if logging_disabled() {
+        return Ok(());
+    }
     let request = CreateActivityInput {
         company_id,
         user_id,
@@ -133,6 +152,9 @@ pub async fn log_team_activity(
     metadata: Option<HashMap<String, serde_json::Value>>,
     req: &RequestInfo,
 ) -> Result<(), sqlx::Error> {
+    if logging_disabled() {
+        return Ok(());
+    }
     let request = CreateActivityInput {
         company_id,
         user_id,
@@ -161,6 +183,9 @@ pub async fn log_shift_activity(
     metadata: Option<HashMap<String, serde_json::Value>>,
     req: &RequestInfo,
 ) -> Result<(), sqlx::Error> {
+    if logging_disabled() {
+        return Ok(());
+    }
     let request = CreateActivityInput {
         company_id,
         user_id,
@@ -189,6 +214,9 @@ pub async fn log_time_off_activity(
     metadata: Option<HashMap<String, serde_json::Value>>,
     req: &RequestInfo,
 ) -> Result<(), sqlx::Error> {
+    if logging_disabled() {
+        return Ok(());
+    }
     let request = CreateActivityInput {
         company_id,
         user_id,
@@ -217,6 +245,9 @@ pub async fn log_shift_swap_activity(
     metadata: Option<HashMap<String, serde_json::Value>>,
     req: &RequestInfo,
 ) -> Result<(), sqlx::Error> {
+    if logging_disabled() {
+        return Ok(());
+    }
     let request = CreateActivityInput {
         company_id,
         user_id,

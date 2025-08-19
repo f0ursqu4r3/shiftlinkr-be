@@ -1,32 +1,10 @@
 use actix_web::{http::StatusCode, test, web, App};
-use be::database::repositories::activity::ActivityRepository;
-use be::database::repositories::time_off::TimeOffRepository;
 use be::handlers::time_off;
-use be::services::ActivityLogger;
-use pretty_assertions::assert_eq;
+use be::middleware::CacheLayer;
 use serde_json::json;
 use serial_test::serial;
 
 mod common;
-
-// Helper function to create test app state and dependencies
-async fn setup_test_app() -> (
-    web::Data<TimeOffRepository>,
-    web::Data<be::Config>,
-    web::Data<ActivityLogger>,
-    common::TestContext,
-) {
-    common::setup_test_env();
-    let ctx = common::TestContext::new().await.unwrap();
-
-    let time_off_repo_data = web::Data::new(TimeOffRepository::new(ctx.pool.clone()));
-    let config_data = web::Data::new(ctx.config.clone());
-    let activity_logger_data = web::Data::new(ActivityLogger::new(ActivityRepository::new(
-        ctx.pool.clone(),
-    )));
-
-    (time_off_repo_data, config_data, activity_logger_data, ctx)
-}
 
 // Macro to generate unauthorized access tests
 macro_rules! test_unauthorized {
@@ -34,14 +12,12 @@ macro_rules! test_unauthorized {
         #[actix_web::test]
         #[serial]
         async fn $test_name() {
-            let (time_off_repo_data, config_data, activity_logger_data, _ctx) =
-                setup_test_app().await;
+            common::setup_test_env();
+            let _ctx = common::TestContext::new().await.unwrap();
 
             let app = test::init_service(
                 App::new()
-                    .app_data(time_off_repo_data)
-                    .app_data(config_data)
-                    .app_data(activity_logger_data)
+                    .app_data(web::Data::new(CacheLayer::new(1000, 60)))
                     .service(
                         web::scope("/api/v1").service(
                             web::scope("/time-off")
@@ -72,14 +48,12 @@ macro_rules! test_unauthorized {
         #[actix_web::test]
         #[serial]
         async fn $test_name() {
-            let (time_off_repo_data, config_data, activity_logger_data, _ctx) =
-                setup_test_app().await;
+            common::setup_test_env();
+            let _ctx = common::TestContext::new().await.unwrap();
 
             let app = test::init_service(
                 App::new()
-                    .app_data(time_off_repo_data)
-                    .app_data(config_data)
-                    .app_data(activity_logger_data)
+                    .app_data(web::Data::new(CacheLayer::new(1000, 60)))
                     .service(
                         web::scope("/api/v1").service(
                             web::scope("/time-off")
@@ -117,11 +91,12 @@ test_unauthorized!(
     post,
     "/api/v1/time-off",
     json!({
-        "user_id": "test_user",
-        "start_date": "2024-01-01",
-        "end_date": "2024-01-05",
+        "userId": "00000000-0000-0000-0000-000000000000",
+        "companyId": "00000000-0000-0000-0000-000000000000",
+        "startDate": "2024-01-01T00:00:00Z",
+        "endDate": "2024-01-05T00:00:00Z",
         "reason": "Test vacation",
-        "request_type": "Vacation"
+        "requestType": "vacation"
     })
 );
 
@@ -133,31 +108,32 @@ test_unauthorized!(
 test_unauthorized!(
     test_get_time_off_request_unauthorized,
     get,
-    "/api/v1/time-off/123"
+    "/api/v1/time-off/00000000-0000-0000-0000-000000000000"
 );
 test_unauthorized!(
     test_update_time_off_request_unauthorized,
     put,
-    "/api/v1/time-off/123",
+    "/api/v1/time-off/00000000-0000-0000-0000-000000000000",
     json!({
-        "user_id": "test_user",
-        "start_date": "2024-01-01",
-        "end_date": "2024-01-05",
+        "userId": "00000000-0000-0000-0000-000000000000",
+        "companyId": "00000000-0000-0000-0000-000000000000",
+        "startDate": "2024-01-02T00:00:00Z",
+        "endDate": "2024-01-06T00:00:00Z",
         "reason": "Updated vacation",
-        "request_type": "Vacation"
+        "requestType": "vacation"
     })
 );
 test_unauthorized!(
     test_delete_time_off_request_unauthorized,
     delete,
-    "/api/v1/time-off/123"
+    "/api/v1/time-off/00000000-0000-0000-0000-000000000000"
 );
 
 // Time off request approval tests
 test_unauthorized!(
     test_approve_time_off_request_unauthorized,
     post,
-    "/api/v1/time-off/123/approve",
+    "/api/v1/time-off/00000000-0000-0000-0000-000000000000/approve",
     json!({
         "notes": "Approved for vacation"
     })
@@ -165,7 +141,7 @@ test_unauthorized!(
 test_unauthorized!(
     test_deny_time_off_request_unauthorized,
     post,
-    "/api/v1/time-off/123/deny",
+    "/api/v1/time-off/00000000-0000-0000-0000-000000000000/deny",
     json!({
         "notes": "Insufficient coverage during requested period"
     })

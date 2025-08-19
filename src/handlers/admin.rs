@@ -289,8 +289,8 @@ pub async fn delete_location(
 
 // Team handlers
 pub async fn create_team(
-    input: web::Json<CreateUpdateTeamInput>,
     ctx: UserContext,
+    input: web::Json<CreateUpdateTeamInput>,
     req_info: RequestInfo,
 ) -> Result<HttpResponse> {
     // Get the location to determine which company it belongs to
@@ -342,7 +342,7 @@ pub async fn create_team(
     })
     .await?;
 
-    Ok(ApiResponse::success(team))
+    Ok(ApiResponse::created(team))
 }
 
 pub async fn get_teams(query: web::Query<TeamQuery>, ctx: UserContext) -> Result<HttpResponse> {
@@ -406,8 +406,8 @@ pub async fn get_team(path: web::Path<Uuid>, ctx: UserContext) -> Result<HttpRes
 
 pub async fn update_team(
     path: web::Path<Uuid>,
-    input: web::Json<CreateUpdateTeamInput>,
     ctx: UserContext,
+    input: web::Json<CreateUpdateTeamInput>,
     req_info: RequestInfo,
 ) -> Result<HttpResponse> {
     let user_id = ctx.user_id();

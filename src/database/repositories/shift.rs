@@ -57,6 +57,7 @@ pub async fn create_shift(
                 created_at,
                 updated_at
         "#))
+    .bind(input.company_id)
     .bind(input.title)
     .bind(input.description)
     .bind(input.location_id)
@@ -343,7 +344,7 @@ pub async fn update_shift(
                 shifts
             SET
                 title = ?,
-                company_id = ?
+                company_id = ?,
                 description = ?,
                 location_id = ?,
                 team_id = ?,
@@ -373,6 +374,7 @@ pub async fn update_shift(
                 updated_at
         "#))
     .bind(input.title)
+    .bind(input.company_id)
     .bind(input.description)
     .bind(input.location_id)
     .bind(input.team_id)

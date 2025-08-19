@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::database::repositories::stats as stats_repo;
 use crate::error::AppError;
 use crate::handlers::shared::ApiResponse;
-use crate::user_context::UserContext;
+use crate::services::user_context::UserContext;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]

@@ -1,27 +1,9 @@
-use actix_web::{http::StatusCode, test, web, App};
-use be::database::repositories::company::CompanyRepository;
+use actix_web::{App, http::StatusCode, test, web};
 use be::handlers::stats;
-use be::{ActivityLogger, ActivityRepository, AppState};
-use pretty_assertions::assert_eq;
+use be::middleware::CacheLayer;
 use serial_test::serial;
 
 mod common;
-
-// Helper function to create test app state and dependencies
-async fn setup_test_app() -> (web::Data<AppState>, web::Data<be::Config>) {
-    common::setup_test_env();
-    let ctx = common::TestContext::new().await.unwrap();
-
-    let app_state = web::Data::new(AppState {
-        auth_service: ctx.auth_service,
-        company_repository: CompanyRepository::new(ctx.pool.clone()),
-        activity_repository: ActivityRepository::new(ctx.pool.clone()),
-        activity_logger: ActivityLogger::new(ActivityRepository::new(ctx.pool.clone())),
-    });
-    let config_data = web::Data::new(ctx.config);
-
-    (app_state, config_data)
-}
 
 // Macro to generate unauthorized access tests
 macro_rules! test_unauthorized {
@@ -29,12 +11,12 @@ macro_rules! test_unauthorized {
         #[actix_web::test]
         #[serial]
         async fn $test_name() {
-            let (app_state, config_data) = setup_test_app().await;
+            common::setup_test_env();
+            let _ctx = common::TestContext::new().await.unwrap();
 
             let app = test::init_service(
                 App::new()
-                    .app_data(app_state)
-                    .app_data(config_data)
+                    .app_data(web::Data::new(CacheLayer::new(500, 60)))
                     .service(
                         web::scope("/api/v1").service(
                             web::scope("/stats")

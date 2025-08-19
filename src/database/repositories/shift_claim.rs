@@ -32,8 +32,8 @@ pub async fn create_claim(
             shift_id,
             user_id,
             status,
-            approved_by,
-            approval_notes,
+            actioned_by,
+            action_notes,
             created_at,
             updated_at
     "#))
@@ -56,8 +56,8 @@ pub async fn get_claim_by_id(id: Uuid) -> Result<Option<ShiftClaim>, sqlx::Error
             shift_id,
             user_id,
             status,
-            approved_by,
-            approval_notes,
+            actioned_by,
+            action_notes,
             created_at,
             updated_at
         FROM
@@ -80,8 +80,8 @@ pub async fn get_claims_by_shift(shift_id: Uuid) -> Result<Vec<ShiftClaim>, sqlx
             shift_id,
             user_id,
             status,
-            approved_by,
-            approval_notes,
+            actioned_by,
+            action_notes,
             created_at,
             updated_at
         FROM
@@ -106,8 +106,8 @@ pub async fn get_claims_by_user(user_id: Uuid) -> Result<Vec<ShiftClaim>, sqlx::
             shift_id,
             user_id,
             status,
-            approved_by,
-            approval_notes,
+            actioned_by,
+            action_notes,
             created_at,
             updated_at
         FROM
@@ -132,8 +132,8 @@ pub async fn get_all_claims_by_company(company_id: Uuid) -> Result<Vec<ShiftClai
             shift_id,
             user_id,
             status,
-            approved_by,
-            approval_notes,
+            actioned_by,
+            action_notes,
             created_at,
             updated_at
         FROM
@@ -193,8 +193,8 @@ pub async fn approve_claim(
             shift_claims
         SET
             status = 'approved',
-            approved_by = ?,
-            approval_notes = ?,
+            actioned_by = ?,
+            action_notes = ?,
             updated_at = ?
         WHERE
             id = ?
@@ -233,8 +233,8 @@ pub async fn reject_claim(
             shift_claims
         SET
             status = 'rejected',
-            approved_by = ?,
-            approval_notes = ?,
+            actioned_by = ?,
+            action_notes = ?,
             updated_at = ?
         WHERE
             id = ?
@@ -282,8 +282,8 @@ pub async fn cancel_claim(
             shift_id,
             user_id,
             status,
-            approved_by,
-            approval_notes,
+            actioned_by,
+            action_notes,
             created_at,
             updated_at
     "#))
@@ -409,8 +409,8 @@ pub async fn get_approved_claim_for_shift(
             shift_id,
             user_id,
             status,
-            approved_by,
-            approval_notes,
+            actioned_by,
+            action_notes,
             created_at,
             updated_at
         FROM

@@ -1,5 +1,6 @@
 use be::database::models::User;
 use be::database::repositories::user as user_repo;
+use be::database::transaction::DatabaseTransaction;
 use chrono::Utc;
 use uuid::Uuid;
 
@@ -19,7 +20,11 @@ async fn test_create_user() {
         updated_at: Utc::now(),
     };
 
-    let result = user_repo::create_user(&user).await;
+    let result = DatabaseTransaction::run(|tx| {
+        let user = user.clone();
+        Box::pin(async move { Ok(user_repo::create_user(tx, &user).await?) })
+    })
+    .await;
     if let Err(ref e) = result {
         eprintln!("Error creating user: {}", e);
     }
@@ -40,7 +45,12 @@ async fn test_find_user_by_email() {
         updated_at: Utc::now(),
     };
 
-    user_repo::create_user(&user).await.unwrap();
+    DatabaseTransaction::run(|tx| {
+        let user = user.clone();
+        Box::pin(async move { Ok(user_repo::create_user(tx, &user).await?) })
+    })
+    .await
+    .unwrap();
 
     let found_user = user_repo::find_by_email("findme@example.com")
         .await
@@ -66,7 +76,12 @@ async fn test_find_user_by_id() {
         updated_at: Utc::now(),
     };
 
-    user_repo::create_user(&user).await.unwrap();
+    DatabaseTransaction::run(|tx| {
+        let user = user.clone();
+        Box::pin(async move { Ok(user_repo::create_user(tx, &user).await?) })
+    })
+    .await
+    .unwrap();
 
     let found_user = user_repo::find_by_id(user.id).await.unwrap();
     assert!(found_user.is_some());
@@ -97,7 +112,12 @@ async fn test_email_exists() {
         updated_at: Utc::now(),
     };
 
-    user_repo::create_user(&user).await.unwrap();
+    DatabaseTransaction::run(|tx| {
+        let u = user.clone();
+        Box::pin(async move { Ok(user_repo::create_user(tx, &u).await?) })
+    })
+    .await
+    .unwrap();
 
     // Now should exist
     let exists = user_repo::email_exists("exists@example.com").await.unwrap();
@@ -131,9 +151,19 @@ async fn test_multiple_users() {
     );
 
     // Create all users
-    user_repo::create_user(&admin_user).await.unwrap();
-    user_repo::create_user(&manager_user).await.unwrap();
-    user_repo::create_user(&employee_user).await.unwrap();
+    DatabaseTransaction::run(|tx| {
+        let a = admin_user.clone();
+        let m = manager_user.clone();
+        let e = employee_user.clone();
+        Box::pin(async move {
+            user_repo::create_user(tx, &a).await?;
+            user_repo::create_user(tx, &m).await?;
+            user_repo::create_user(tx, &e).await?;
+            Ok(())
+        })
+    })
+    .await
+    .unwrap();
 
     // Verify users can be found
     let found_admin = user_repo::find_by_email("admin@example.com")
@@ -167,7 +197,12 @@ async fn test_user_creation_basic() {
         "Basic User".to_string(),
     );
 
-    user_repo::create_user(&user).await.unwrap();
+    DatabaseTransaction::run(|tx| {
+        let u = user.clone();
+        Box::pin(async move { Ok(user_repo::create_user(tx, &u).await?) })
+    })
+    .await
+    .unwrap();
 
     let found_user = user_repo::find_by_email("basic@example.com")
         .await
@@ -194,10 +229,19 @@ async fn test_duplicate_email_constraint() {
     );
 
     // First user should succeed
-    user_repo::create_user(&user1).await.unwrap();
+    DatabaseTransaction::run(|tx| {
+        let u1 = user1.clone();
+        Box::pin(async move { Ok(user_repo::create_user(tx, &u1).await?) })
+    })
+    .await
+    .unwrap();
 
     // Second user with same email should fail
-    let result = user_repo::create_user(&user2).await;
+    let result = DatabaseTransaction::run(|tx| {
+        let u2 = user2.clone();
+        Box::pin(async move { Ok(user_repo::create_user(tx, &u2).await?) })
+    })
+    .await;
     assert!(result.is_err());
 }
 

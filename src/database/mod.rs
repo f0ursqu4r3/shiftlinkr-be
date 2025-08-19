@@ -1,6 +1,7 @@
 use anyhow::Result;
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::{PgPool, Postgres, Transaction, postgres::PgPoolOptions};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::OnceCell;
 
 pub mod models;
@@ -16,8 +17,13 @@ pub type DbExecutor<'a> = &'a mut DbTransaction<'a>;
 static DB_POOL: OnceCell<Arc<PgPool>> = OnceCell::const_new();
 
 pub async fn init_database(database_url: &str, run_migrations: bool) -> Result<PgPool> {
-    // Create connection pool
-    let new_pool = PgPool::connect(database_url).await?;
+    // Create connection pool with sensible defaults for tests and dev
+    let new_pool = PgPoolOptions::new()
+        .max_connections(20)
+        .min_connections(1)
+        .acquire_timeout(Duration::from_secs(30))
+        .connect(database_url)
+        .await?;
 
     // Run migrations
     if run_migrations {

@@ -1,34 +1,11 @@
 use actix_web::{http::StatusCode, test, web, App};
-use be::database::repositories::company::CompanyRepository;
-use be::database::repositories::location::LocationRepository;
 use be::handlers::admin;
-use be::{ActivityLogger, ActivityRepository, AppState};
+use be::middleware::CacheLayer;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use serial_test::serial;
 
 mod common;
-
-// Helper function to create test app state and dependencies
-async fn setup_test_app() -> (
-    web::Data<AppState>,
-    web::Data<LocationRepository>,
-    web::Data<be::Config>,
-) {
-    common::setup_test_env();
-    let ctx = common::TestContext::new().await.unwrap();
-
-    let app_state = web::Data::new(AppState {
-        auth_service: ctx.auth_service,
-        company_repository: CompanyRepository::new(ctx.pool.clone()),
-        activity_repository: ActivityRepository::new(ctx.pool.clone()),
-        activity_logger: ActivityLogger::new(ActivityRepository::new(ctx.pool.clone())),
-    });
-    let location_repo_data = web::Data::new(LocationRepository::new(ctx.pool.clone()));
-    let config_data = web::Data::new(ctx.config);
-
-    (app_state, location_repo_data, config_data)
-}
 
 // Macro to generate unauthorized access tests
 macro_rules! test_unauthorized {
@@ -36,13 +13,12 @@ macro_rules! test_unauthorized {
         #[actix_web::test]
         #[serial]
         async fn $test_name() {
-            let (app_state, location_repo_data, config_data) = setup_test_app().await;
-
+            common::setup_test_env();
+            let _ctx = common::TestContext::new().await.unwrap();
+            let cache = CacheLayer::new(1000, 60);
             let app = test::init_service(
                 App::new()
-                    .app_data(app_state)
-                    .app_data(location_repo_data)
-                    .app_data(config_data)
+                    .app_data(web::Data::new(cache))
                     .service(
                         web::scope("/api/v1").service(
                             web::scope("/admin")
@@ -57,12 +33,12 @@ macro_rules! test_unauthorized {
                                 .route("/teams/{id}", web::put().to(admin::update_team))
                                 .route("/teams/{id}", web::delete().to(admin::delete_team))
                                 .route(
-                                    "/teams/{id}/members",
-                                    web::post().to(admin::add_team_member),
+                                    "/teams/{team_id}/members",
+                                    web::get().to(admin::get_team_members),
                                 )
                                 .route(
-                                    "/teams/{id}/members",
-                                    web::get().to(admin::get_team_members),
+                                    "/teams/{team_id}/members/{user_id}",
+                                    web::post().to(admin::add_team_member),
                                 )
                                 .route(
                                     "/teams/{team_id}/members/{user_id}",
@@ -82,13 +58,12 @@ macro_rules! test_unauthorized {
         #[actix_web::test]
         #[serial]
         async fn $test_name() {
-            let (app_state, location_repo_data, config_data) = setup_test_app().await;
-
+            common::setup_test_env();
+            let _ctx = common::TestContext::new().await.unwrap();
+            let cache = CacheLayer::new(1000, 60);
             let app = test::init_service(
                 App::new()
-                    .app_data(app_state)
-                    .app_data(location_repo_data)
-                    .app_data(config_data)
+                    .app_data(web::Data::new(cache))
                     .service(
                         web::scope("/api/v1").service(
                             web::scope("/admin")
@@ -103,12 +78,12 @@ macro_rules! test_unauthorized {
                                 .route("/teams/{id}", web::put().to(admin::update_team))
                                 .route("/teams/{id}", web::delete().to(admin::delete_team))
                                 .route(
-                                    "/teams/{id}/members",
-                                    web::post().to(admin::add_team_member),
+                                    "/teams/{team_id}/members",
+                                    web::get().to(admin::get_team_members),
                                 )
                                 .route(
-                                    "/teams/{id}/members",
-                                    web::get().to(admin::get_team_members),
+                                    "/teams/{team_id}/members/{user_id}",
+                                    web::post().to(admin::add_team_member),
                                 )
                                 .route(
                                     "/teams/{team_id}/members/{user_id}",
@@ -136,10 +111,9 @@ test_unauthorized!(
     "/api/v1/admin/locations",
     json!({
         "name": "Test Location",
-        "address": "123 Test St",
-        "city": "Test City",
-        "state": "TS",
-        "zip": "12345"
+    "address": "123 Test St",
+    "phone": "555-1234",
+    "email": "loc@example.com"
     })
 );
 
@@ -151,24 +125,23 @@ test_unauthorized!(
 test_unauthorized!(
     test_get_location_unauthorized,
     get,
-    "/api/v1/admin/locations/1"
+    "/api/v1/admin/locations/00000000-0000-0000-0000-000000000001"
 );
 test_unauthorized!(
     test_update_location_unauthorized,
     put,
-    "/api/v1/admin/locations/1",
+    "/api/v1/admin/locations/00000000-0000-0000-0000-000000000001",
     json!({
         "name": "Updated Location",
         "address": "456 Updated St",
-        "city": "Updated City",
-        "state": "US",
-        "zip": "67890"
+        "phone": "555-6789",
+        "email": "updated@loc.com"
     })
 );
 test_unauthorized!(
     test_delete_location_unauthorized,
     delete,
-    "/api/v1/admin/locations/1"
+    "/api/v1/admin/locations/00000000-0000-0000-0000-000000000001"
 );
 
 // Team tests
@@ -178,47 +151,48 @@ test_unauthorized!(
     "/api/v1/admin/teams",
     json!({
         "name": "Test Team",
-        "location_id": 1,
+    "location_id": "00000000-0000-0000-0000-000000000001",
         "description": "Test team description"
     })
 );
 
 test_unauthorized!(test_get_teams_unauthorized, get, "/api/v1/admin/teams");
-test_unauthorized!(test_get_team_unauthorized, get, "/api/v1/admin/teams/1");
+test_unauthorized!(
+    test_get_team_unauthorized,
+    get,
+    "/api/v1/admin/teams/00000000-0000-0000-0000-000000000001"
+);
 test_unauthorized!(
     test_update_team_unauthorized,
     put,
-    "/api/v1/admin/teams/1",
+    "/api/v1/admin/teams/00000000-0000-0000-0000-000000000001",
     json!({
         "name": "Updated Team",
-        "location_id": 1,
+        "location_id": "00000000-0000-0000-0000-000000000001",
         "description": "Updated team description"
     })
 );
 test_unauthorized!(
     test_delete_team_unauthorized,
     delete,
-    "/api/v1/admin/teams/1"
+    "/api/v1/admin/teams/00000000-0000-0000-0000-000000000001"
 );
 
 // Team member tests
 test_unauthorized!(
     test_add_team_member_unauthorized,
     post,
-    "/api/v1/admin/teams/1/members",
-    json!({
-        "user_id": 1,
-        "role": "member"
-    })
+    "/api/v1/admin/teams/00000000-0000-0000-0000-000000000001/members/00000000-0000-0000-0000-000000000002",
+    json!({})
 );
 
 test_unauthorized!(
     test_get_team_members_unauthorized,
     get,
-    "/api/v1/admin/teams/1/members"
+    "/api/v1/admin/teams/00000000-0000-0000-0000-000000000001/members"
 );
 test_unauthorized!(
     test_remove_team_member_unauthorized,
     delete,
-    "/api/v1/admin/teams/1/members/1"
+    "/api/v1/admin/teams/00000000-0000-0000-0000-000000000001/members/00000000-0000-0000-0000-000000000002"
 );

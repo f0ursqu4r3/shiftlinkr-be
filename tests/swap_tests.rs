@@ -1,41 +1,22 @@
 use actix_web::{http::StatusCode, test, web, App};
-use be::database::repositories::company::CompanyRepository;
 use be::handlers::swaps;
-use be::{ActivityLogger, ActivityRepository, AppState};
-use pretty_assertions::assert_eq;
+use be::middleware::CacheLayer;
 use serde_json::json;
 use serial_test::serial;
 
 mod common;
 
-// Helper function to create test app state and dependencies
-async fn setup_test_app() -> (web::Data<AppState>, web::Data<be::Config>) {
-    common::setup_test_env();
-    let ctx = common::TestContext::new().await.unwrap();
-
-    let app_state = web::Data::new(AppState {
-        auth_service: ctx.auth_service,
-        company_repository: CompanyRepository::new(ctx.pool.clone()),
-        activity_repository: ActivityRepository::new(ctx.pool.clone()),
-        activity_logger: ActivityLogger::new(ActivityRepository::new(ctx.pool.clone())),
-    });
-    let config_data = web::Data::new(ctx.config);
-
-    (app_state, config_data)
-}
-
-// Macro to generate unauthorized access tests
+// Macro to generate unauthorized tests
 macro_rules! test_unauthorized {
-    ($test_name:ident, $method:ident, $uri:expr) => {
+    ($name:ident, $method:ident, $uri:expr) => {
         #[actix_web::test]
         #[serial]
-        async fn $test_name() {
-            let (app_state, config_data) = setup_test_app().await;
-
+        async fn $name() {
+            common::setup_test_env();
+            let _ctx = common::TestContext::new().await.unwrap();
             let app = test::init_service(
                 App::new()
-                    .app_data(app_state)
-                    .app_data(config_data)
+                    .app_data(web::Data::new(CacheLayer::new(1000, 60)))
                     .service(
                         web::scope("/api/v1").service(
                             web::scope("/swaps")
@@ -55,16 +36,15 @@ macro_rules! test_unauthorized {
             assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
         }
     };
-    ($test_name:ident, $method:ident, $uri:expr, $json:expr) => {
+    ($name:ident, $method:ident, $uri:expr, $payload:expr) => {
         #[actix_web::test]
         #[serial]
-        async fn $test_name() {
-            let (app_state, config_data) = setup_test_app().await;
-
+        async fn $name() {
+            common::setup_test_env();
+            let _ctx = common::TestContext::new().await.unwrap();
             let app = test::init_service(
                 App::new()
-                    .app_data(app_state)
-                    .app_data(config_data)
+                    .app_data(web::Data::new(CacheLayer::new(1000, 60)))
                     .service(
                         web::scope("/api/v1").service(
                             web::scope("/swaps")
@@ -81,7 +61,7 @@ macro_rules! test_unauthorized {
 
             let req = test::TestRequest::$method()
                 .uri($uri)
-                .set_json(&$json)
+                .set_json(&$payload)
                 .to_request();
             let resp = test::call_service(&app, req).await;
             assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
@@ -89,43 +69,45 @@ macro_rules! test_unauthorized {
     };
 }
 
-// Swap request tests
+// Unauthorized tests for swap endpoints
 test_unauthorized!(
-    test_create_swap_unauthorized,
+    test_create_swap_request_unauthorized,
     post,
     "/api/v1/swaps",
     json!({
-        "original_shift_id": 1,
-        "requesting_user_id": "user123",
-        "swap_type": "open"
+        "originalShiftId": "00000000-0000-0000-0000-000000000000",
+        "requestingUserId": "00000000-0000-0000-0000-000000000001",
+        "targetUserId": "00000000-0000-0000-0000-000000000002",
+        "targetShiftId": null,
+        "notes": "Requesting swap",
+        "swapType": "targeted"
     })
 );
-
-test_unauthorized!(test_get_swaps_unauthorized, get, "/api/v1/swaps");
-test_unauthorized!(test_get_swap_by_id_unauthorized, get, "/api/v1/swaps/123");
+test_unauthorized!(test_get_swap_requests_unauthorized, get, "/api/v1/swaps");
+test_unauthorized!(
+    test_get_swap_request_unauthorized,
+    get,
+    "/api/v1/swaps/00000000-0000-0000-0000-000000000000"
+);
 test_unauthorized!(
     test_respond_to_swap_unauthorized,
     post,
-    "/api/v1/swaps/123/respond",
+    "/api/v1/swaps/00000000-0000-0000-0000-000000000000/respond",
     json!({
-        "response": "accept",
-        "responding_user_id": "user456"
+        "targetShiftId": null,
+        "decision": "accepted",
+        "notes": "Sure"
     })
 );
 test_unauthorized!(
     test_approve_swap_unauthorized,
     post,
-    "/api/v1/swaps/123/approve",
-    json!({
-        "approving_user_id": "manager123"
-    })
+    "/api/v1/swaps/00000000-0000-0000-0000-000000000000/approve",
+    json!({})
 );
 test_unauthorized!(
     test_deny_swap_unauthorized,
     post,
-    "/api/v1/swaps/123/deny",
-    json!({
-        "denying_user_id": "manager123",
-        "reason": "Insufficient coverage"
-    })
+    "/api/v1/swaps/00000000-0000-0000-0000-000000000000/deny",
+    json!({})
 );
