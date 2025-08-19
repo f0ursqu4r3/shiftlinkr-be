@@ -38,8 +38,8 @@ pub struct ApprovalRequest {
 
 /// Create a new shift swap request
 pub async fn create_swap_request(
-    input: web::Json<ShiftSwapInput>,
     ctx: UserContext,
+    input: web::Json<ShiftSwapInput>,
     req_info: RequestInfo,
     cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
@@ -142,8 +142,8 @@ pub async fn get_swap_request(path: web::Path<Uuid>, ctx: UserContext) -> Result
 /// Respond to a shift swap request (for targeted swaps)
 pub async fn respond_to_swap(
     path: web::Path<Uuid>,
-    response: web::Json<SwapResponseRequest>,
     ctx: UserContext,
+    response: web::Json<SwapResponseRequest>,
     req_info: RequestInfo,
     cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
@@ -223,8 +223,8 @@ pub async fn respond_to_swap(
 /// Approve a shift swap request (managers/admins only)
 pub async fn approve_swap_request(
     path: web::Path<Uuid>,
-    approval: web::Json<ApprovalRequest>,
     ctx: UserContext,
+    approval: web::Json<ApprovalRequest>,
     req_info: RequestInfo,
     cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
@@ -293,8 +293,8 @@ pub async fn approve_swap_request(
 /// Deny a shift swap request (managers/admins only)
 pub async fn deny_swap_request(
     path: web::Path<Uuid>,
-    denial: web::Json<ApprovalRequest>,
     ctx: UserContext,
+    denial: web::Json<ApprovalRequest>,
     req_info: RequestInfo,
     cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {

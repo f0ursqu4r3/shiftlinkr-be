@@ -31,8 +31,8 @@ pub struct ApprovalRequest {
 
 /// Create a new time-off request
 pub async fn create_time_off_request(
-    input: web::Json<TimeOffRequestInput>,
     ctx: UserContext,
+    input: web::Json<TimeOffRequestInput>,
     req_info: RequestInfo,
     cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
@@ -123,8 +123,8 @@ pub async fn get_time_off_request(path: web::Path<Uuid>, ctx: UserContext) -> Re
 /// Update a time-off request
 pub async fn update_time_off_request(
     path: web::Path<Uuid>,
-    input: web::Json<TimeOffRequestInput>,
     ctx: UserContext,
+    input: web::Json<TimeOffRequestInput>,
     req_info: RequestInfo,
     cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
@@ -263,8 +263,8 @@ pub async fn delete_time_off_request(
 /// Approve a time-off request (managers/admins only)
 pub async fn approve_time_off_request(
     path: web::Path<Uuid>,
-    approval: web::Json<ApprovalRequest>,
     ctx: UserContext,
+    approval: web::Json<ApprovalRequest>,
     req_info: RequestInfo,
     cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
@@ -376,8 +376,8 @@ pub async fn approve_time_off_request(
 /// Deny a time-off request (managers/admins only)
 pub async fn deny_time_off_request(
     path: web::Path<Uuid>,
-    denial: web::Json<ApprovalRequest>,
     ctx: UserContext,
+    denial: web::Json<ApprovalRequest>,
     req_info: RequestInfo,
     cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {

@@ -22,8 +22,8 @@ pub struct AssignmentResponseRequest {
 
 // User Shift Schedules
 pub async fn create_user_schedule(
-    input: web::Json<UserShiftScheduleInput>,
     ctx: UserContext,
+    input: web::Json<UserShiftScheduleInput>,
 ) -> Result<HttpResponse> {
     let user_id = input.user_id;
 
@@ -61,8 +61,8 @@ pub async fn get_user_schedule(path: web::Path<Uuid>, ctx: UserContext) -> Resul
 
 pub async fn update_user_schedule(
     path: web::Path<Uuid>,
-    input: web::Json<UserShiftScheduleInput>,
     ctx: UserContext,
+    input: web::Json<UserShiftScheduleInput>,
 ) -> Result<HttpResponse> {
     let user_id = path.into_inner();
 
@@ -105,8 +105,8 @@ pub async fn delete_user_schedule(path: web::Path<Uuid>, ctx: UserContext) -> Re
 
 // Shift Assignments
 pub async fn create_shift_assignment(
-    input: web::Json<ShiftAssignmentInput>,
     ctx: UserContext,
+    input: web::Json<ShiftAssignmentInput>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
 
@@ -194,8 +194,8 @@ pub async fn get_pending_assignments_for_user(
 
 pub async fn respond_to_assignment(
     path: web::Path<Uuid>,
-    input: web::Json<AssignmentResponseRequest>,
     ctx: UserContext,
+    input: web::Json<AssignmentResponseRequest>,
 ) -> Result<HttpResponse> {
     let assignment_id = path.into_inner();
 

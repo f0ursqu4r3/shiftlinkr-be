@@ -119,8 +119,8 @@ pub async fn reset_password(
 }
 
 pub async fn create_invite(
-    input: web::Json<CreateInviteInput>,
     ctx: UserContext,
+    input: web::Json<CreateInviteInput>,
     req_info: RequestInfo,
     cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {

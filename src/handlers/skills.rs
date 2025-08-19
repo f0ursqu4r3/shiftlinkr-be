@@ -28,8 +28,8 @@ pub struct SkillSearchQuery {
 
 // Skills management
 pub async fn create_skill(
-    input: web::Json<SkillInput>,
     ctx: UserContext,
+    input: web::Json<SkillInput>,
     req_info: RequestInfo,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
@@ -91,8 +91,8 @@ pub async fn get_skill(path: web::Path<Uuid>, ctx: UserContext) -> Result<HttpRe
 
 pub async fn update_skill(
     path: web::Path<Uuid>,
-    input: web::Json<SkillInput>,
     ctx: UserContext,
+    input: web::Json<SkillInput>,
     req_info: RequestInfo,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
@@ -184,8 +184,8 @@ pub async fn delete_skill(
 
 // User Skills management
 pub async fn add_user_skill(
-    input: web::Json<UserSkillInput>,
     ctx: UserContext,
+    input: web::Json<UserSkillInput>,
     req_info: RequestInfo,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
@@ -260,8 +260,8 @@ pub async fn get_user_skills(path: web::Path<Uuid>, ctx: UserContext) -> Result<
 
 pub async fn update_user_skill(
     path: web::Path<(Uuid, Uuid)>,
-    input: web::Json<UpdateUserSkillRequest>,
     ctx: UserContext,
+    input: web::Json<UpdateUserSkillRequest>,
     req_info: RequestInfo,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
@@ -386,8 +386,8 @@ pub async fn remove_user_skill(
 
 // Shift Required Skills management
 pub async fn add_shift_required_skill(
-    input: web::Json<ShiftRequiredSkillInput>,
     ctx: UserContext,
+    input: web::Json<ShiftRequiredSkillInput>,
     req_info: RequestInfo,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;

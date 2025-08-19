@@ -43,8 +43,8 @@ pub struct UserResponse {
 
 // Location handlers
 pub async fn create_location(
-    input: web::Json<CreateUpdateLocationInput>,
     ctx: UserContext,
+    input: web::Json<CreateUpdateLocationInput>,
     req_info: RequestInfo,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
@@ -165,8 +165,8 @@ pub async fn get_location(path: web::Path<Uuid>, ctx: UserContext) -> Result<Htt
 
 pub async fn update_location(
     path: web::Path<Uuid>,
-    input: web::Json<CreateUpdateLocationInput>,
     ctx: UserContext,
+    input: web::Json<CreateUpdateLocationInput>,
     req_info: RequestInfo,
 ) -> Result<HttpResponse> {
     let company_id = ctx.strict_company_id()?;
@@ -665,8 +665,8 @@ pub async fn get_users(ctx: UserContext) -> Result<HttpResponse> {
 
 pub async fn update_user(
     path: web::Path<Uuid>,
-    input: web::Json<UpdateUserInput>,
     ctx: UserContext,
+    input: web::Json<UpdateUserInput>,
     req_info: RequestInfo,
 ) -> Result<HttpResponse, AppError> {
     let user_id_to_update = path.into_inner();

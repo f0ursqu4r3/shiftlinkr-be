@@ -59,10 +59,10 @@ pub struct AssignmentResponseInput {
 
 // Shift handlers
 pub async fn create_shift(
-    input: web::Json<CreateUpdateShiftInput>,
-    cache: web::Data<crate::middleware::CacheLayer>,
     ctx: UserContext,
+    input: web::Json<CreateUpdateShiftInput>,
     req_info: RequestInfo,
+    cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
     ctx.requires_same_company(input.company_id)?;
@@ -146,8 +146,8 @@ pub async fn get_shift(path: web::Path<Uuid>, ctx: UserContext) -> Result<HttpRe
 
 pub async fn update_shift(
     path: web::Path<Uuid>,
-    input: web::Json<CreateUpdateShiftInput>,
     ctx: UserContext,
+    input: web::Json<CreateUpdateShiftInput>,
     req_info: RequestInfo,
     cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
@@ -216,8 +216,8 @@ pub async fn update_shift(
 
 pub async fn assign_shift(
     path: web::Path<Uuid>,
-    input: web::Json<AssignShiftInput>,
     ctx: UserContext,
+    input: web::Json<AssignShiftInput>,
     req_info: RequestInfo,
     cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
@@ -345,8 +345,8 @@ pub async fn unassign_shift(
 
 pub async fn update_shift_status(
     path: web::Path<Uuid>,
-    input: web::Json<UpdateShiftStatusInput>,
     ctx: UserContext,
+    input: web::Json<UpdateShiftStatusInput>,
     req_info: RequestInfo,
     cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
@@ -475,9 +475,9 @@ pub async fn get_my_pending_assignments(ctx: UserContext) -> Result<HttpResponse
 // Respond to a shift assignment
 pub async fn respond_to_assignment(
     path: web::Path<Uuid>,
-    input: web::Json<AssignmentResponseInput>,
     ctx: UserContext,
-    _req_info: RequestInfo,
+    input: web::Json<AssignmentResponseInput>,
+    req_info: RequestInfo,
     cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     let assignment_id = path.into_inner();
@@ -531,7 +531,7 @@ pub async fn respond_to_assignment(
                 &action,
                 format!("User responded to assignment with {}", response),
                 Some(metadata),
-                &_req_info,
+                &req_info,
             )
             .await?;
 
@@ -675,8 +675,8 @@ pub async fn get_my_claims(ctx: UserContext) -> Result<HttpResponse> {
 // Approve a shift claim (managers/admins only)
 pub async fn approve_shift_claim(
     path: web::Path<Uuid>,
-    approval_data: web::Json<ApprovalInput>,
     ctx: UserContext,
+    approval_data: web::Json<ApprovalInput>,
     req_info: RequestInfo,
     cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
@@ -742,8 +742,8 @@ pub async fn approve_shift_claim(
 // Reject a shift claim (managers/admins only)
 pub async fn reject_shift_claim(
     path: web::Path<Uuid>,
-    rejection_data: web::Json<ApprovalInput>,
     ctx: UserContext,
+    rejection_data: web::Json<ApprovalInput>,
     req_info: RequestInfo,
     cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {

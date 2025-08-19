@@ -49,9 +49,9 @@ pub async fn get_pto_balance(
 /// Update PTO balance for a user (admins/managers only)
 pub async fn update_pto_balance(
     path: web::Path<Uuid>,
+    ctx: UserContext,
     input: web::Json<PtoBalanceUpdateInput>,
     req: RequestInfo,
-    ctx: UserContext,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
 
@@ -117,9 +117,9 @@ pub async fn update_pto_balance(
 /// Adjust PTO balance (admins/managers only)
 pub async fn adjust_pto_balance(
     path: web::Path<Uuid>,
+    ctx: UserContext,
     input: web::Json<PtoBalanceAdjustmentInput>,
     req: RequestInfo,
-    ctx: UserContext,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
 
