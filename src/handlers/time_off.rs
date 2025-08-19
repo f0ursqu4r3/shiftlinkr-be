@@ -34,6 +34,7 @@ pub async fn create_time_off_request(
     input: web::Json<TimeOffRequestInput>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     let request_input = input.into_inner();
     let request_user_id = request_input.user_id.clone();
@@ -77,6 +78,8 @@ pub async fn create_time_off_request(
     })
     .await?;
 
+    // Invalidate cached GETs in time-off scope
+    cache.bump();
     Ok(ApiResponse::created(time_off_request))
 }
 
@@ -123,6 +126,7 @@ pub async fn update_time_off_request(
     input: web::Json<TimeOffRequestInput>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     let request_id = path.into_inner();
 
@@ -194,6 +198,8 @@ pub async fn update_time_off_request(
     })
     .await?;
 
+    // Invalidate cached GETs
+    cache.bump();
     Ok(ApiResponse::success(updated_request))
 }
 
@@ -202,6 +208,7 @@ pub async fn delete_time_off_request(
     path: web::Path<Uuid>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     let request_id = path.into_inner();
 
@@ -246,6 +253,8 @@ pub async fn delete_time_off_request(
     })
     .await?;
 
+    // Invalidate cached GETs
+    cache.bump();
     Ok(ApiResponse::success_message(
         "Time-off request deleted successfully",
     ))
@@ -257,6 +266,7 @@ pub async fn approve_time_off_request(
     approval: web::Json<ApprovalRequest>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
 
@@ -358,6 +368,8 @@ pub async fn approve_time_off_request(
     })
     .await?;
 
+    // Invalidate cached GETs
+    cache.bump();
     Ok(ApiResponse::success(approved_request))
 }
 
@@ -367,6 +379,7 @@ pub async fn deny_time_off_request(
     denial: web::Json<ApprovalRequest>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     // Only managers and admins can deny requests
     ctx.requires_manager()?;
@@ -410,6 +423,8 @@ pub async fn deny_time_off_request(
     })
     .await?;
 
+    // Invalidate cached GETs
+    cache.bump();
     Ok(ApiResponse::success(denied_request))
 }
 

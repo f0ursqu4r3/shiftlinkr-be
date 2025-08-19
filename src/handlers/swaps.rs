@@ -41,6 +41,7 @@ pub async fn create_swap_request(
     input: web::Json<ShiftSwapInput>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     // Users can only create swap requests for themselves unless they're managers/admins
     let request_input = input.into_inner();
@@ -82,6 +83,8 @@ pub async fn create_swap_request(
     })
     .await?;
 
+    // Invalidate cached GETs in swaps scope
+    cache.bump();
     Ok(ApiResponse::created(swap_request))
 }
 
@@ -142,6 +145,7 @@ pub async fn respond_to_swap(
     response: web::Json<SwapResponseRequest>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     let swap_id = path.into_inner();
 
@@ -211,6 +215,8 @@ pub async fn respond_to_swap(
     })
     .await?;
 
+    // Invalidate cached GETs
+    cache.bump();
     Ok(ApiResponse::success(updated_swap))
 }
 
@@ -220,6 +226,7 @@ pub async fn approve_swap_request(
     approval: web::Json<ApprovalRequest>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
 
@@ -278,6 +285,8 @@ pub async fn approve_swap_request(
     })
     .await?;
 
+    // Invalidate cached GETs
+    cache.bump();
     Ok(ApiResponse::success(shift_swap))
 }
 
@@ -287,6 +296,7 @@ pub async fn deny_swap_request(
     denial: web::Json<ApprovalRequest>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
 
@@ -345,5 +355,7 @@ pub async fn deny_swap_request(
     })
     .await?;
 
+    // Invalidate cached GETs
+    cache.bump();
     Ok(ApiResponse::success(shift_swap))
 }

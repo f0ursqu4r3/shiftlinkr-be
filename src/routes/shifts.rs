@@ -1,10 +1,14 @@
 use actix_web::web;
 
 use crate::handlers::shifts;
+use crate::middleware::{CacheLayer, ResponseCacheMiddleware};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
+    let cache_layer = CacheLayer::new(2000, 120); // more capacity, shorter ttl
     cfg.service(
         web::scope("/shifts")
+            .app_data(web::Data::new(cache_layer.clone()))
+            .wrap(ResponseCacheMiddleware::new(cache_layer.clone()))
             .route("", web::post().to(shifts::create_shift))
             .route("", web::get().to(shifts::get_shifts))
             .route("/{id}", web::get().to(shifts::get_shift))

@@ -35,7 +35,10 @@ pub struct InviteTokenResponse {
     pub expires_at: String,
 }
 
-pub async fn register(request: web::Json<CreateUserInput>) -> Result<HttpResponse> {
+pub async fn register(
+    request: web::Json<CreateUserInput>,
+    cache: web::Data<crate::middleware::CacheLayer>,
+) -> Result<HttpResponse> {
     let register_request = request.into_inner();
 
     let response = auth::register(register_request).await.map_err(|e| {
@@ -43,10 +46,15 @@ pub async fn register(request: web::Json<CreateUserInput>) -> Result<HttpRespons
         AppError::internal_server_error_message(e.to_string())
     })?;
 
+    // Invalidate cached auth GETs (e.g., /me)
+    cache.bump();
     Ok(ApiResponse::success(response))
 }
 
-pub async fn login(request: web::Json<LoginInput>) -> Result<HttpResponse> {
+pub async fn login(
+    request: web::Json<LoginInput>,
+    cache: web::Data<crate::middleware::CacheLayer>,
+) -> Result<HttpResponse> {
     let login_request = request.into_inner();
 
     let response = auth::login(login_request).await.map_err(|e| {
@@ -54,6 +62,8 @@ pub async fn login(request: web::Json<LoginInput>) -> Result<HttpResponse> {
         AppError::from(e)
     })?;
 
+    // Invalidate cache: user context may change
+    cache.bump();
     Ok(ApiResponse::success(response))
 }
 
@@ -90,7 +100,10 @@ pub async fn forgot_password(request: web::Json<ForgotPasswordInput>) -> Result<
     ))
 }
 
-pub async fn reset_password(input: web::Json<ResetPasswordInput>) -> Result<HttpResponse> {
+pub async fn reset_password(
+    input: web::Json<ResetPasswordInput>,
+    cache: web::Data<crate::middleware::CacheLayer>,
+) -> Result<HttpResponse> {
     auth::reset_password(&input.token, &input.new_password)
         .await
         .map_err(|e| {
@@ -98,6 +111,8 @@ pub async fn reset_password(input: web::Json<ResetPasswordInput>) -> Result<Http
             AppError::from(e)
         })?;
 
+    // Invalidate auth-related cached responses
+    cache.bump();
     Ok(ApiResponse::success_message(
         "Password has been reset successfully.",
     ))
@@ -107,6 +122,7 @@ pub async fn create_invite(
     input: web::Json<CreateInviteInput>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     let user_id = ctx.user_id();
 
@@ -196,6 +212,8 @@ pub async fn create_invite(
         expires_at: invite_token.expires_at.to_rfc3339(),
     };
 
+    // Invalidate cached invite lists
+    cache.bump();
     Ok(ApiResponse::success(invite_token_response))
 }
 
@@ -246,6 +264,7 @@ pub async fn accept_invite(
     token: Path<String>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     let user = ctx.user;
 
@@ -359,6 +378,8 @@ pub async fn accept_invite(
 
     let response = MeResponse { user, companies };
 
+    // Invalidate cached /me and company lists
+    cache.bump();
     Ok(ApiResponse::success(response))
 }
 
@@ -366,6 +387,7 @@ pub async fn reject_invite(
     token: Path<String>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     // Get invite token
     let invite_token = invite_repo::get_invite_token(&token)
@@ -431,6 +453,7 @@ pub async fn reject_invite(
     })
     .await?;
 
+    cache.bump();
     Ok(ApiResponse::success("Invite rejected successfully"))
 }
 
@@ -448,7 +471,11 @@ pub async fn get_my_invites(ctx: UserContext) -> Result<HttpResponse> {
     Ok(ApiResponse::success(invites))
 }
 
-pub async fn switch_company(path: Path<Uuid>, ctx: UserContext) -> Result<HttpResponse> {
+pub async fn switch_company(
+    path: Path<Uuid>,
+    ctx: UserContext,
+    cache: web::Data<crate::middleware::CacheLayer>,
+) -> Result<HttpResponse> {
     let new_company_id = path.into_inner();
     let user_id = ctx.user_id();
 
@@ -474,5 +501,7 @@ pub async fn switch_company(path: Path<Uuid>, ctx: UserContext) -> Result<HttpRe
             AppError::from(e)
         })?;
 
+    // Invalidate cached /me after switching companies
+    cache.bump();
     Ok(ApiResponse::success(response))
 }

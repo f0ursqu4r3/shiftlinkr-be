@@ -60,6 +60,7 @@ pub struct AssignmentResponseInput {
 // Shift handlers
 pub async fn create_shift(
     input: web::Json<CreateUpdateShiftInput>,
+    cache: web::Data<crate::middleware::CacheLayer>,
     ctx: UserContext,
     req_info: RequestInfo,
 ) -> Result<HttpResponse> {
@@ -104,6 +105,8 @@ pub async fn create_shift(
     })
     .await?;
 
+    // Invalidate cached GETs
+    cache.bump();
     Ok(ApiResponse::created(shift))
 }
 
@@ -146,6 +149,7 @@ pub async fn update_shift(
     input: web::Json<CreateUpdateShiftInput>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     // Check if user is admin or manager
     ctx.requires_manager()?;
@@ -205,6 +209,8 @@ pub async fn update_shift(
     })
     .await?;
 
+    // Invalidate cached GETs
+    cache.bump();
     Ok(ApiResponse::success(updated_shift))
 }
 
@@ -213,6 +219,7 @@ pub async fn assign_shift(
     input: web::Json<AssignShiftInput>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
     let company_id = ctx.strict_company_id()?;
@@ -275,6 +282,8 @@ pub async fn assign_shift(
     })
     .await?;
 
+    // Invalidate cached GETs
+    cache.bump();
     Ok(ApiResponse::success(ShiftAssignResponse {
         shift,
         assignment,
@@ -285,6 +294,7 @@ pub async fn unassign_shift(
     path: web::Path<Uuid>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
     let company_id = ctx.strict_company_id()?;
@@ -328,6 +338,8 @@ pub async fn unassign_shift(
     })
     .await?;
 
+    // Invalidate cached GETs
+    cache.bump();
     Ok(ApiResponse::success(shift))
 }
 
@@ -336,6 +348,7 @@ pub async fn update_shift_status(
     input: web::Json<UpdateShiftStatusInput>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
     let company_id = ctx.strict_company_id()?;
@@ -374,6 +387,8 @@ pub async fn update_shift_status(
     })
     .await?;
 
+    // Invalidate cached GETs
+    cache.bump();
     Ok(ApiResponse::success(shift))
 }
 
@@ -381,6 +396,7 @@ pub async fn delete_shift(
     path: web::Path<Uuid>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
     let company_id = ctx.strict_company_id()?;
@@ -414,6 +430,8 @@ pub async fn delete_shift(
     })
     .await?;
 
+    // Invalidate cached GETs
+    cache.bump();
     Ok(ApiResponse::success_message("Shift deleted successfully"))
 }
 
@@ -460,6 +478,7 @@ pub async fn respond_to_assignment(
     input: web::Json<AssignmentResponseInput>,
     ctx: UserContext,
     _req_info: RequestInfo,
+    cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     let assignment_id = path.into_inner();
 
@@ -521,6 +540,8 @@ pub async fn respond_to_assignment(
     })
     .await?;
 
+    // Invalidate cached GETs
+    cache.bump();
     Ok(ApiResponse::success(assignment_response))
 }
 
@@ -529,6 +550,7 @@ pub async fn claim_shift(
     path: web::Path<Uuid>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     let company_id = ctx.strict_company_id()?;
     let shift_id = path.into_inner();
@@ -621,6 +643,8 @@ pub async fn claim_shift(
     })
     .await?;
 
+    // Invalidate cached GETs
+    cache.bump();
     Ok(ApiResponse::created(claim))
 }
 
@@ -654,6 +678,7 @@ pub async fn approve_shift_claim(
     approval_data: web::Json<ApprovalInput>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
 
@@ -709,6 +734,8 @@ pub async fn approve_shift_claim(
     })
     .await?;
 
+    // Invalidate cached GETs
+    cache.bump();
     Ok(ApiResponse::success(ShiftClaimResponse { claim, shift }))
 }
 
@@ -718,6 +745,7 @@ pub async fn reject_shift_claim(
     rejection_data: web::Json<ApprovalInput>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
 
@@ -768,6 +796,8 @@ pub async fn reject_shift_claim(
     })
     .await?;
 
+    // Invalidate cached GETs
+    cache.bump();
     Ok(ApiResponse::success(ShiftClaimResponse { claim, shift }))
 }
 
@@ -776,6 +806,7 @@ pub async fn cancel_shift_claim(
     path: web::Path<Uuid>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: web::Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     let claim_id = path.into_inner();
     let user_id = ctx.user_id();
@@ -829,6 +860,8 @@ pub async fn cancel_shift_claim(
     })
     .await?;
 
+    // Invalidate cached GETs
+    cache.bump();
     Ok(ApiResponse::success(ShiftClaimResponse { claim, shift }))
 }
 

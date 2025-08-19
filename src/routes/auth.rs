@@ -1,10 +1,14 @@
 use actix_web::web;
 
 use crate::handlers::auth;
+use crate::middleware::{CacheLayer, ResponseCacheMiddleware};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
+    let cache_layer = CacheLayer::new(1000, 60);
     cfg.service(
         web::scope("/auth")
+            .app_data(web::Data::new(cache_layer.clone()))
+            .wrap(ResponseCacheMiddleware::new(cache_layer.clone()))
             .route("/register", web::post().to(auth::register))
             .route("/login", web::post().to(auth::login))
             .route("/me", web::get().to(auth::me))
