@@ -1,25 +1,23 @@
 use actix_cors::Cors;
-use actix_web::{App, HttpResponse, HttpServer, Responder, get, middleware::Logger};
+use actix_web::{App, HttpServer, Responder, get, middleware::Logger};
 use anyhow::Result;
 
 use be::{
     config::Config,
     database::init_database,
+    handlers::shared::ApiResponse,
     middleware::{RequestIdMiddleware, RequestInfoMiddleware},
     routes,
 };
 
 #[get("/")]
 async fn hello() -> impl Responder {
-    HttpResponse::Ok().body("ShiftLinkr API v1.0")
+    ApiResponse::success("ShiftLinkr API v1.0")
 }
 
 #[get("/health")]
 async fn health() -> impl Responder {
-    HttpResponse::Ok().json(serde_json::json!({
-        "status": "ok",
-        "timestamp": chrono::Utc::now()
-    }))
+    ApiResponse::success("OK")
 }
 
 #[actix_web::main]
