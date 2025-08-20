@@ -6,7 +6,7 @@ use be::{
     config::Config,
     database::init_database,
     handlers::shared::ApiResponse,
-    middleware::{RequestIdMiddleware, RequestInfoMiddleware},
+    middleware::{GlobalRateLimiter, RequestIdMiddleware, RequestInfoMiddleware, RateLimitStore, cleanup_rate_limits},
     routes,
 };
 
@@ -44,8 +44,18 @@ async fn main() -> Result<()> {
     init_database(&config.database_url, run_migrations).await?;
     println!("🔥 Database initialized");
 
+    // Create shared rate limit store for cleanup task
+    let rate_limit_store = RateLimitStore::new();
+    let cleanup_store = rate_limit_store.clone();
+    
+    // Start cleanup task for rate limits
+    tokio::spawn(async move {
+        cleanup_rate_limits(cleanup_store, 300).await; // Cleanup every 5 minutes
+    });
+    
     let server_address = config.server_address();
     println!("🌐 Server starting on http://{}", server_address);
+    println!("🛡️ Rate limiting enabled with cleanup task started");
 
     // Start HTTP server
     HttpServer::new(move || {
@@ -63,6 +73,7 @@ async fn main() -> Result<()> {
                     ])
                     .max_age(3600),
             )
+            .wrap(GlobalRateLimiter::general()) // Global rate limiting
             .wrap(RequestIdMiddleware)
             .wrap(RequestInfoMiddleware)
             .wrap(Logger::new(

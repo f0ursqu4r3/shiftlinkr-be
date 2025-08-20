@@ -1,10 +1,12 @@
 use actix_web::web;
 
 use crate::handlers::admin;
+use crate::middleware::GlobalRateLimiter;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/admin")
+            .wrap(GlobalRateLimiter::admin()) // Admin-specific rate limiting
             .route("/locations", web::post().to(admin::create_location))
             .route("/locations", web::get().to(admin::get_locations))
             .route("/locations/{id}", web::get().to(admin::get_location))
