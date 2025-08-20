@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     database::{
-        models::{AssignmentResponse, ShiftAssignmentInput, UserShiftScheduleInput},
+        models::{ShiftAssignmentInput, UserShiftScheduleInput},
         repositories::schedule as schedule_repo,
         transaction::DatabaseTransaction,
     },
@@ -16,7 +16,7 @@ use crate::{
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AssignmentResponseRequest {
-    pub response: AssignmentResponse,
+    pub response: String, // Fixed: use String instead of enum
     pub response_notes: Option<String>,
 }
 

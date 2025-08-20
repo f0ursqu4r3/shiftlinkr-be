@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     database::{
-        models::{ShiftSwapInput, ShiftSwapResponseStatus, ShiftSwapStatus, activity::Action},
+        models::{Action, ShiftSwapInput, ShiftSwapResponseType, ShiftSwapStatus},
         repositories::shift_swap as shift_swap_repo,
         transaction::DatabaseTransaction,
     },
@@ -27,7 +27,7 @@ pub struct SwapQuery {
 #[serde(rename_all = "camelCase")]
 pub struct SwapResponseRequest {
     pub target_shift_id: Option<Uuid>,
-    pub decision: ShiftSwapResponseStatus,
+    pub decision: ShiftSwapResponseType, // Fixed: use enum for type safety
     pub notes: Option<String>,
 }
 
@@ -180,7 +180,7 @@ pub async fn respond_to_swap(
                 tx,
                 swap_id,
                 ctx.user.id,
-                decision.clone(),
+                decision.clone(), // Clone the enum, not convert to string
                 notes.clone(),
             )
             .await?;

@@ -7,8 +7,9 @@ use super::macros::string_enum;
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct UserShiftSchedule {
-    pub id: Uuid,      // UUID primary key
-    pub user_id: Uuid, // UUID for user references
+    pub id: Uuid,         // UUID primary key
+    pub user_id: Uuid,    // UUID for user references
+    pub company_id: Uuid, // UUID for company references - Added to match schema
     pub monday_start: Option<NaiveTime>,
     pub monday_end: Option<NaiveTime>,
     pub tuesday_start: Option<NaiveTime>,
@@ -33,7 +34,8 @@ pub struct UserShiftSchedule {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserShiftScheduleInput {
-    pub user_id: Uuid, // UUID for user references
+    pub user_id: Uuid,    // UUID for user references
+    pub company_id: Uuid, // UUID for company references - Added to match schema
     pub monday_start: Option<NaiveTime>,
     pub monday_end: Option<NaiveTime>,
     pub tuesday_start: Option<NaiveTime>,
@@ -62,7 +64,7 @@ pub struct ShiftAssignment {
     pub assigned_by: Uuid, // UUID for user references
     pub assignment_status: AssignmentStatus,
     pub acceptance_deadline: Option<DateTime<Utc>>, // TIMESTAMPTZ
-    pub response: AssignmentResponse,
+    pub response: Option<String>,                   // Fixed: should be Option<String> not enum
     pub response_notes: Option<String>,
     pub created_at: DateTime<Utc>, // TIMESTAMPTZ
     pub updated_at: DateTime<Utc>, // TIMESTAMPTZ
@@ -91,14 +93,5 @@ string_enum! {
 impl Default for AssignmentStatus {
     fn default() -> Self {
         AssignmentStatus::Pending
-    }
-}
-
-string_enum! {
-    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-    #[serde(rename_all = "lowercase")]
-    pub enum AssignmentResponse {
-        Accept => "accept",
-        Decline => "decline",
     }
 }

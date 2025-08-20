@@ -1,3 +1,4 @@
+use bigdecimal::BigDecimal;
 use sqlx::{Postgres, Transaction};
 
 use crate::database::{
@@ -42,7 +43,7 @@ pub async fn create_balance(
     .bind(request.pto_balance_hours.unwrap_or(0))
     .bind(request.sick_balance_hours.unwrap_or(0))
     .bind(request.personal_balance_hours.unwrap_or(0))
-    .bind(request.pto_accrual_rate.unwrap_or(0.0))
+    .bind(request.pto_accrual_rate.as_ref().map_or_else(|| BigDecimal::from(0), |v| v.clone()))
     .bind(request.hire_date)
     .fetch_one(&mut **tx)
     .await?;
@@ -164,7 +165,7 @@ pub async fn update_balance(
             "personal_balance_hours" => {
                 query_builder = query_builder.bind(request.personal_balance_hours)
             }
-            "pto_accrual_rate" => query_builder = query_builder.bind(request.pto_accrual_rate),
+            "pto_accrual_rate" => query_builder = query_builder.bind(request.pto_accrual_rate.clone()),
             "hire_date" => query_builder = query_builder.bind(request.hire_date),
             "last_accrual_date" => query_builder = query_builder.bind(request.last_accrual_date),
             _ => {}
@@ -235,12 +236,16 @@ pub async fn create_or_update_balance(
     if let Some(_) = get_user_balance_for_company(user_id, company_id).await? {
         // Update existing
         let update_request = UpdateUserCompanyInput {
+            role: request.role.clone(),
+            is_primary: request.is_primary,
+            hire_date: request.hire_date,
             pto_balance_hours: request.pto_balance_hours,
             sick_balance_hours: request.sick_balance_hours,
             personal_balance_hours: request.personal_balance_hours,
-            pto_accrual_rate: request.pto_accrual_rate,
-            hire_date: request.hire_date,
+            pto_accrual_rate: request.pto_accrual_rate.clone(),
             last_accrual_date: None,
+            hourly_rate: request.hourly_rate.clone(),
+            overtime_rate_multiplier: request.overtime_rate_multiplier.clone(),
         };
         update_balance(tx, user_id, company_id, &update_request).await
     } else {

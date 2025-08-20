@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::{
     database::{
         models::{
-            Action, AssignmentResponse, CreateUpdateShiftInput, Shift, ShiftAssignment,
+            Action, CreateUpdateShiftInput, Shift, ShiftAssignment,
             ShiftAssignmentInput, ShiftClaimInput, ShiftClaimResponse, ShiftQuery, ShiftQueryType,
             ShiftStatus,
         },
@@ -53,7 +53,7 @@ pub struct ApprovalInput {
 
 #[derive(Debug, Deserialize)]
 pub struct AssignmentResponseInput {
-    pub response: AssignmentResponse, // "accepted" or "declined"
+    pub response: String, // "accept" or "decline"
     pub notes: Option<String>,
 }
 
@@ -484,7 +484,7 @@ pub async fn respond_to_assignment(
 
     // Parse response
     let response = input.response.clone();
-    let is_accepted = matches!(response, AssignmentResponse::Accept);
+    let is_accepted = response.as_str() == "accept";
 
     let assignment = schedule_repo::get_shift_assignment(assignment_id)
         .await
@@ -494,9 +494,10 @@ pub async fn respond_to_assignment(
     ctx.requires_same_user(assignment.user_id)?;
     let company_id = ctx.strict_company_id()?;
 
-    let action = match response {
-        AssignmentResponse::Accept => Action::ACCEPTED,
-        AssignmentResponse::Decline => Action::DECLINED,
+    let action = match response.as_str() {
+        "accept" => Action::ACCEPTED,
+        "decline" => Action::DECLINED,
+        _ => Action::DECLINED, // Default case
     };
 
     let assignment_response = DatabaseTransaction::run(|tx| {

@@ -7,8 +7,8 @@ use crate::{
     database::{
         get_pool,
         models::{
-            CompanyRole, Shift, ShiftSwap, ShiftSwapInput, ShiftSwapResponse,
-            ShiftSwapResponseStatus, ShiftSwapStatus, ShiftSwapType,
+            CompanyRole, Shift, ShiftSwap, ShiftSwapInput, ShiftSwapResponse, ShiftSwapResponseType, 
+            ShiftSwapStatus, ShiftSwapType,
         },
         utils::sql,
     },
@@ -651,7 +651,7 @@ pub async fn create_swap_response(
     tx: &mut Transaction<'_, Postgres>,
     swap_id: Uuid,
     user_id: Uuid,
-    response_type: ShiftSwapResponseStatus,
+    response_type: ShiftSwapResponseType,  // Fixed: use enum for type safety
     notes: Option<String>,
 ) -> Result<ShiftSwapResponse, sqlx::Error> {
     let now = Utc::now();
@@ -676,11 +676,11 @@ pub async fn create_swap_response(
         "#))
         .bind(swap_id)
         .bind(user_id)
-        .bind(response_type.clone())
+        .bind(response_type.to_string())
         .bind(notes.clone())
         .bind(now)
         .bind(now)
-        .bind(response_type)
+        .bind(response_type.to_string())
         .bind(notes)
         .bind(now)
         .fetch_one(&mut **tx)
@@ -693,7 +693,7 @@ pub async fn create_swap_response(
 pub async fn update_swap_response_status(
     tx: &mut Transaction<'_, Postgres>,
     response_id: Uuid,
-    response_type: ShiftSwapResponseStatus,
+    response_type: ShiftSwapResponseType,  // Fixed: use enum for type safety
     notes: Option<String>,
 ) -> Result<ShiftSwapResponse, sqlx::Error> {
     let now = Utc::now();
@@ -715,7 +715,7 @@ pub async fn update_swap_response_status(
                 notes,
                 created_at
         "#))
-    .bind(response_type)
+    .bind(response_type.to_string())
     .bind(notes)
     .bind(now)
     .bind(response_id)

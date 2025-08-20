@@ -58,29 +58,33 @@ string_enum! {
 #[serde(rename_all = "camelCase")]
 pub struct ShiftSwapResponse {
     pub id: Uuid,
-    pub swap_id: Option<Uuid>,
+    pub swap_id: Uuid, // Fixed: should be UUID, not Option<Uuid>
     pub responding_user_id: Uuid,
-    pub status: ShiftSwapResponseStatus,
-    pub notes: String,
+    pub response_type: ShiftSwapResponseType, // Fixed: use enum instead of String for type safety
+    pub notes: Option<String>,                // Fixed: should be Option<String>
     pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftSwapResponseInput {
-    pub swap_id: String,
-    pub responding_user_id: String,
-    pub status: ShiftSwapResponseStatus,
+    pub swap_id: Uuid,                        // Fixed: should be UUID, not String
+    pub responding_user_id: Uuid,             // Fixed: should be UUID, not String
+    pub response_type: ShiftSwapResponseType, // Fixed: use enum for type safety
     pub notes: Option<String>,
 }
 
 string_enum! {
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-    pub enum ShiftSwapResponseStatus {
-        Pending => "pending",
+    pub enum ShiftSwapResponseType {
         Interested => "interested",
-        NotInterested => "not_interested",
         Accepted => "accepted",
         Declined => "declined",
+    }
+}
+
+impl Default for ShiftSwapResponseType {
+    fn default() -> Self {
+        ShiftSwapResponseType::Interested
     }
 }

@@ -14,6 +14,7 @@ pub mod team;
 pub mod time_off;
 pub mod user;
 pub mod user_company;
+pub mod wage;
 
 // Re-export all models for easy importing
 pub use activity::*;
@@ -29,5 +30,6 @@ pub use stats::*;
 pub use swap::*;
 pub use team::*;
 pub use time_off::*;
-pub use user::*;
+pub use user::{CreateUserInput, User}; // Specific re-export to avoid conflict
 pub use user_company::*;
+pub use wage::*;

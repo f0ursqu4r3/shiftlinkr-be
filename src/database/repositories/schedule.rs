@@ -5,8 +5,8 @@ use uuid::Uuid;
 use crate::database::{
     get_pool,
     models::{
-        AssignmentResponse, AssignmentStatus, Shift, ShiftAssignment, ShiftAssignmentInput,
-        UserShiftSchedule, UserShiftScheduleInput,
+        AssignmentStatus, Shift, ShiftAssignment, ShiftAssignmentInput, UserShiftSchedule,
+        UserShiftScheduleInput,
     },
     utils::sql,
 };
@@ -452,13 +452,14 @@ pub async fn get_pending_assignments_for_user(
 pub async fn respond_to_assignment(
     tx: &mut Transaction<'_, Postgres>,
     assignment_id: Uuid,
-    response: AssignmentResponse,
+    response: String, // Fixed: use String instead of enum
     response_notes: Option<String>,
 ) -> Result<Option<ShiftAssignment>, sqlx::Error> {
     let now = Utc::now().naive_utc();
-    let status = match response {
-        AssignmentResponse::Accept => AssignmentStatus::Accepted,
-        AssignmentResponse::Decline => AssignmentStatus::Declined,
+    let status = match response.as_str() {
+        "accept" => AssignmentStatus::Accepted,
+        "decline" => AssignmentStatus::Declined,
+        _ => AssignmentStatus::Declined, // Default case
     };
 
     let assignment = sqlx::query_as::<_, ShiftAssignment>(&sql(r#"
