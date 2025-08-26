@@ -422,6 +422,7 @@ dependencies = [
  "actix-rt",
  "actix-web",
  "anyhow",
+ "base64",
  "bcrypt",
  "bigdecimal",
  "chrono",

@@ -97,24 +97,24 @@ async fn test_shift_claim_repository() -> Result<(), be::error::AppError> {
     assert!(claim.action_notes.is_none());
 
     // Get claim by ID
-    let fetched_claim = shift_claim_repo::get_claim_by_id(claim.id).await?;
+    let fetched_claim = shift_claim_repo::find_by_id(claim.id).await?;
     assert!(fetched_claim.is_some());
     let fetched_claim = fetched_claim.unwrap();
     assert_eq!(fetched_claim.id, claim.id);
     assert_eq!(fetched_claim.shift_id, shift.id);
 
     // Get claims by shift
-    let shift_claims = shift_claim_repo::get_claims_by_shift(shift.id).await?;
+    let shift_claims = shift_claim_repo::find_by_shift_id(shift.id).await?;
     assert_eq!(shift_claims.len(), 1);
     assert_eq!(shift_claims[0].id, claim.id);
 
     // Get claims by user
-    let user_claims = shift_claim_repo::get_claims_by_user(user.id).await?;
+    let user_claims = shift_claim_repo::find_by_user_id(user.id).await?;
     assert_eq!(user_claims.len(), 1);
     assert_eq!(user_claims[0].id, claim.id);
 
     // Check pending
-    let has_pending = shift_claim_repo::has_pending_claim(shift.id, user.id).await?;
+    let has_pending = shift_claim_repo::has_pending_claim_for_shift(shift.id, user.id).await?;
     assert!(has_pending.is_some());
 
     // Approve claim
@@ -123,7 +123,7 @@ async fn test_shift_claim_repository() -> Result<(), be::error::AppError> {
         let manager_id = manager.id;
         Box::pin(async move {
             Ok::<_, be::error::AppError>(
-                shift_claim_repo::approve_claim(tx, claim_id, manager_id, Some("Approved!".into()))
+                shift_claim_repo::approve(tx, claim_id, manager_id, Some("Approved!".into()))
                     .await?,
             )
         })
@@ -233,7 +233,7 @@ async fn test_shift_claim_cancel_and_reject() -> Result<(), be::error::AppError>
         let cid = claim.id;
         let uid = user.id;
         Box::pin(async move {
-            Ok::<_, be::error::AppError>(shift_claim_repo::cancel_claim(tx, cid, uid).await?)
+            Ok::<_, be::error::AppError>(shift_claim_repo::cancel(tx, cid, uid).await?)
         })
     })
     .await?;
@@ -261,7 +261,7 @@ async fn test_shift_claim_cancel_and_reject() -> Result<(), be::error::AppError>
         let mid = manager.id;
         Box::pin(async move {
             Ok::<_, be::error::AppError>(
-                shift_claim_repo::reject_claim(tx, cid, mid, Some("Not qualified".into())).await?,
+                shift_claim_repo::reject(tx, cid, mid, Some("Not qualified".into())).await?,
             )
         })
     })

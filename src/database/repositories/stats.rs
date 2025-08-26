@@ -4,53 +4,99 @@ use uuid::Uuid;
 use crate::database::{
     get_pool,
     models::{DashboardStats, ShiftStats, TimeOffStats},
+    utils::sql,
 };
 
 // Simple stats that just return basic counts
 pub async fn get_dashboard_stats_for_user(
-    _user_id: Option<Uuid>,
+    user_id: Option<Uuid>,
     _start_date: Option<DateTime<Utc>>,
     _end_date: Option<DateTime<Utc>>,
 ) -> Result<DashboardStats, sqlx::Error> {
     // For now, return basic counts
-    let total_shifts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM shifts")
-        .fetch_one(&get_pool().await)
-        .await?;
+    let total_shifts: i64 = sqlx::query_scalar(&sql(r#"
+        SELECT
+            COUNT(s.*)
+        FROM
+            shifts s
+            JOIN user_company uc ON s.company_id = uc.company_id
+        WHERE
+            uc.user_id = ?
+    "#))
+    .bind(user_id)
+    .fetch_one(&get_pool().await)
+    .await?;
 
     let now = Utc::now();
-    let upcoming_shifts: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM shifts WHERE start_time > $1")
-            .bind(now)
-            .fetch_one(&get_pool().await)
-            .await?;
+    let upcoming_shifts: i64 = sqlx::query_scalar(&sql(r#"
+            SELECT
+                COUNT(s.*)
+            FROM
+                shifts s
+                JOIN user_company uc ON s.company_id = uc.company_id
+            WHERE
+                s.start_time > ?
+                AND uc.user_id = ?
+        "#))
+    .bind(now)
+    .bind(user_id)
+    .fetch_one(&get_pool().await)
+    .await?;
 
-    let pending_time_off_requests: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM time_off_requests WHERE status = 'pending'")
-            .fetch_one(&get_pool().await)
-            .await?;
+    let pending_time_off_requests: i64 = sqlx::query_scalar(&sql(r#"
+            SELECT
+                COUNT(*)
+            FROM
+                time_off_requests
+            WHERE
+                status = 'pending'
+        "#))
+    .fetch_one(&get_pool().await)
+    .await?;
 
-    let pending_swap_requests: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM shift_swaps WHERE status = 'pending'")
-            .fetch_one(&get_pool().await)
-            .await?;
+    let pending_swap_requests: i64 = sqlx::query_scalar(&sql(r#"
+            SELECT
+                COUNT(*)
+            FROM
+                shift_swaps
+            WHERE
+                status = 'pending'
+        "#))
+    .fetch_one(&get_pool().await)
+    .await?;
 
-    let approved_time_off: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM time_off_requests WHERE status = 'approved'")
-            .fetch_one(&get_pool().await)
-            .await?;
+    let approved_time_off: i64 = sqlx::query_scalar(&sql(r#"
+            SELECT
+                COUNT(*)
+            FROM
+                time_off_requests
+            WHERE
+                status = 'approved'
+        "#))
+    .fetch_one(&get_pool().await)
+    .await?;
 
     // Calculate total hours from shifts (convert seconds to hours)
-    let total_hours: f64 = sqlx::query_scalar(
-            "SELECT COALESCE(SUM(EXTRACT(EPOCH FROM (end_time - start_time)) / 3600), 0)::DOUBLE PRECISION FROM shifts"
-        )
-        .fetch_one(&get_pool().await)
-        .await?;
+    let total_hours: f64 = sqlx::query_scalar(&sql(r#"
+        SELECT
+            COALESCE(SUM(EXTRACT(EPOCH FROM (end_time - start_time)) / 3600), 0)::DOUBLE PRECISION
+        FROM
+            shifts
+    "#))
+    .fetch_one(&get_pool().await)
+    .await?;
 
     // Calculate team coverage as percentage of shifts that are assigned (not open)
-    let assigned_shifts_count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM shifts WHERE status != 'open'")
-            .fetch_one(&get_pool().await)
-            .await?;
+    let assigned_shifts_count: i64 = sqlx::query_scalar(&sql(r#"
+            SELECT
+                COUNT(*)
+            FROM
+                shifts
+            WHERE
+                status != 'open'
+        "#))
+    .fetch_one(&get_pool().await)
+    .await?;
 
     let team_coverage = if total_shifts > 0 {
         (assigned_shifts_count as f64 / total_shifts as f64) * 100.0

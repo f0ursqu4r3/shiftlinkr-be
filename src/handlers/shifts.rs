@@ -6,9 +6,8 @@ use uuid::Uuid;
 use crate::{
     database::{
         models::{
-            Action, CreateUpdateShiftInput, Shift, ShiftAssignment,
-            ShiftAssignmentInput, ShiftClaimInput, ShiftClaimResponse, ShiftQuery, ShiftQueryType,
-            ShiftStatus,
+            Action, CreateUpdateShiftInput, Shift, ShiftAssignment, ShiftAssignmentInput,
+            ShiftClaimInput, ShiftClaimResponse, ShiftQuery, ShiftQueryType, ShiftStatus,
         },
         repositories::{
             schedule as schedule_repo, shift as shift_repo, shift_claim as shift_claim_repo,
@@ -17,7 +16,7 @@ use crate::{
     },
     error::AppError,
     handlers::shared::ApiResponse,
-    middleware::request_info::RequestInfo,
+    middleware::{cache::InvalidationContext, request_info::RequestInfo},
     services::{activity_logger, user_context::UserContext},
 };
 
@@ -105,8 +104,25 @@ pub async fn create_shift(
     })
     .await?;
 
-    // Invalidate cached GETs
-    cache.bump();
+    // Invalidate cached GETs - tags-based invalidation
+    cache
+        .invalidate(
+            "shifts",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
     Ok(ApiResponse::created(shift))
 }
 
@@ -209,8 +225,26 @@ pub async fn update_shift(
     })
     .await?;
 
-    // Invalidate cached GETs
-    cache.bump();
+    // Invalidate cached GETs - tags-based invalidation
+    cache
+        .invalidate(
+            "shifts",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                resource_id: Some(shift_id),
+                ..Default::default()
+            },
+        )
+        .await;
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
     Ok(ApiResponse::success(updated_shift))
 }
 
@@ -430,8 +464,26 @@ pub async fn delete_shift(
     })
     .await?;
 
-    // Invalidate cached GETs
-    cache.bump();
+    // Invalidate cached GETs - tags-based invalidation
+    cache
+        .invalidate(
+            "shifts",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                resource_id: Some(shift_id),
+                ..Default::default()
+            },
+        )
+        .await;
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
     Ok(ApiResponse::success_message("Shift deleted successfully"))
 }
 
@@ -582,7 +634,7 @@ pub async fn claim_shift(
             }
 
             // Check if user has already claimed this shift
-            if shift_claim_repo::has_user_claimed_shift(shift_id, user_id)
+            if shift_claim_repo::has_claimed_shift(shift_id, user_id)
                 .await
                 .map_err(AppError::from)
                 .is_ok()
@@ -594,7 +646,7 @@ pub async fn claim_shift(
 
             if let Some(_team_id) = shift_info.team_id {
                 // Check if user is a team member (if shift has a team)
-                shift_claim_repo::is_user_team_member(shift_id, user_id)
+                shift_claim_repo::user_belongs_to_team(shift_id, user_id)
                     .await
                     .map_err(AppError::from)?
                     .ok_or_else(|| {
@@ -655,7 +707,7 @@ pub async fn get_shift_claims(path: web::Path<Uuid>, ctx: UserContext) -> Result
 
     let shift_id = path.into_inner();
 
-    let claims = shift_claim_repo::get_claims_by_shift(shift_id)
+    let claims = shift_claim_repo::find_by_shift_id(shift_id)
         .await
         .map_err(AppError::from)?;
 
@@ -666,7 +718,7 @@ pub async fn get_shift_claims(path: web::Path<Uuid>, ctx: UserContext) -> Result
 pub async fn get_my_claims(ctx: UserContext) -> Result<HttpResponse> {
     let user_id = ctx.user_id();
 
-    let claims = shift_claim_repo::get_claims_by_user(user_id)
+    let claims = shift_claim_repo::find_by_user_id(user_id)
         .await
         .map_err(AppError::from)?;
 
@@ -690,16 +742,12 @@ pub async fn approve_shift_claim(
     let (claim, shift) = DatabaseTransaction::run(|tx| {
         Box::pin(async move {
             // Approve the claim
-            let claim = shift_claim_repo::approve_claim(
-                tx,
-                claim_id,
-                approver_id,
-                approval_data.notes.clone(),
-            )
-            .await?
-            .ok_or_else(|| {
-                AppError::NotFound("Claim not found or already processed".to_string())
-            })?;
+            let claim =
+                shift_claim_repo::approve(tx, claim_id, approver_id, approval_data.notes.clone())
+                    .await?
+                    .ok_or_else(|| {
+                        AppError::NotFound("Claim not found or already processed".to_string())
+                    })?;
 
             // Assign the shift to the user
             let shift = shift_repo::assign_shift(tx, claim.shift_id, claim.user_id)
@@ -707,7 +755,7 @@ pub async fn approve_shift_claim(
                 .ok_or_else(|| AppError::NotFound("Shift not found".to_string()))?;
 
             // Cancel any other pending claims for this shift
-            shift_claim_repo::cancel_pending_claims_for_shift(tx, claim.shift_id).await?;
+            shift_claim_repo::cancel_pending_claims_for_shift_id(tx, claim.shift_id).await?;
 
             // Log the approval activity
             let metadata = activity_logger::metadata(vec![
@@ -756,16 +804,12 @@ pub async fn reject_shift_claim(
 
     let (claim, shift) = DatabaseTransaction::run(|tx| {
         Box::pin(async move {
-            let claim = shift_claim_repo::reject_claim(
-                tx,
-                claim_id,
-                approver_id,
-                rejection_data.notes.clone(),
-            )
-            .await?
-            .ok_or_else(|| {
-                AppError::NotFound("Claim not found or already processed".to_string())
-            })?;
+            let claim =
+                shift_claim_repo::reject(tx, claim_id, approver_id, rejection_data.notes.clone())
+                    .await?
+                    .ok_or_else(|| {
+                        AppError::NotFound("Claim not found or already processed".to_string())
+                    })?;
 
             let shift = shift_repo::assign_shift(tx, claim.shift_id, claim.user_id)
                 .await?
@@ -815,7 +859,7 @@ pub async fn cancel_shift_claim(
 
     let (claim, shift) = DatabaseTransaction::run(|tx| {
         Box::pin(async move {
-            let claim = shift_claim_repo::get_claim_by_id(claim_id)
+            let claim = shift_claim_repo::find_by_id(claim_id)
                 .await
                 .map_err(AppError::from)?
                 .ok_or_else(|| AppError::NotFound("Claim not found".to_string()))?;
@@ -827,7 +871,7 @@ pub async fn cancel_shift_claim(
                 ));
             }
 
-            let cancelled_claim = shift_claim_repo::cancel_claim(tx, claim_id, user_id)
+            let cancelled_claim = shift_claim_repo::cancel(tx, claim_id, user_id)
                 .await?
                 .ok_or_else(|| {
                     AppError::NotFound("Claim not found or not cancellable".to_string())
@@ -870,7 +914,7 @@ pub async fn cancel_shift_claim(
 pub async fn get_pending_claims(ctx: UserContext) -> Result<HttpResponse> {
     ctx.requires_manager()?;
 
-    let claims = shift_claim_repo::get_pending_claims_by_company(ctx.strict_company_id()?)
+    let claims = shift_claim_repo::find_pending_by_company_id(ctx.strict_company_id()?)
         .await
         .map_err(AppError::from)?;
 
