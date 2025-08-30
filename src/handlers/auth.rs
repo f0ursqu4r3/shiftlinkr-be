@@ -1,4 +1,7 @@
-use actix_web::{HttpResponse, Result, web, web::Path};
+use actix_web::{
+    HttpResponse, Result,
+    web::{Data, Json, Path},
+};
 use serde;
 use serde::Serialize;
 use serde_json::json;
@@ -16,7 +19,7 @@ use crate::{
     },
     error::AppError,
     handlers::shared::ApiResponse,
-    middleware::{cache::InvalidationContext, request_info::RequestInfo},
+    middleware::{CacheLayer, cache::InvalidationContext, request_info::RequestInfo},
     services::{activity_logger, auth},
     user_context::UserContext,
 };
@@ -36,8 +39,8 @@ pub struct InviteTokenResponse {
 }
 
 pub async fn register(
-    request: web::Json<CreateUserInput>,
-    cache: web::Data<crate::middleware::CacheLayer>,
+    request: Json<CreateUserInput>,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let register_request = request.into_inner();
 
@@ -57,10 +60,7 @@ pub async fn register(
     Ok(ApiResponse::success(response))
 }
 
-pub async fn login(
-    request: web::Json<LoginInput>,
-    cache: web::Data<crate::middleware::CacheLayer>,
-) -> Result<HttpResponse> {
+pub async fn login(request: Json<LoginInput>, cache: Data<CacheLayer>) -> Result<HttpResponse> {
     let login_request = request.into_inner();
 
     let response = auth::login(login_request).await.map_err(|e| {
@@ -95,7 +95,7 @@ pub async fn me(ctx: UserContext) -> Result<HttpResponse> {
     Ok(ApiResponse::success(response))
 }
 
-pub async fn forgot_password(request: web::Json<ForgotPasswordInput>) -> Result<HttpResponse> {
+pub async fn forgot_password(request: Json<ForgotPasswordInput>) -> Result<HttpResponse> {
     let token = auth::forgot_password(&request.email).await.map_err(|e| {
         log::error!("Failed to send password reset email: {}", e);
         AppError::from(e)
@@ -111,8 +111,8 @@ pub async fn forgot_password(request: web::Json<ForgotPasswordInput>) -> Result<
 }
 
 pub async fn reset_password(
-    input: web::Json<ResetPasswordInput>,
-    cache: web::Data<crate::middleware::CacheLayer>,
+    input: Json<ResetPasswordInput>,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     auth::reset_password(&input.token, &input.new_password)
         .await
@@ -133,9 +133,9 @@ pub async fn reset_password(
 
 pub async fn create_invite(
     ctx: UserContext,
-    input: web::Json<CreateInviteInput>,
+    input: Json<CreateInviteInput>,
     req_info: RequestInfo,
-    cache: web::Data<crate::middleware::CacheLayer>,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let user_id = ctx.user_id();
 
@@ -249,7 +249,7 @@ pub async fn create_invite(
     Ok(ApiResponse::success(invite_token_response))
 }
 
-pub async fn get_invite(path: web::Path<String>) -> Result<HttpResponse> {
+pub async fn get_invite(path: Path<String>) -> Result<HttpResponse> {
     let token = path.into_inner();
 
     let invite_token = invite_repo::get_invite_token(&token)
@@ -296,7 +296,7 @@ pub async fn accept_invite(
     token: Path<String>,
     ctx: UserContext,
     req_info: RequestInfo,
-    cache: web::Data<crate::middleware::CacheLayer>,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let user = ctx.user;
 
@@ -451,7 +451,7 @@ pub async fn reject_invite(
     token: Path<String>,
     ctx: UserContext,
     req_info: RequestInfo,
-    cache: web::Data<crate::middleware::CacheLayer>,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     // Get invite token
     let invite_token = invite_repo::get_invite_token(&token)
@@ -558,7 +558,7 @@ pub async fn get_my_invites(ctx: UserContext) -> Result<HttpResponse> {
 pub async fn switch_company(
     path: Path<Uuid>,
     ctx: UserContext,
-    cache: web::Data<crate::middleware::CacheLayer>,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let new_company_id = path.into_inner();
     let user_id = ctx.user_id();

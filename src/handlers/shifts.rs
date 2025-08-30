@@ -1,4 +1,7 @@
-use actix_web::{HttpResponse, Result, web};
+use actix_web::{
+    HttpResponse, Result,
+    web::{Data, Json, Path, Query},
+};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -59,9 +62,9 @@ pub struct AssignmentResponseInput {
 // Shift handlers
 pub async fn create_shift(
     ctx: UserContext,
-    input: web::Json<CreateUpdateShiftInput>,
+    input: Json<CreateUpdateShiftInput>,
     req_info: RequestInfo,
-    cache: web::Data<crate::middleware::CacheLayer>,
+    cache: Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
     ctx.requires_same_company(input.company_id)?;
@@ -129,7 +132,7 @@ pub async fn create_shift(
 // In shifts.rs handler
 pub async fn get_shifts(
     ctx: UserContext,
-    query: web::Query<ShiftQuery>,
+    query: Query<ShiftQuery>,
 ) -> Result<HttpResponse, AppError> {
     match &query.query_type {
         ShiftQueryType::User(user_id) => ctx.requires_same_user(*user_id)?,
@@ -146,7 +149,7 @@ pub async fn get_shifts(
     Ok(ApiResponse::success(shifts))
 }
 
-pub async fn get_shift(path: web::Path<Uuid>, ctx: UserContext) -> Result<HttpResponse> {
+pub async fn get_shift(path: Path<Uuid>, ctx: UserContext) -> Result<HttpResponse> {
     let company_id = ctx.strict_company_id()?;
     let shift_id = path.into_inner();
 
@@ -161,11 +164,11 @@ pub async fn get_shift(path: web::Path<Uuid>, ctx: UserContext) -> Result<HttpRe
 }
 
 pub async fn update_shift(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
-    input: web::Json<CreateUpdateShiftInput>,
+    input: Json<CreateUpdateShiftInput>,
     req_info: RequestInfo,
-    cache: web::Data<crate::middleware::CacheLayer>,
+    cache: Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     // Check if user is admin or manager
     ctx.requires_manager()?;
@@ -249,11 +252,11 @@ pub async fn update_shift(
 }
 
 pub async fn assign_shift(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
-    input: web::Json<AssignShiftInput>,
+    input: Json<AssignShiftInput>,
     req_info: RequestInfo,
-    cache: web::Data<crate::middleware::CacheLayer>,
+    cache: Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
     let company_id = ctx.strict_company_id()?;
@@ -346,10 +349,10 @@ pub async fn assign_shift(
 }
 
 pub async fn unassign_shift(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
     req_info: RequestInfo,
-    cache: web::Data<crate::middleware::CacheLayer>,
+    cache: Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
     let company_id = ctx.strict_company_id()?;
@@ -419,11 +422,11 @@ pub async fn unassign_shift(
 }
 
 pub async fn update_shift_status(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
-    input: web::Json<UpdateShiftStatusInput>,
+    input: Json<UpdateShiftStatusInput>,
     req_info: RequestInfo,
-    cache: web::Data<crate::middleware::CacheLayer>,
+    cache: Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
     let company_id = ctx.strict_company_id()?;
@@ -488,10 +491,10 @@ pub async fn update_shift_status(
 }
 
 pub async fn delete_shift(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
     req_info: RequestInfo,
-    cache: web::Data<crate::middleware::CacheLayer>,
+    cache: Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
     let company_id = ctx.strict_company_id()?;
@@ -549,10 +552,7 @@ pub async fn delete_shift(
 }
 
 // Get shift assignments for a specific shift (managers/admins only)
-pub async fn get_shift_assignments(
-    path: web::Path<Uuid>,
-    ctx: UserContext,
-) -> Result<HttpResponse> {
+pub async fn get_shift_assignments(path: Path<Uuid>, ctx: UserContext) -> Result<HttpResponse> {
     ctx.requires_manager()?;
 
     let shift_id = path.into_inner();
@@ -587,11 +587,11 @@ pub async fn get_my_pending_assignments(ctx: UserContext) -> Result<HttpResponse
 
 // Respond to a shift assignment
 pub async fn respond_to_assignment(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
-    input: web::Json<AssignmentResponseInput>,
+    input: Json<AssignmentResponseInput>,
     req_info: RequestInfo,
-    cache: web::Data<crate::middleware::CacheLayer>,
+    cache: Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     let assignment_id = path.into_inner();
 
@@ -682,10 +682,10 @@ pub async fn respond_to_assignment(
 
 // Employee shift claiming with proper validation and workflow
 pub async fn claim_shift(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
     req_info: RequestInfo,
-    cache: web::Data<crate::middleware::CacheLayer>,
+    cache: Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     let company_id = ctx.strict_company_id()?;
     let shift_id = path.into_inner();
@@ -805,7 +805,7 @@ pub async fn claim_shift(
 }
 
 // Get claims for a specific shift (managers/admins only)
-pub async fn get_shift_claims(path: web::Path<Uuid>, ctx: UserContext) -> Result<HttpResponse> {
+pub async fn get_shift_claims(path: Path<Uuid>, ctx: UserContext) -> Result<HttpResponse> {
     ctx.requires_manager()?;
 
     let shift_id = path.into_inner();
@@ -830,11 +830,11 @@ pub async fn get_my_claims(ctx: UserContext) -> Result<HttpResponse> {
 
 // Approve a shift claim (managers/admins only)
 pub async fn approve_shift_claim(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
-    approval_data: web::Json<ApprovalInput>,
+    approval_data: Json<ApprovalInput>,
     req_info: RequestInfo,
-    cache: web::Data<crate::middleware::CacheLayer>,
+    cache: Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
 
@@ -914,11 +914,11 @@ pub async fn approve_shift_claim(
 
 // Reject a shift claim (managers/admins only)
 pub async fn reject_shift_claim(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
-    rejection_data: web::Json<ApprovalInput>,
+    rejection_data: Json<ApprovalInput>,
     req_info: RequestInfo,
-    cache: web::Data<crate::middleware::CacheLayer>,
+    cache: Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
 
@@ -993,10 +993,10 @@ pub async fn reject_shift_claim(
 
 // Cancel a shift claim (by the user who made it)
 pub async fn cancel_shift_claim(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
     req_info: RequestInfo,
-    cache: web::Data<crate::middleware::CacheLayer>,
+    cache: Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     let claim_id = path.into_inner();
     let user_id = ctx.user_id();

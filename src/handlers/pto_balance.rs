@@ -1,4 +1,7 @@
-use actix_web::{HttpResponse, Result, web::{self, Data}};
+use actix_web::{
+    HttpResponse, Result,
+    web::{Data, Json, Path, Query},
+};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -23,7 +26,7 @@ pub struct BalanceQueryInput {
 
 /// Get PTO balance for a user
 pub async fn get_pto_balance(
-    path: Option<web::Path<Uuid>>,
+    path: Option<Path<Uuid>>,
     ctx: UserContext,
     req_info: RequestInfo,
     cache: Data<CacheLayer>,
@@ -62,9 +65,9 @@ pub async fn get_pto_balance(
 
 /// Update PTO balance for a user (admins/managers only)
 pub async fn update_pto_balance(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
-    input: web::Json<PtoBalanceUpdateInput>,
+    input: Json<PtoBalanceUpdateInput>,
     req_info: RequestInfo,
     cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
@@ -144,16 +147,18 @@ pub async fn update_pto_balance(
 
 /// Adjust PTO balance (admins/managers only)
 pub async fn adjust_pto_balance(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
-    input: web::Json<PtoBalanceAdjustmentInput>,
+    input: Json<PtoBalanceAdjustmentInput>,
     req: RequestInfo,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
 
     let company_id = ctx.strict_company_id()?;
     let user_id = path.into_inner();
     let adjustment_data = input.into_inner();
+    let path_for_cache = req.path.clone();
 
     let balance = DatabaseTransaction::run(|tx| {
         Box::pin(async move {
@@ -195,14 +200,28 @@ pub async fn adjust_pto_balance(
     })
     .await?;
 
+    // Cache invalidation for PTO balance adjustment - affects pto, users, stats
+    cache
+        .invalidate(
+            &path_for_cache,
+            &InvalidationContext {
+                company_id: Some(company_id),
+                user_id: Some(user_id),
+                resource_id: None,
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(balance))
 }
 
 /// Get PTO balance history for a user
 pub async fn get_pto_balance_history(
-    path: web::Path<Uuid>,
-    query: web::Query<BalanceQueryInput>,
+    path: Path<Uuid>,
+    query: Query<BalanceQueryInput>,
     ctx: UserContext,
+    req_info: RequestInfo,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let user_id = path.into_inner();
     let company_id = ctx.strict_company_id()?;
@@ -216,19 +235,33 @@ pub async fn get_pto_balance_history(
             AppError::DatabaseError(err)
         })?;
 
+    // Cache PTO balance history - affects pto, users
+    cache
+        .invalidate(
+            &req_info.path,
+            &InvalidationContext {
+                company_id: Some(company_id),
+                user_id: Some(user_id),
+                resource_id: None,
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(balance_history))
 }
 
 /// Process PTO accrual for a user (admins/managers only)
 pub async fn process_pto_accrual(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     req: RequestInfo,
     ctx: UserContext,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
 
     let company_id = ctx.strict_company_id()?;
     let user_id = path.into_inner();
+    let path_for_cache = req.path.clone();
 
     let result = DatabaseTransaction::run(|tx| {
         Box::pin(async move {
@@ -281,6 +314,18 @@ pub async fn process_pto_accrual(
         })
     })
     .await?;
+
+    // Cache invalidation for PTO accrual processing - affects pto, users, stats
+    cache
+        .invalidate(
+            &path_for_cache,
+            &InvalidationContext {
+                company_id: Some(company_id),
+                user_id: Some(user_id),
+                resource_id: None,
+            },
+        )
+        .await;
 
     Ok(ApiResponse::success(result))
 }

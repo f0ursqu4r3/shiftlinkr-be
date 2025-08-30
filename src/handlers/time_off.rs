@@ -1,4 +1,7 @@
-use actix_web::{HttpResponse, Result, web};
+use actix_web::{
+    HttpResponse, Result,
+    web::{Data, Json, Path, Query},
+};
 use chrono::NaiveDate;
 use serde::Deserialize;
 use uuid::Uuid;
@@ -11,7 +14,7 @@ use crate::{
     },
     error::AppError,
     handlers::shared::ApiResponse,
-    middleware::{cache::InvalidationContext, request_info::RequestInfo},
+    middleware::{CacheLayer, cache::InvalidationContext, request_info::RequestInfo},
     services::{activity_logger, user_context::UserContext},
 };
 
@@ -32,9 +35,9 @@ pub struct ApprovalRequest {
 /// Create a new time-off request
 pub async fn create_time_off_request(
     ctx: UserContext,
-    input: web::Json<TimeOffRequestInput>,
+    input: Json<TimeOffRequestInput>,
     req_info: RequestInfo,
-    cache: web::Data<crate::middleware::CacheLayer>,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let request_input = input.into_inner();
     let request_user_id = request_input.user_id.clone();
@@ -116,7 +119,7 @@ pub async fn create_time_off_request(
 
 /// Get time-off requests with optional filtering
 pub async fn get_time_off_requests(
-    query: web::Query<TimeOffQuery>,
+    query: Query<TimeOffQuery>,
     ctx: UserContext,
 ) -> Result<HttpResponse> {
     let target_user_id = query.user_id.unwrap_or(ctx.user_id());
@@ -135,7 +138,7 @@ pub async fn get_time_off_requests(
 }
 
 /// Get a specific time-off request by ID
-pub async fn get_time_off_request(path: web::Path<Uuid>, ctx: UserContext) -> Result<HttpResponse> {
+pub async fn get_time_off_request(path: Path<Uuid>, ctx: UserContext) -> Result<HttpResponse> {
     let request_id = path.into_inner();
 
     let time_off_request = time_off_repo::get_request_by_id(request_id)
@@ -153,11 +156,11 @@ pub async fn get_time_off_request(path: web::Path<Uuid>, ctx: UserContext) -> Re
 
 /// Update a time-off request
 pub async fn update_time_off_request(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
-    input: web::Json<TimeOffRequestInput>,
+    input: Json<TimeOffRequestInput>,
     req_info: RequestInfo,
-    cache: web::Data<crate::middleware::CacheLayer>,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let request_id = path.into_inner();
 
@@ -269,10 +272,10 @@ pub async fn update_time_off_request(
 
 /// Delete a time-off request
 pub async fn delete_time_off_request(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
     req_info: RequestInfo,
-    cache: web::Data<crate::middleware::CacheLayer>,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let request_id = path.into_inner();
 
@@ -359,11 +362,11 @@ pub async fn delete_time_off_request(
 
 /// Approve a time-off request (managers/admins only)
 pub async fn approve_time_off_request(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
-    approval: web::Json<ApprovalRequest>,
+    approval: Json<ApprovalRequest>,
     req_info: RequestInfo,
-    cache: web::Data<crate::middleware::CacheLayer>,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
 
@@ -504,11 +507,11 @@ pub async fn approve_time_off_request(
 
 /// Deny a time-off request (managers/admins only)
 pub async fn deny_time_off_request(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
-    denial: web::Json<ApprovalRequest>,
+    denial: Json<ApprovalRequest>,
     req_info: RequestInfo,
-    cache: web::Data<crate::middleware::CacheLayer>,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     // Only managers and admins can deny requests
     ctx.requires_manager()?;
@@ -592,11 +595,11 @@ pub async fn deny_time_off_request(
 // /// Wrapper function for approving time-off requests with PTO balance integration
 // async fn approve_time_off_with_balance_check(
 //     AsyncUserContext(user_context): AsyncUserContext,
-//     time_off_repo: web::Data<TimeOffRepository>,
-//     activity_logger: web::Data<ActivityLogger>,
-//     pto_repo: web::Data<PtoBalanceRepository>,
-//     path: web::Path<Uuid>,
-//     approval: web::Json<ApprovalRequest>,
+//     time_off_repo: Data<TimeOffRepository>,
+//     activity_logger: Data<ActivityLogger>,
+//     pto_repo: Data<PtoBalanceRepository>,
+//     path: Path<Uuid>,
+//     approval: Json<ApprovalRequest>,
 //     req: HttpRequest,
 // ) -> Result<HttpResponse> {
 //     approve_time_off_request(
@@ -614,11 +617,11 @@ pub async fn deny_time_off_request(
 // /// Public wrapper for the approve endpoint
 // pub async fn approve_time_off_request_endpoint(
 //     AsyncUserContext(user_context): AsyncUserContext,
-//     time_off_repo: web::Data<TimeOffRepository>,
-//     activity_logger: web::Data<ActivityLogger>,
-//     pto_repo: web::Data<PtoBalanceRepository>,
-//     path: web::Path<Uuid>,
-//     approval: web::Json<ApprovalRequest>,
+//     time_off_repo: Data<TimeOffRepository>,
+//     activity_logger: Data<ActivityLogger>,
+//     pto_repo: Data<PtoBalanceRepository>,
+//     path: Path<Uuid>,
+//     approval: Json<ApprovalRequest>,
 //     req: HttpRequest,
 // ) -> Result<HttpResponse> {
 //     approve_time_off_with_balance_check(

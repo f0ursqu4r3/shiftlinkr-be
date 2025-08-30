@@ -1,4 +1,7 @@
-use actix_web::{HttpResponse, Result, web};
+use actix_web::{
+    HttpResponse, Result,
+    web::{Data, Json, Path, Query},
+};
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -16,7 +19,7 @@ use crate::{
     },
     error::AppError,
     handlers::shared::ApiResponse,
-    middleware::request_info::RequestInfo,
+    middleware::{CacheLayer, cache::InvalidationContext, request_info::RequestInfo},
     services::{activity_logger, user_context::UserContext},
 };
 
@@ -44,14 +47,16 @@ pub struct UserResponse {
 // Location handlers
 pub async fn create_location(
     ctx: UserContext,
-    input: web::Json<CreateUpdateLocationInput>,
+    input: Json<CreateUpdateLocationInput>,
     req_info: RequestInfo,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
 
     let user_id = ctx.user_id();
     let company_id = ctx.strict_company_id()?;
     let location_input = input.into_inner();
+    let path_for_cache = req_info.path.clone();
 
     // Extract values that need to be moved
     let name = location_input.name;
@@ -95,10 +100,26 @@ pub async fn create_location(
     })
     .await?;
 
+    // Cache invalidation for location creation - affects locations, company
+    cache
+        .invalidate(
+            &path_for_cache,
+            &InvalidationContext {
+                company_id: Some(company_id),
+                user_id: Some(user_id),
+                resource_id: Some(location.id),
+            },
+        )
+        .await;
+
     Ok(ApiResponse::created(location))
 }
 
-pub async fn get_locations(ctx: UserContext) -> Result<HttpResponse> {
+pub async fn get_locations(
+    ctx: UserContext,
+    req_info: RequestInfo,
+    cache: Data<CacheLayer>,
+) -> Result<HttpResponse> {
     let user_id = ctx.user_id();
 
     let companies = company_repo::get_companies_for_user(user_id)
@@ -121,10 +142,27 @@ pub async fn get_locations(ctx: UserContext) -> Result<HttpResponse> {
             AppError::DatabaseError(e)
         })?;
 
+    // Cache locations retrieval - affects locations, company
+    cache
+        .invalidate(
+            &req_info.path,
+            &InvalidationContext {
+                company_id: companies.first().map(|c| c.id), // Use first company if available
+                user_id: Some(user_id),
+                resource_id: None,
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(all_locations))
 }
 
-pub async fn get_location(path: web::Path<Uuid>, ctx: UserContext) -> Result<HttpResponse> {
+pub async fn get_location(
+    path: Path<Uuid>,
+    ctx: UserContext,
+    req_info: RequestInfo,
+    cache: Data<CacheLayer>,
+) -> Result<HttpResponse> {
     let location_id = path.into_inner();
     let user_id = ctx.user_id();
 
@@ -160,20 +198,35 @@ pub async fn get_location(path: web::Path<Uuid>, ctx: UserContext) -> Result<Htt
             AppError::PermissionDenied("Insufficient permissions to access location".to_string())
         })?;
 
+    // Cache location retrieval - affects locations
+    cache
+        .invalidate(
+            &req_info.path,
+            &InvalidationContext {
+                company_id: Some(location.company_id),
+                user_id: Some(user_id),
+                resource_id: Some(location_id),
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(location))
 }
 
 pub async fn update_location(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
-    input: web::Json<CreateUpdateLocationInput>,
+    input: Json<CreateUpdateLocationInput>,
     req_info: RequestInfo,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let company_id = ctx.strict_company_id()?;
 
     ctx.requires_manager()?;
 
     let location_id = path.into_inner();
+    let path_for_cache = req_info.path.clone();
+    let user_id = ctx.user_id();
 
     let location = DatabaseTransaction::run(|tx| {
         Box::pin(async move {
@@ -206,7 +259,7 @@ pub async fn update_location(
             activity_logger::log_location_activity(
                 tx,
                 company_id,
-                Some(ctx.user_id()),
+                Some(user_id),
                 location.id,
                 Action::UPDATED,
                 format!("Location '{}' updated", location.name),
@@ -219,15 +272,30 @@ pub async fn update_location(
     })
     .await?;
 
+    // Cache invalidation for location update - affects locations, company
+    cache
+        .invalidate(
+            &path_for_cache,
+            &InvalidationContext {
+                company_id: Some(company_id),
+                user_id: Some(user_id),
+                resource_id: Some(location.id),
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(location))
 }
 
 pub async fn delete_location(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let location_id = path.into_inner();
+    let path_for_cache = req_info.path.clone();
+    let user_id = ctx.user_id();
 
     // Get the location to check permissions
     let location = location_repo::find_by_id(location_id)
@@ -269,7 +337,7 @@ pub async fn delete_location(
             activity_logger::log_location_activity(
                 tx,
                 location.company_id,
-                Some(ctx.user_id()),
+                Some(user_id),
                 location.id,
                 Action::DELETED,
                 format!("Location '{}' deleted", location.name),
@@ -282,6 +350,18 @@ pub async fn delete_location(
     })
     .await?;
 
+    // Cache invalidation for location deletion - affects locations, company
+    cache
+        .invalidate(
+            &path_for_cache,
+            &InvalidationContext {
+                company_id: Some(location.company_id),
+                user_id: Some(user_id),
+                resource_id: Some(location_id),
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success_message(
         "Location deleted successfully",
     ))
@@ -290,14 +370,16 @@ pub async fn delete_location(
 // Team handlers
 pub async fn create_team(
     ctx: UserContext,
-    input: web::Json<CreateUpdateTeamInput>,
+    input: Json<CreateUpdateTeamInput>,
     req_info: RequestInfo,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     // Get the location to determine which company it belongs to
     let location_id = input.location_id;
     let team_input = input.into_inner();
     let team_name = team_input.name.clone();
     let user_id = ctx.user_id();
+    let path_for_cache = req_info.path.clone();
 
     let location = location_repo::find_by_id(location_id)
         .await
@@ -342,10 +424,27 @@ pub async fn create_team(
     })
     .await?;
 
+    // Cache invalidation for team creation - affects teams, locations
+    cache
+        .invalidate(
+            &path_for_cache,
+            &InvalidationContext {
+                company_id: Some(location.company_id),
+                user_id: Some(user_id),
+                resource_id: Some(team.id),
+            },
+        )
+        .await;
+
     Ok(ApiResponse::created(team))
 }
 
-pub async fn get_teams(query: web::Query<TeamQuery>, ctx: UserContext) -> Result<HttpResponse> {
+pub async fn get_teams(
+    query: Query<TeamQuery>,
+    ctx: UserContext,
+    req_info: RequestInfo,
+    cache: Data<CacheLayer>,
+) -> Result<HttpResponse> {
     let teams = if let Some(location_id) = query.location_id {
         let location = location_repo::find_by_id(location_id)
             .await
@@ -378,10 +477,34 @@ pub async fn get_teams(query: web::Query<TeamQuery>, ctx: UserContext) -> Result
             })?
     };
 
+    // Cache teams retrieval - affects teams, locations, company
+    let company_id = if query.location_id.is_some() {
+        // We already fetched the location above, use the context company
+        ctx.strict_company_id()?
+    } else {
+        ctx.strict_company_id()?
+    };
+
+    cache
+        .invalidate(
+            &req_info.path,
+            &InvalidationContext {
+                company_id: Some(company_id),
+                user_id: Some(ctx.user_id()),
+                resource_id: query.location_id,
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(teams))
 }
 
-pub async fn get_team(path: web::Path<Uuid>, ctx: UserContext) -> Result<HttpResponse> {
+pub async fn get_team(
+    path: Path<Uuid>,
+    ctx: UserContext,
+    req_info: RequestInfo,
+    cache: Data<CacheLayer>,
+) -> Result<HttpResponse> {
     let team_id = path.into_inner();
 
     ctx.requires_manager()?;
@@ -401,18 +524,32 @@ pub async fn get_team(path: web::Path<Uuid>, ctx: UserContext) -> Result<HttpRes
             AppError::NotFound("Team not found".to_string())
         })?;
 
+    // Cache team retrieval - affects teams
+    cache
+        .invalidate(
+            &req_info.path,
+            &InvalidationContext {
+                company_id: Some(location.company_id),
+                user_id: Some(ctx.user_id()),
+                resource_id: Some(team_id),
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(team))
 }
 
 pub async fn update_team(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
-    input: web::Json<CreateUpdateTeamInput>,
+    input: Json<CreateUpdateTeamInput>,
     req_info: RequestInfo,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let user_id = ctx.user_id();
 
     let team_id = path.into_inner();
+    let path_for_cache = req_info.path.clone();
 
     ctx.requires_manager()?;
 
@@ -461,15 +598,31 @@ pub async fn update_team(
         })
     })
     .await?;
+
+    // Cache invalidation for team update - affects teams, locations
+    cache
+        .invalidate(
+            &path_for_cache,
+            &InvalidationContext {
+                company_id: Some(location.company_id),
+                user_id: Some(user_id),
+                resource_id: Some(team.id),
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(team))
 }
 
 pub async fn delete_team(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let team_id = path.into_inner();
+    let path_for_cache = req_info.path.clone();
+    let user_id = ctx.user_id();
 
     ctx.requires_manager()?;
 
@@ -493,7 +646,7 @@ pub async fn delete_team(
             activity_logger::log_team_activity(
                 tx,
                 location.company_id,
-                Some(ctx.user_id()),
+                Some(user_id),
                 team_id,
                 Action::DELETED,
                 format!("Team with ID {} deleted", team_id),
@@ -506,16 +659,32 @@ pub async fn delete_team(
         })
     })
     .await?;
+
+    // Cache invalidation for team deletion - affects teams, locations
+    cache
+        .invalidate(
+            &path_for_cache,
+            &InvalidationContext {
+                company_id: Some(location.company_id),
+                user_id: Some(user_id),
+                resource_id: Some(team_id),
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success_message("Team deleted successfully"))
 }
 
 // Team member handlers
 pub async fn add_team_member(
-    path: web::Path<(Uuid, Uuid)>,
+    path: Path<(Uuid, Uuid)>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let (team_id, user_id) = path.into_inner();
+    let path_for_cache = req_info.path.clone();
+    let manager_id = ctx.user_id();
 
     ctx.requires_manager()?;
 
@@ -555,10 +724,19 @@ pub async fn add_team_member(
     })
     .await?;
 
+    // Invalidate relevant cache entries
+    let invalidation_ctx = InvalidationContext {
+        company_id: Some(location.company_id),
+        user_id: Some(manager_id),
+        resource_id: Some(team_id),
+    };
+
+    cache.invalidate(&path_for_cache, &invalidation_ctx).await;
+
     Ok(ApiResponse::success(team_member))
 }
 
-pub async fn get_team_members(path: web::Path<Uuid>, ctx: UserContext) -> Result<HttpResponse> {
+pub async fn get_team_members(path: Path<Uuid>, ctx: UserContext) -> Result<HttpResponse> {
     let team_id = path.into_inner();
 
     ctx.requires_manager()?;
@@ -576,11 +754,14 @@ pub async fn get_team_members(path: web::Path<Uuid>, ctx: UserContext) -> Result
 }
 
 pub async fn remove_team_member(
-    path: web::Path<(Uuid, Uuid)>,
+    path: Path<(Uuid, Uuid)>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let (team_id, user_id) = path.into_inner();
+    let path_for_cache = req_info.path.clone();
+    let manager_id = ctx.user_id();
 
     ctx.requires_manager()?;
 
@@ -624,6 +805,15 @@ pub async fn remove_team_member(
     })
     .await?;
 
+    // Invalidate relevant cache entries
+    let invalidation_ctx = InvalidationContext {
+        company_id: Some(location.company_id),
+        user_id: Some(manager_id),
+        resource_id: Some(team_id),
+    };
+
+    cache.invalidate(&path_for_cache, &invalidation_ctx).await;
+
     Ok(ApiResponse::success_message(
         "Team member removed successfully",
     ))
@@ -664,14 +854,16 @@ pub async fn get_users(ctx: UserContext) -> Result<HttpResponse> {
 }
 
 pub async fn update_user(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
-    input: web::Json<UpdateUserInput>,
+    input: Json<UpdateUserInput>,
     req_info: RequestInfo,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse, AppError> {
     let user_id_to_update = path.into_inner();
     let user_id = ctx.user_id();
     let update_request = input.into_inner();
+    let path_for_cache = req_info.path.clone();
 
     // Check permissions based on whether role is being updated
     if update_request.role.is_some() {
@@ -746,6 +938,15 @@ pub async fn update_user(
     })
     .await?;
 
+    // Invalidate relevant cache entries
+    let invalidation_ctx = InvalidationContext {
+        company_id: Some(company_id),
+        user_id: Some(user_id),
+        resource_id: Some(user_id_to_update),
+    };
+
+    cache.invalidate(&path_for_cache, &invalidation_ctx).await;
+
     Ok(ApiResponse::success(UserResponse {
         id: updated_user.id,
         email: updated_user.email,
@@ -759,11 +960,14 @@ pub async fn update_user(
 }
 
 pub async fn delete_user(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let user_id_to_delete = path.into_inner();
+    let path_for_cache = req_info.path.clone();
+    let admin_id = ctx.user_id();
 
     // Only admins can delete users - check company-specific admin role
     ctx.requires_manager()?;
@@ -814,6 +1018,15 @@ pub async fn delete_user(
         })
     })
     .await?;
+
+    // Invalidate relevant cache entries
+    let invalidation_ctx = InvalidationContext {
+        company_id: Some(company_id),
+        user_id: Some(admin_id),
+        resource_id: Some(user_id_to_delete),
+    };
+
+    cache.invalidate(&path_for_cache, &invalidation_ctx).await;
 
     Ok(ApiResponse::success_message("User deleted successfully"))
 }

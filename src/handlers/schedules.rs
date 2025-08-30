@@ -1,6 +1,6 @@
 use actix_web::{
     HttpResponse, Result,
-    web::{self, Data},
+    web::{Data, Json, Path},
 };
 use serde::Deserialize;
 use uuid::Uuid;
@@ -27,7 +27,7 @@ pub struct AssignmentResponseRequest {
 // User Shift Schedules
 pub async fn create_user_schedule(
     ctx: UserContext,
-    input: web::Json<UserShiftScheduleInput>,
+    input: Json<UserShiftScheduleInput>,
     req_info: RequestInfo,
     cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
@@ -60,7 +60,7 @@ pub async fn create_user_schedule(
 }
 
 pub async fn get_user_schedule(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
     req_info: RequestInfo,
     cache: Data<CacheLayer>,
@@ -95,9 +95,9 @@ pub async fn get_user_schedule(
 }
 
 pub async fn update_user_schedule(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
-    input: web::Json<UserShiftScheduleInput>,
+    input: Json<UserShiftScheduleInput>,
     req_info: RequestInfo,
     cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
@@ -132,7 +132,7 @@ pub async fn update_user_schedule(
 }
 
 pub async fn delete_user_schedule(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
     req_info: RequestInfo,
     cache: Data<CacheLayer>,
@@ -172,23 +172,44 @@ pub async fn delete_user_schedule(
 // Shift Assignments
 pub async fn create_shift_assignment(
     ctx: UserContext,
-    input: web::Json<ShiftAssignmentInput>,
+    input: Json<ShiftAssignmentInput>,
+    req_info: RequestInfo,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
+    let company_id = ctx.strict_company_id()?;
+    let user_id = ctx.user_id();
 
     let assignment = DatabaseTransaction::run(|tx| {
         Box::pin(async move {
-            schedule_repo::create_shift_assignment(tx, ctx.user_id(), input.into_inner())
+            schedule_repo::create_shift_assignment(tx, user_id, input.into_inner())
                 .await
                 .map_err(AppError::from)
         })
     })
     .await?;
 
+    // Cache invalidation for assignment creation - affects schedules, shifts, assignments
+    cache
+        .invalidate(
+            &req_info.path,
+            &InvalidationContext {
+                company_id: Some(company_id),
+                user_id: Some(assignment.user_id),
+                resource_id: Some(assignment.id),
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(assignment))
 }
 
-pub async fn get_shift_assignment(path: web::Path<Uuid>, ctx: UserContext) -> Result<HttpResponse> {
+pub async fn get_shift_assignment(
+    path: Path<Uuid>,
+    ctx: UserContext,
+    req_info: RequestInfo,
+    cache: Data<CacheLayer>,
+) -> Result<HttpResponse> {
     let assignment_id = path.into_inner();
 
     let assignment = schedule_repo::get_shift_assignment(assignment_id)
@@ -201,12 +222,26 @@ pub async fn get_shift_assignment(path: web::Path<Uuid>, ctx: UserContext) -> Re
 
     ctx.requires_same_user(assignment.user_id)?;
 
+    // Cache assignment retrieval - affects assignments
+    cache
+        .invalidate(
+            &req_info.path,
+            &InvalidationContext {
+                company_id: Some(ctx.strict_company_id()?),
+                user_id: Some(assignment.user_id),
+                resource_id: Some(assignment.id),
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(assignment))
 }
 
 pub async fn get_shift_assignments_by_shift(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
+    req_info: RequestInfo,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
 
@@ -219,12 +254,26 @@ pub async fn get_shift_assignments_by_shift(
             AppError::DatabaseError(e)
         })?;
 
+    // Cache assignments by shift - affects assignments, shifts
+    cache
+        .invalidate(
+            &req_info.path,
+            &InvalidationContext {
+                company_id: Some(ctx.strict_company_id()?),
+                user_id: None,
+                resource_id: Some(shift_id),
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(assignments))
 }
 
 pub async fn get_shift_assignments_by_user(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
+    req_info: RequestInfo,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let user_id = path.into_inner();
 
@@ -237,12 +286,26 @@ pub async fn get_shift_assignments_by_user(
             AppError::DatabaseError(e)
         })?;
 
+    // Cache assignments by user - affects assignments, users
+    cache
+        .invalidate(
+            &req_info.path,
+            &InvalidationContext {
+                company_id: Some(ctx.strict_company_id()?),
+                user_id: Some(user_id),
+                resource_id: None,
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(assignments))
 }
 
 pub async fn get_pending_assignments_for_user(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
+    req_info: RequestInfo,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let user_id = path.into_inner();
 
@@ -255,13 +318,27 @@ pub async fn get_pending_assignments_for_user(
             AppError::DatabaseError(e)
         })?;
 
+    // Cache pending assignments - affects assignments, users
+    cache
+        .invalidate(
+            &req_info.path,
+            &InvalidationContext {
+                company_id: Some(ctx.strict_company_id()?),
+                user_id: Some(user_id),
+                resource_id: None,
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(assignments))
 }
 
 pub async fn respond_to_assignment(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
-    input: web::Json<AssignmentResponseRequest>,
+    input: Json<AssignmentResponseRequest>,
+    req_info: RequestInfo,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let assignment_id = path.into_inner();
 
@@ -290,10 +367,27 @@ pub async fn respond_to_assignment(
     })
     .await?;
 
+    // Cache invalidation for assignment response - affects assignments, schedules, shifts
+    cache
+        .invalidate(
+            &req_info.path,
+            &InvalidationContext {
+                company_id: Some(ctx.strict_company_id()?),
+                user_id: Some(assignment.user_id),
+                resource_id: Some(assignment_id),
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(updated_assignment))
 }
 
-pub async fn cancel_assignment(path: web::Path<Uuid>, ctx: UserContext) -> Result<HttpResponse> {
+pub async fn cancel_assignment(
+    path: Path<Uuid>,
+    ctx: UserContext,
+    req_info: RequestInfo,
+    cache: Data<CacheLayer>,
+) -> Result<HttpResponse> {
     ctx.requires_manager()?;
 
     let assignment_id = path.into_inner();
@@ -306,10 +400,26 @@ pub async fn cancel_assignment(path: web::Path<Uuid>, ctx: UserContext) -> Resul
         })?
         .ok_or_else(|| AppError::NotFound("Shift assignment not found".to_string()))?;
 
+    // Cache invalidation for assignment cancellation - affects assignments, schedules, shifts
+    cache
+        .invalidate(
+            &req_info.path,
+            &InvalidationContext {
+                company_id: Some(ctx.strict_company_id()?),
+                user_id: Some(assignment.user_id),
+                resource_id: Some(assignment_id),
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(assignment))
 }
 
-pub async fn expire_overdue_assignments(ctx: UserContext) -> Result<HttpResponse> {
+pub async fn expire_overdue_assignments(
+    ctx: UserContext,
+    req_info: RequestInfo,
+    cache: Data<CacheLayer>,
+) -> Result<HttpResponse> {
     ctx.requires_admin()?;
 
     let expired_assignments = DatabaseTransaction::run(|tx| {
@@ -321,10 +431,26 @@ pub async fn expire_overdue_assignments(ctx: UserContext) -> Result<HttpResponse
     })
     .await?;
 
+    // Cache invalidation for assignment expiration - affects assignments, schedules
+    cache
+        .invalidate(
+            &req_info.path,
+            &InvalidationContext {
+                company_id: Some(ctx.strict_company_id()?),
+                user_id: None,
+                resource_id: None,
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(expired_assignments))
 }
 
-pub async fn get_user_shift_suggestions(ctx: UserContext) -> Result<HttpResponse> {
+pub async fn get_user_shift_suggestions(
+    ctx: UserContext,
+    req_info: RequestInfo,
+    cache: Data<CacheLayer>,
+) -> Result<HttpResponse> {
     let user_id = ctx.user_id();
 
     let suggestions = schedule_repo::get_user_shift_suggestions(user_id)
@@ -333,6 +459,18 @@ pub async fn get_user_shift_suggestions(ctx: UserContext) -> Result<HttpResponse
             log::error!("Failed to get user shift suggestions: {}", e);
             AppError::DatabaseError(e)
         })?;
+
+    // Cache shift suggestions - affects shifts, schedules, users
+    cache
+        .invalidate(
+            &req_info.path,
+            &InvalidationContext {
+                company_id: Some(ctx.strict_company_id()?),
+                user_id: Some(user_id),
+                resource_id: None,
+            },
+        )
+        .await;
 
     Ok(ApiResponse::success(suggestions))
 }

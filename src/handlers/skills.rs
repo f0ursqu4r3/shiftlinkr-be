@@ -1,4 +1,7 @@
-use actix_web::{HttpResponse, Result, web};
+use actix_web::{
+    HttpResponse, Result,
+    web::{Data, Json, Path, Query},
+};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -29,7 +32,7 @@ pub struct SkillSearchQuery {
 // Skills management
 pub async fn create_skill(
     ctx: UserContext,
-    input: web::Json<SkillInput>,
+    input: Json<SkillInput>,
     req_info: RequestInfo,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
@@ -77,7 +80,7 @@ pub async fn get_all_skills(ctx: UserContext) -> Result<HttpResponse> {
     Ok(ApiResponse::success(skills))
 }
 
-pub async fn get_skill(path: web::Path<Uuid>, ctx: UserContext) -> Result<HttpResponse> {
+pub async fn get_skill(path: Path<Uuid>, ctx: UserContext) -> Result<HttpResponse> {
     let skill_id = path.into_inner();
     let company_id = ctx.strict_company_id()?;
 
@@ -90,9 +93,9 @@ pub async fn get_skill(path: web::Path<Uuid>, ctx: UserContext) -> Result<HttpRe
 }
 
 pub async fn update_skill(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
-    input: web::Json<SkillInput>,
+    input: Json<SkillInput>,
     req_info: RequestInfo,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
@@ -138,7 +141,7 @@ pub async fn update_skill(
 }
 
 pub async fn delete_skill(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
     req_info: RequestInfo,
 ) -> Result<HttpResponse> {
@@ -185,9 +188,9 @@ pub async fn delete_skill(
 // User Skills management
 pub async fn add_user_skill(
     ctx: UserContext,
-    input: web::Json<UserSkillInput>,
+    input: Json<UserSkillInput>,
     req_info: RequestInfo,
-    cache: web::Data<CacheLayer>,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
 
@@ -278,7 +281,7 @@ pub async fn add_user_skill(
     Ok(ApiResponse::success(user_skill))
 }
 
-pub async fn get_user_skills(path: web::Path<Uuid>, ctx: UserContext) -> Result<HttpResponse> {
+pub async fn get_user_skills(path: Path<Uuid>, ctx: UserContext) -> Result<HttpResponse> {
     let user_id = path.into_inner();
 
     ctx.requires_same_user(user_id)?;
@@ -293,9 +296,9 @@ pub async fn get_user_skills(path: web::Path<Uuid>, ctx: UserContext) -> Result<
 }
 
 pub async fn update_user_skill(
-    path: web::Path<(Uuid, Uuid)>,
+    path: Path<(Uuid, Uuid)>,
     ctx: UserContext,
-    input: web::Json<UpdateUserSkillRequest>,
+    input: Json<UpdateUserSkillRequest>,
     req_info: RequestInfo,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
@@ -355,10 +358,10 @@ pub async fn update_user_skill(
 }
 
 pub async fn remove_user_skill(
-    path: web::Path<(Uuid, Uuid)>,
+    path: Path<(Uuid, Uuid)>,
     ctx: UserContext,
     req_info: RequestInfo,
-    cache: web::Data<CacheLayer>,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
     let user_id = ctx.user_id();
@@ -455,7 +458,7 @@ pub async fn remove_user_skill(
 // Shift Required Skills management
 pub async fn add_shift_required_skill(
     ctx: UserContext,
-    input: web::Json<ShiftRequiredSkillInput>,
+    input: Json<ShiftRequiredSkillInput>,
     req_info: RequestInfo,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
@@ -507,10 +510,7 @@ pub async fn add_shift_required_skill(
     Ok(ApiResponse::success(shift_skill))
 }
 
-pub async fn get_shift_required_skills(
-    path: web::Path<Uuid>,
-    ctx: UserContext,
-) -> Result<HttpResponse> {
+pub async fn get_shift_required_skills(path: Path<Uuid>, ctx: UserContext) -> Result<HttpResponse> {
     let company_id = ctx.strict_company_id()?;
     let shift_id = path.into_inner();
 
@@ -527,7 +527,7 @@ pub async fn get_shift_required_skills(
 }
 
 pub async fn remove_shift_required_skill(
-    path: web::Path<(Uuid, Uuid)>,
+    path: Path<(Uuid, Uuid)>,
     ctx: UserContext,
     req_info: RequestInfo,
 ) -> Result<HttpResponse> {
@@ -580,8 +580,8 @@ pub async fn remove_shift_required_skill(
 
 // Skill search and matching
 pub async fn get_users_with_skill(
-    path: web::Path<Uuid>,
-    query: web::Query<SkillSearchQuery>,
+    path: Path<Uuid>,
+    query: Query<SkillSearchQuery>,
     ctx: UserContext,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;

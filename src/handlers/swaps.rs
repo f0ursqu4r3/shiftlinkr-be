@@ -1,4 +1,7 @@
-use actix_web::{HttpResponse, Result, web};
+use actix_web::{
+    HttpResponse, Result,
+    web::{Data, Json, Path, Query},
+};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -39,9 +42,9 @@ pub struct ApprovalRequest {
 /// Create a new shift swap request
 pub async fn create_swap_request(
     ctx: UserContext,
-    input: web::Json<ShiftSwapInput>,
+    input: Json<ShiftSwapInput>,
     req_info: RequestInfo,
-    cache: web::Data<crate::middleware::CacheLayer>,
+    cache: Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     // Users can only create swap requests for themselves unless they're managers/admins
     let request_input = input.into_inner();
@@ -122,10 +125,7 @@ pub async fn create_swap_request(
 }
 
 /// Get shift swap requests with optional filtering
-pub async fn get_swap_requests(
-    query: web::Query<SwapQuery>,
-    ctx: UserContext,
-) -> Result<HttpResponse> {
+pub async fn get_swap_requests(query: Query<SwapQuery>, ctx: UserContext) -> Result<HttpResponse> {
     let user_id = ctx.user_id();
     let company_id = ctx.strict_company_id()?;
     let requesting_user_id = query.requesting_user_id;
@@ -150,7 +150,7 @@ pub async fn get_swap_requests(
 }
 
 /// Get a specific shift swap request by ID
-pub async fn get_swap_request(path: web::Path<Uuid>, ctx: UserContext) -> Result<HttpResponse> {
+pub async fn get_swap_request(path: Path<Uuid>, ctx: UserContext) -> Result<HttpResponse> {
     let swap_id = path.into_inner();
 
     let swap_request = shift_swap_repo::find_swap_request_by_id(swap_id)
@@ -174,11 +174,11 @@ pub async fn get_swap_request(path: web::Path<Uuid>, ctx: UserContext) -> Result
 
 /// Respond to a shift swap request (for targeted swaps)
 pub async fn respond_to_swap(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
-    response: web::Json<SwapResponseRequest>,
+    response: Json<SwapResponseRequest>,
     req_info: RequestInfo,
-    cache: web::Data<crate::middleware::CacheLayer>,
+    cache: Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     let swap_id = path.into_inner();
 
@@ -301,11 +301,11 @@ pub async fn respond_to_swap(
 
 /// Approve a shift swap request (managers/admins only)
 pub async fn approve_swap_request(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
-    approval: web::Json<ApprovalRequest>,
+    approval: Json<ApprovalRequest>,
     req_info: RequestInfo,
-    cache: web::Data<crate::middleware::CacheLayer>,
+    cache: Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
 
@@ -418,11 +418,11 @@ pub async fn approve_swap_request(
 
 /// Deny a shift swap request (managers/admins only)
 pub async fn deny_swap_request(
-    path: web::Path<Uuid>,
+    path: Path<Uuid>,
     ctx: UserContext,
-    denial: web::Json<ApprovalRequest>,
+    denial: Json<ApprovalRequest>,
     req_info: RequestInfo,
-    cache: web::Data<crate::middleware::CacheLayer>,
+    cache: Data<crate::middleware::CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
 
