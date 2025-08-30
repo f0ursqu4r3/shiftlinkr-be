@@ -1,12 +1,18 @@
-use actix_web::{HttpResponse, Result, web};
+use actix_web::{
+    HttpResponse, Result,
+    web::{Data, Query},
+};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::database::repositories::stats as stats_repo;
-use crate::error::AppError;
-use crate::handlers::shared::ApiResponse;
-use crate::services::user_context::UserContext;
+use crate::{
+    database::repositories::stats as stats_repo,
+    error::AppError,
+    handlers::shared::ApiResponse,
+    middleware::{CacheLayer, cache::InvalidationContext, request_info::RequestInfo},
+    services::user_context::UserContext,
+};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -18,8 +24,10 @@ pub struct StatsQuery {
 
 /// Get dashboard statistics
 pub async fn get_dashboard_stats(
-    query: web::Query<StatsQuery>,
+    query: Query<StatsQuery>,
     ctx: UserContext,
+    req_info: RequestInfo,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let user_id = ctx.user_id();
 
@@ -35,13 +43,27 @@ pub async fn get_dashboard_stats(
                 AppError::DatabaseError(err)
             })?;
 
+    // Cache dashboard stats - they're expensive to calculate and frequently accessed
+    cache
+        .invalidate(
+            &req_info.path,
+            &InvalidationContext {
+                company_id: Some(ctx.strict_company_id()?),
+                user_id: Some(target_user_id),
+                resource_id: None,
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(stats))
 }
 
 /// Get shift statistics
 pub async fn get_shift_stats(
-    query: web::Query<StatsQuery>,
+    query: Query<StatsQuery>,
     ctx: UserContext,
+    req_info: RequestInfo,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let user_id = ctx.user_id();
 
@@ -56,13 +78,27 @@ pub async fn get_shift_stats(
             AppError::DatabaseError(err)
         })?;
 
+    // Cache shift stats - affects shifts and stats resources
+    cache
+        .invalidate(
+            &req_info.path,
+            &InvalidationContext {
+                company_id: Some(ctx.strict_company_id()?),
+                user_id: Some(target_user_id),
+                resource_id: None,
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(stats))
 }
 
 /// Get time-off statistics
 pub async fn get_time_off_stats(
-    query: web::Query<StatsQuery>,
+    query: Query<StatsQuery>,
     ctx: UserContext,
+    req_info: RequestInfo,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let user_id = ctx.user_id();
 
@@ -76,6 +112,18 @@ pub async fn get_time_off_stats(
             log::error!("Error fetching time-off stats: {}", err);
             AppError::DatabaseError(err)
         })?;
+
+    // Cache time-off stats - affects time-off and stats resources
+    cache
+        .invalidate(
+            &req_info.path,
+            &InvalidationContext {
+                company_id: Some(ctx.strict_company_id()?),
+                user_id: Some(target_user_id),
+                resource_id: None,
+            },
+        )
+        .await;
 
     Ok(ApiResponse::success(stats))
 }

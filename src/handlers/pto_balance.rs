@@ -1,4 +1,4 @@
-use actix_web::{HttpResponse, Result, web};
+use actix_web::{HttpResponse, Result, web::{self, Data}};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -10,7 +10,7 @@ use crate::{
     },
     error::AppError,
     handlers::shared::ApiResponse,
-    middleware::request_info::RequestInfo,
+    middleware::{CacheLayer, cache::InvalidationContext, request_info::RequestInfo},
     services::{activity_logger, user_context::UserContext},
 };
 
@@ -25,6 +25,8 @@ pub struct BalanceQueryInput {
 pub async fn get_pto_balance(
     path: Option<web::Path<Uuid>>,
     ctx: UserContext,
+    req_info: RequestInfo,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let user_id = path.map(|p| p.into_inner()).unwrap_or(ctx.user.id);
 
@@ -43,6 +45,18 @@ pub async fn get_pto_balance(
             AppError::NotFound(format!("PTO balance not found for user {}", user_id))
         })?;
 
+    // Cache PTO balance - affects pto, users resources
+    cache
+        .invalidate(
+            &req_info.path,
+            &InvalidationContext {
+                company_id: Some(company_id),
+                user_id: Some(user_id),
+                resource_id: None,
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(balance))
 }
 
@@ -51,13 +65,15 @@ pub async fn update_pto_balance(
     path: web::Path<Uuid>,
     ctx: UserContext,
     input: web::Json<PtoBalanceUpdateInput>,
-    req: RequestInfo,
+    req_info: RequestInfo,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
 
     let company_id = ctx.strict_company_id()?;
     let user_id = path.into_inner();
     let update_data = input.into_inner();
+    let path_for_cache = req_info.path.clone();
 
     let balance = DatabaseTransaction::run(|tx| {
         Box::pin(async move {
@@ -102,7 +118,7 @@ pub async fn update_pto_balance(
                     user_id, company_id
                 ),
                 Some(metadata),
-                &req,
+                &req_info,
             )
             .await?;
 
@@ -110,6 +126,18 @@ pub async fn update_pto_balance(
         })
     })
     .await?;
+
+    // Cache invalidation for PTO balance update - affects pto, users, stats
+    cache
+        .invalidate(
+            &path_for_cache,
+            &InvalidationContext {
+                company_id: Some(company_id),
+                user_id: Some(user_id),
+                resource_id: None,
+            },
+        )
+        .await;
 
     Ok(ApiResponse::success(balance))
 }

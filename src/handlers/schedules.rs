@@ -1,4 +1,7 @@
-use actix_web::{HttpResponse, Result, web};
+use actix_web::{
+    HttpResponse, Result,
+    web::{self, Data},
+};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -10,6 +13,7 @@ use crate::{
     },
     error::AppError,
     handlers::shared::ApiResponse,
+    middleware::{CacheLayer, cache::InvalidationContext, request_info::RequestInfo},
     services::user_context::UserContext,
 };
 
@@ -24,6 +28,8 @@ pub struct AssignmentResponseRequest {
 pub async fn create_user_schedule(
     ctx: UserContext,
     input: web::Json<UserShiftScheduleInput>,
+    req_info: RequestInfo,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let user_id = input.user_id;
 
@@ -38,10 +44,27 @@ pub async fn create_user_schedule(
     })
     .await?;
 
+    // Cache invalidation for schedule creation - affects schedules and users
+    cache
+        .invalidate(
+            &req_info.path,
+            &InvalidationContext {
+                company_id: Some(ctx.strict_company_id()?),
+                user_id: Some(user_id),
+                resource_id: Some(schedule.id),
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(schedule))
 }
 
-pub async fn get_user_schedule(path: web::Path<Uuid>, ctx: UserContext) -> Result<HttpResponse> {
+pub async fn get_user_schedule(
+    path: web::Path<Uuid>,
+    ctx: UserContext,
+    req_info: RequestInfo,
+    cache: Data<CacheLayer>,
+) -> Result<HttpResponse> {
     let user_id = path.into_inner();
 
     ctx.requires_same_user(user_id)?;
@@ -56,6 +79,18 @@ pub async fn get_user_schedule(path: web::Path<Uuid>, ctx: UserContext) -> Resul
             AppError::NotFound(format!("User schedule not found for user ID: {}", user_id))
         })?;
 
+    // Cache read operation for schedule retrieval
+    cache
+        .invalidate(
+            &req_info.path,
+            &InvalidationContext {
+                company_id: Some(ctx.strict_company_id()?),
+                user_id: Some(user_id),
+                resource_id: Some(schedule.id),
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(schedule))
 }
 
@@ -63,6 +98,8 @@ pub async fn update_user_schedule(
     path: web::Path<Uuid>,
     ctx: UserContext,
     input: web::Json<UserShiftScheduleInput>,
+    req_info: RequestInfo,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let user_id = path.into_inner();
 
@@ -79,10 +116,27 @@ pub async fn update_user_schedule(
     })
     .await?;
 
+    // Cache invalidation for schedule update - affects schedules and users
+    cache
+        .invalidate(
+            &req_info.path,
+            &InvalidationContext {
+                company_id: Some(ctx.strict_company_id()?),
+                user_id: Some(user_id),
+                resource_id: Some(schedule.id),
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(schedule))
 }
 
-pub async fn delete_user_schedule(path: web::Path<Uuid>, ctx: UserContext) -> Result<HttpResponse> {
+pub async fn delete_user_schedule(
+    path: web::Path<Uuid>,
+    ctx: UserContext,
+    req_info: RequestInfo,
+    cache: Data<CacheLayer>,
+) -> Result<HttpResponse> {
     let user_id = path.into_inner();
 
     ctx.requires_manager()?;
@@ -97,6 +151,18 @@ pub async fn delete_user_schedule(path: web::Path<Uuid>, ctx: UserContext) -> Re
         })
     })
     .await?;
+
+    // Cache invalidation for schedule deletion - affects schedules and users
+    cache
+        .invalidate(
+            &req_info.path,
+            &InvalidationContext {
+                company_id: Some(ctx.strict_company_id()?),
+                user_id: Some(user_id),
+                resource_id: None, // No specific resource ID for deletion
+            },
+        )
+        .await;
 
     Ok(ApiResponse::success_message(
         "User schedule deleted successfully",
