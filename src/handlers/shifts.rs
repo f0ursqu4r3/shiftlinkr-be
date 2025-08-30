@@ -316,8 +316,29 @@ pub async fn assign_shift(
     })
     .await?;
 
-    // Invalidate cached GETs
-    cache.bump();
+    // Invalidate cached GETs - smart invalidation
+    cache
+        .invalidate(
+            "shifts",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                resource_id: Some(shift_id),
+                user_id: Some(assigned_user_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(ShiftAssignResponse {
         shift,
         assignment,
@@ -372,8 +393,28 @@ pub async fn unassign_shift(
     })
     .await?;
 
-    // Invalidate cached GETs
-    cache.bump();
+    // Invalidate cached GETs - smart invalidation
+    cache
+        .invalidate(
+            "shifts",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                resource_id: Some(shift_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(shift))
 }
 
@@ -421,8 +462,28 @@ pub async fn update_shift_status(
     })
     .await?;
 
-    // Invalidate cached GETs
-    cache.bump();
+    // Smart cache invalidation - update_shift_status
+    cache
+        .invalidate(
+            "shifts",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                resource_id: Some(shift_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(shift))
 }
 
@@ -593,8 +654,29 @@ pub async fn respond_to_assignment(
     })
     .await?;
 
-    // Invalidate cached GETs
-    cache.bump();
+    // Smart cache invalidation - respond_to_assignment
+    cache
+        .invalidate(
+            "shifts",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                resource_id: Some(assignment.shift_id),
+                user_id: Some(assignment.user_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(assignment_response))
 }
 
@@ -696,8 +778,29 @@ pub async fn claim_shift(
     })
     .await?;
 
-    // Invalidate cached GETs
-    cache.bump();
+    // Smart cache invalidation - claim_shift
+    cache
+        .invalidate(
+            "shifts",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                resource_id: Some(shift_id),
+                user_id: Some(user_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
     Ok(ApiResponse::created(claim))
 }
 
@@ -783,8 +886,29 @@ pub async fn approve_shift_claim(
     })
     .await?;
 
-    // Invalidate cached GETs
-    cache.bump();
+    // Smart cache invalidation - approve_shift_claim
+    cache
+        .invalidate(
+            "shifts",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                resource_id: Some(claim.shift_id),
+                user_id: Some(claim.user_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(ShiftClaimResponse { claim, shift }))
 }
 
@@ -841,8 +965,29 @@ pub async fn reject_shift_claim(
     })
     .await?;
 
-    // Invalidate cached GETs
-    cache.bump();
+    // Smart cache invalidation - reject_shift_claim
+    cache
+        .invalidate(
+            "shifts",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                resource_id: Some(claim.shift_id),
+                user_id: Some(claim.user_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(ShiftClaimResponse { claim, shift }))
 }
 
@@ -905,8 +1050,29 @@ pub async fn cancel_shift_claim(
     })
     .await?;
 
-    // Invalidate cached GETs
-    cache.bump();
+    // Smart cache invalidation - cancel_shift_claim
+    cache
+        .invalidate(
+            "shifts",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                resource_id: Some(claim.shift_id),
+                user_id: Some(user_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(ShiftClaimResponse { claim, shift }))
 }
 
