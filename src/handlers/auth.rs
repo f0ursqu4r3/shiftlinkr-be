@@ -16,7 +16,7 @@ use crate::{
     },
     error::AppError,
     handlers::shared::ApiResponse,
-    middleware::request_info::RequestInfo,
+    middleware::{cache::InvalidationContext, request_info::RequestInfo},
     services::{activity_logger, auth},
     user_context::UserContext,
 };
@@ -46,8 +46,14 @@ pub async fn register(
         AppError::internal_server_error_message(e.to_string())
     })?;
 
-    // Invalidate cached auth GETs (e.g., /me)
-    cache.bump();
+    // Smart cache invalidation - register (minimal - new user affects stats)
+    cache
+        .invalidate("users", &InvalidationContext::default())
+        .await;
+    cache
+        .invalidate("stats", &InvalidationContext::default())
+        .await;
+
     Ok(ApiResponse::success(response))
 }
 
@@ -62,8 +68,12 @@ pub async fn login(
         AppError::from(e)
     })?;
 
-    // Invalidate cache: user context may change
-    cache.bump();
+    // Smart cache invalidation - login (minimal - user activity/session context)
+    // Note: Login doesn't modify data, but may affect user-specific cached data
+    cache
+        .invalidate("users", &InvalidationContext::default())
+        .await;
+
     Ok(ApiResponse::success(response))
 }
 
@@ -111,8 +121,11 @@ pub async fn reset_password(
             AppError::from(e)
         })?;
 
-    // Invalidate auth-related cached responses
-    cache.bump();
+    // Smart cache invalidation - reset_password (affects user auth state)
+    cache
+        .invalidate("users", &InvalidationContext::default())
+        .await;
+
     Ok(ApiResponse::success_message(
         "Password has been reset successfully.",
     ))
@@ -212,8 +225,27 @@ pub async fn create_invite(
         expires_at: invite_token.expires_at.to_rfc3339(),
     };
 
-    // Invalidate cached invite lists
-    cache.bump();
+    // Smart cache invalidation - create_invite
+    cache
+        .invalidate(
+            "users",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(invite_token_response))
 }
 
@@ -367,6 +399,7 @@ pub async fn accept_invite(
     // Log successful invite acceptance
     // Return an Ok response with user info
     let user = accepting_user;
+    let user_id = user.id;
 
     // Get user's companies
     let companies = company_repo::get_companies_for_user(user.id)
@@ -378,8 +411,39 @@ pub async fn accept_invite(
 
     let response = MeResponse { user, companies };
 
-    // Invalidate cached /me and company lists
-    cache.bump();
+    // Smart cache invalidation - accept_invite
+    cache
+        .invalidate(
+            "users",
+            &InvalidationContext {
+                company_id: Some(invite_token.company_id),
+                user_id: Some(user_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    // User joining affects company stats and shift availability
+    cache
+        .invalidate(
+            "shifts",
+            &InvalidationContext {
+                company_id: Some(invite_token.company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(invite_token.company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(response))
 }
 
@@ -453,7 +517,27 @@ pub async fn reject_invite(
     })
     .await?;
 
-    cache.bump();
+    // Smart cache invalidation - reject_invite
+    cache
+        .invalidate(
+            "users",
+            &InvalidationContext {
+                company_id: Some(invite_token.company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(invite_token.company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success("Invite rejected successfully"))
 }
 
@@ -501,7 +585,40 @@ pub async fn switch_company(
             AppError::from(e)
         })?;
 
-    // Invalidate cached /me after switching companies
-    cache.bump();
+    // Smart cache invalidation - switch_company (affects user context in both companies)
+    // Invalidate for the new company
+    cache
+        .invalidate(
+            "users",
+            &InvalidationContext {
+                company_id: Some(new_company_id),
+                user_id: Some(user_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    // Also invalidate user-specific caches (since company context changed)
+    cache
+        .invalidate(
+            "shifts",
+            &InvalidationContext {
+                company_id: Some(new_company_id),
+                user_id: Some(user_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(new_company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(response))
 }

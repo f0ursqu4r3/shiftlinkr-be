@@ -11,7 +11,7 @@ use crate::{
     },
     error::AppError,
     handlers::shared::ApiResponse,
-    middleware::request_info::RequestInfo,
+    middleware::{cache::InvalidationContext, request_info::RequestInfo},
     services::{activity_logger, user_context::UserContext},
 };
 
@@ -78,8 +78,39 @@ pub async fn create_time_off_request(
     })
     .await?;
 
-    // Invalidate cached GETs in time-off scope
-    cache.bump();
+    // Smart cache invalidation - create_time_off_request
+    cache
+        .invalidate(
+            "time-off",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                user_id: Some(requesting_user_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    // Time-off affects shift availability and stats
+    cache
+        .invalidate(
+            "shifts",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
     Ok(ApiResponse::created(time_off_request))
 }
 
@@ -135,6 +166,7 @@ pub async fn update_time_off_request(
     let new_request_type = request_input.request_type.clone();
     let new_start_date = request_input.start_date;
     let new_end_date = request_input.end_date;
+    let company_id = ctx.strict_company_id()?;
 
     let time_off_request = time_off_repo::get_request_by_id(request_id)
         .await
@@ -198,8 +230,40 @@ pub async fn update_time_off_request(
     })
     .await?;
 
-    // Invalidate cached GETs
-    cache.bump();
+    // Smart cache invalidation - update_time_off_request
+    cache
+        .invalidate(
+            "time-off",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                user_id: Some(requesting_user_id),
+                resource_id: Some(request_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    // Time-off affects shift availability and stats
+    cache
+        .invalidate(
+            "shifts",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(updated_request))
 }
 
@@ -219,6 +283,7 @@ pub async fn delete_time_off_request(
         .ok_or_else(|| AppError::NotFound(format!("Time-off request not found: {}", request_id)))?;
 
     let target_user_id = time_off_request.user_id;
+    let company_id = ctx.strict_company_id()?;
 
     ctx.requires_same_user_or(target_user_id, "Cannot delete other users' requests")?;
 
@@ -253,8 +318,40 @@ pub async fn delete_time_off_request(
     })
     .await?;
 
-    // Invalidate cached GETs
-    cache.bump();
+    // Smart cache invalidation - delete_time_off_request
+    cache
+        .invalidate(
+            "time-off",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                user_id: Some(target_user_id),
+                resource_id: Some(request_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    // Time-off affects shift availability and stats
+    cache
+        .invalidate(
+            "shifts",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success_message(
         "Time-off request deleted successfully",
     ))
@@ -368,8 +465,40 @@ pub async fn approve_time_off_request(
     })
     .await?;
 
-    // Invalidate cached GETs
-    cache.bump();
+    // Smart cache invalidation - approve_time_off_request
+    cache
+        .invalidate(
+            "time-off",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                user_id: Some(approved_request.user_id),
+                resource_id: Some(request_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    // Time-off affects shift availability and stats
+    cache
+        .invalidate(
+            "shifts",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(approved_request))
 }
 
@@ -423,8 +552,40 @@ pub async fn deny_time_off_request(
     })
     .await?;
 
-    // Invalidate cached GETs
-    cache.bump();
+    // Smart cache invalidation - deny_time_off_request
+    cache
+        .invalidate(
+            "time-off",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                user_id: Some(denied_request.user_id),
+                resource_id: Some(request_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    // Time-off affects shift availability and stats
+    cache
+        .invalidate(
+            "shifts",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(denied_request))
 }
 

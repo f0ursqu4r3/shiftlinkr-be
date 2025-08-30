@@ -10,7 +10,7 @@ use crate::{
     },
     error::AppError,
     handlers::shared::ApiResponse,
-    middleware::request_info::RequestInfo,
+    middleware::{cache::InvalidationContext, request_info::RequestInfo},
     services::{activity_logger, user_context::UserContext},
 };
 
@@ -83,8 +83,41 @@ pub async fn create_swap_request(
     })
     .await?;
 
-    // Invalidate cached GETs in swaps scope
-    cache.bump();
+    // Smart cache invalidation - create_swap_request
+    cache
+        .invalidate(
+            "swaps",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                resource_id: Some(original_shift_id),
+                user_id: Some(requesting_user_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    // Swaps affect shift availability
+    cache
+        .invalidate(
+            "shifts",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                resource_id: Some(original_shift_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
     Ok(ApiResponse::created(swap_request))
 }
 
@@ -215,8 +248,54 @@ pub async fn respond_to_swap(
     })
     .await?;
 
-    // Invalidate cached GETs
-    cache.bump();
+    // Smart cache invalidation - respond_to_swap
+    cache
+        .invalidate(
+            "swaps",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                resource_id: Some(original_shift_id),
+                user_id: Some(requesting_user_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    // Also invalidate for the responding user
+    cache
+        .invalidate(
+            "swaps",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                resource_id: Some(original_shift_id),
+                user_id: Some(ctx.user.id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    // Swaps affect shift availability
+    cache
+        .invalidate(
+            "shifts",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                resource_id: Some(original_shift_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(updated_swap))
 }
 
@@ -285,8 +364,55 @@ pub async fn approve_swap_request(
     })
     .await?;
 
-    // Invalidate cached GETs
-    cache.bump();
+    // Smart cache invalidation - approve_swap_request
+    cache
+        .invalidate(
+            "swaps",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                resource_id: Some(swap_request.original_shift_id),
+                user_id: Some(swap_request.requesting_user_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    // Swaps affect shift availability for both shifts
+    cache
+        .invalidate(
+            "shifts",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                resource_id: Some(swap_request.original_shift_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    // If there's a target shift, invalidate that too
+    if let Some(target_shift_id) = shift_swap.target_shift_id {
+        cache
+            .invalidate(
+                "shifts",
+                &InvalidationContext {
+                    company_id: Some(company_id),
+                    resource_id: Some(target_shift_id),
+                    ..Default::default()
+                },
+            )
+            .await;
+    }
+
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(shift_swap))
 }
 
@@ -355,7 +481,40 @@ pub async fn deny_swap_request(
     })
     .await?;
 
-    // Invalidate cached GETs
-    cache.bump();
+    // Smart cache invalidation - deny_swap_request
+    cache
+        .invalidate(
+            "swaps",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                resource_id: Some(swap_request.original_shift_id),
+                user_id: Some(swap_request.requesting_user_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    // Swaps affect shift availability
+    cache
+        .invalidate(
+            "shifts",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                resource_id: Some(swap_request.original_shift_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success(shift_swap))
 }
