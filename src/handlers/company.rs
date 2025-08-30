@@ -1,6 +1,6 @@
 use actix_web::{
     HttpResponse, Result,
-    web::{Json, Path},
+    web::{Data, Json, Path},
 };
 use uuid::Uuid;
 
@@ -15,7 +15,7 @@ use crate::{
     },
     error::AppError,
     handlers::shared::ApiResponse,
-    middleware::request_info::RequestInfo,
+    middleware::{CacheLayer, cache::InvalidationContext, request_info::RequestInfo},
     services::activity_logger,
     user_context::UserContext,
 };
@@ -47,6 +47,7 @@ pub async fn create_company(
     request: Json<CreateCompanyInput>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let user_id = ctx.user_id();
 
@@ -103,6 +104,29 @@ pub async fn create_company(
         })
     })
     .await?;
+
+    // Smart cache invalidation - create_company
+    cache
+        .invalidate(
+            "users",
+            &InvalidationContext {
+                company_id: Some(company.id),
+                user_id: Some(user_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(company.id),
+                ..Default::default()
+            },
+        )
+        .await;
+
     // Return the company info with the user's role
     Ok(ApiResponse::created(CompanyInfo {
         id: company.id,
@@ -139,25 +163,24 @@ pub async fn add_employee_to_company(
     input: Json<AddEmployeeToCompanyInput>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let user_id = ctx.user_id();
+    let employee_user_id = input.user_id;
+    let employee_role = input.role.clone();
 
     ctx.requires_manager()?;
 
     let company_id = ctx.strict_company_id()?;
 
     // Check if the user is already an employee
-    if company_repo::check_user_company_access(company_id, input.user_id)
+    if company_repo::check_user_company_access(company_id, employee_user_id)
         .await
-        .map_err(|e| {
-            log::error!("Failed to check user company access: {}", e);
-            AppError::DatabaseError(e)
-        })?
-        .is_some()
+        .is_ok()
     {
         return Err(AppError::BadRequest(format!(
             "User {} is already an employee of company {}",
-            input.user_id, company_id
+            employee_user_id, company_id
         ))
         .into());
     }
@@ -169,12 +192,13 @@ pub async fn add_employee_to_company(
 
             // Log activity
             let metadata = activity_logger::metadata(vec![
-                (&"company_id".to_string(), company_id.to_string()),
-                (&"employee_user_id".to_string(), input.user_id.to_string()),
+                (
+                    &"employee_user_id".to_string(),
+                    employee_user_id.to_string(),
+                ),
                 (
                     &"employee_role".to_string(),
-                    input
-                        .role
+                    employee_role
                         .as_ref()
                         .map_or("None".to_string(), |r| r.to_string()),
                 ),
@@ -184,11 +208,11 @@ pub async fn add_employee_to_company(
                 tx,
                 company_id,
                 Some(user_id),
-                input.user_id,
+                employee_user_id,
                 "add_employee",
                 format!(
                     "User {} added to company {} with role {:?}",
-                    input.user_id, company_id, input.role
+                    employee_user_id, company_id, employee_role
                 ),
                 Some(metadata),
                 &req_info,
@@ -200,6 +224,41 @@ pub async fn add_employee_to_company(
     })
     .await?;
 
+    // Smart cache invalidation - add_employee_to_company
+    let company_id = ctx.strict_company_id()?;
+
+    cache
+        .invalidate(
+            "users",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                user_id: Some(employee_user_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    // Employee addition affects shifts and stats
+    cache
+        .invalidate(
+            "shifts",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success_message(
         "Employee added to company successfully",
     ))
@@ -209,6 +268,7 @@ pub async fn remove_employee_from_company(
     path: Path<Uuid>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let user_id = ctx.user_id();
 
@@ -249,6 +309,39 @@ pub async fn remove_employee_from_company(
     })
     .await?;
 
+    // Smart cache invalidation - remove_employee_from_company
+    cache
+        .invalidate(
+            "users",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                user_id: Some(target_user_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    // Employee removal affects shifts and stats
+    cache
+        .invalidate(
+            "shifts",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
     Ok(ApiResponse::success_message(
         "Employee removed from company successfully",
     ))
@@ -259,6 +352,7 @@ pub async fn update_employee_role(
     input: Json<CompanyRole>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let user_id = ctx.user_id();
 
@@ -305,6 +399,29 @@ pub async fn update_employee_role(
         })
     })
     .await?;
+
+    // Smart cache invalidation - update_employee_role
+    cache
+        .invalidate(
+            "users",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                user_id: Some(target_user_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    // Role changes affect permissions and stats
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
 
     Ok(ApiResponse::success_message(
         "Employee role updated successfully",

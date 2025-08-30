@@ -10,7 +10,7 @@ use crate::{
     },
     error::AppError,
     handlers::shared::ApiResponse,
-    middleware::request_info::RequestInfo,
+    middleware::{CacheLayer, cache::InvalidationContext, request_info::RequestInfo},
     services::{activity_logger, user_context::UserContext},
 };
 
@@ -187,6 +187,7 @@ pub async fn add_user_skill(
     ctx: UserContext,
     input: web::Json<UserSkillInput>,
     req_info: RequestInfo,
+    cache: web::Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
 
@@ -240,6 +241,39 @@ pub async fn add_user_skill(
         })
     })
     .await?;
+
+    // Smart cache invalidation - add_user_skill (affects shift eligibility)
+    cache
+        .invalidate(
+            "users",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                user_id: Some(target_user_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    // User skills affect which shifts they can be assigned to
+    cache
+        .invalidate(
+            "shifts",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
 
     Ok(ApiResponse::success(user_skill))
 }
@@ -324,6 +358,7 @@ pub async fn remove_user_skill(
     path: web::Path<(Uuid, Uuid)>,
     ctx: UserContext,
     req_info: RequestInfo,
+    cache: web::Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     ctx.requires_manager()?;
     let user_id = ctx.user_id();
@@ -380,6 +415,39 @@ pub async fn remove_user_skill(
         })
     })
     .await?;
+
+    // Smart cache invalidation - remove_user_skill (affects shift eligibility)
+    cache
+        .invalidate(
+            "users",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                user_id: Some(target_user_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    // Removing user skills affects which shifts they can be assigned to
+    cache
+        .invalidate(
+            "shifts",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    cache
+        .invalidate(
+            "stats",
+            &InvalidationContext {
+                company_id: Some(company_id),
+                ..Default::default()
+            },
+        )
+        .await;
 
     Ok(ApiResponse::success("User skill removed successfully"))
 }
