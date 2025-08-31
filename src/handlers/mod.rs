@@ -7,5 +7,6 @@ pub mod shared;
 pub mod shifts;
 pub mod skills;
 pub mod stats;
+pub mod subscription;
 pub mod swaps;
 pub mod time_off;

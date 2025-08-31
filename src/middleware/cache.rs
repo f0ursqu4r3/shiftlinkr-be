@@ -141,6 +141,165 @@ impl TagInferenceEngine {
                 id_capture_group: Some(1),
                 query_params: vec![],
             },
+            // Auth routes
+            ResourcePattern {
+                name: "auth",
+                path_regex: Regex::new(r"/api/v1/auth/(register|login|forgot-password|reset-password|me|invite|invites|switch-company)").unwrap(),
+                id_capture_group: None,
+                query_params: vec![],
+            },
+            ResourcePattern {
+                name: "auth_invite",
+                path_regex: Regex::new(r"/api/v1/auth/invite/([^/]+)").unwrap(),
+                id_capture_group: Some(1),
+                query_params: vec![],
+            },
+            ResourcePattern {
+                name: "auth_invite_action",
+                path_regex: Regex::new(r"/api/v1/auth/invite/([^/]+)/(accept|reject)").unwrap(),
+                id_capture_group: Some(1),
+                query_params: vec![],
+            },
+            ResourcePattern {
+                name: "auth_switch_company",
+                path_regex: Regex::new(r"/api/v1/auth/switch-company/([a-f0-9-]+)").unwrap(),
+                id_capture_group: Some(1),
+                query_params: vec![],
+            },
+            // Admin routes
+            ResourcePattern {
+                name: "admin_locations",
+                path_regex: Regex::new(r"/api/v1/admin/locations(?:/(\d+))?").unwrap(),
+                id_capture_group: Some(1),
+                query_params: vec!["company_id"],
+            },
+            ResourcePattern {
+                name: "admin_teams",
+                path_regex: Regex::new(r"/api/v1/admin/teams(?:/(\d+))?").unwrap(),
+                id_capture_group: Some(1),
+                query_params: vec!["company_id"],
+            },
+            ResourcePattern {
+                name: "admin_team_members",
+                path_regex: Regex::new(r"/api/v1/admin/teams/(\d+)/members(?:/(\d+))?").unwrap(),
+                id_capture_group: Some(2),
+                query_params: vec!["company_id"],
+            },
+            ResourcePattern {
+                name: "admin_users",
+                path_regex: Regex::new(r"/api/v1/admin/users(?:/(\d+))?").unwrap(),
+                id_capture_group: Some(1),
+                query_params: vec!["company_id"],
+            },
+            // Schedules routes
+            ResourcePattern {
+                name: "schedules",
+                path_regex: Regex::new(r"/api/v1/schedules(?:/(\d+))?").unwrap(),
+                id_capture_group: Some(1),
+                query_params: vec!["company_id", "user_id"],
+            },
+            ResourcePattern {
+                name: "schedule_suggestions",
+                path_regex: Regex::new(r"/api/v1/schedules/(\d+)/suggestions").unwrap(),
+                id_capture_group: Some(1),
+                query_params: vec!["company_id"],
+            },
+            // Shift assignments routes
+            ResourcePattern {
+                name: "shift_assignments",
+                path_regex: Regex::new(r"/api/v1/assignments(?:/(\d+))?").unwrap(),
+                id_capture_group: Some(1),
+                query_params: vec!["company_id", "user_id", "shift_id"],
+            },
+            ResourcePattern {
+                name: "shift_assignments_by_shift",
+                path_regex: Regex::new(r"/api/v1/assignments/shift/(\d+)").unwrap(),
+                id_capture_group: Some(1),
+                query_params: vec!["company_id"],
+            },
+            ResourcePattern {
+                name: "shift_assignments_by_user",
+                path_regex: Regex::new(r"/api/v1/assignments/user/(\d+)").unwrap(),
+                id_capture_group: Some(1),
+                query_params: vec!["company_id"],
+            },
+            ResourcePattern {
+                name: "pending_assignments",
+                path_regex: Regex::new(r"/api/v1/assignments/user/(\d+)/pending").unwrap(),
+                id_capture_group: Some(1),
+                query_params: vec!["company_id"],
+            },
+            ResourcePattern {
+                name: "assignment_action",
+                path_regex: Regex::new(r"/api/v1/assignments/(\d+)/(respond|cancel)").unwrap(),
+                id_capture_group: Some(1),
+                query_params: vec!["company_id"],
+            },
+            // PTO Balance routes
+            ResourcePattern {
+                name: "pto_balance",
+                path_regex: Regex::new(r"/api/v1/pto-balance(?:/(\d+))?").unwrap(),
+                id_capture_group: Some(1),
+                query_params: vec!["company_id", "user_id"],
+            },
+            ResourcePattern {
+                name: "pto_balance_history",
+                path_regex: Regex::new(r"/api/v1/pto-balance/(\d+)/history").unwrap(),
+                id_capture_group: Some(1),
+                query_params: vec!["company_id"],
+            },
+            ResourcePattern {
+                name: "pto_balance_action",
+                path_regex: Regex::new(r"/api/v1/pto-balance/(\d+)/(adjust|accrual)").unwrap(),
+                id_capture_group: Some(1),
+                query_params: vec!["company_id"],
+            },
+            // Skills routes
+            ResourcePattern {
+                name: "skills",
+                path_regex: Regex::new(r"/api/v1/skills(?:/(\d+))?").unwrap(),
+                id_capture_group: Some(1),
+                query_params: vec!["company_id"],
+            },
+            ResourcePattern {
+                name: "skill_users",
+                path_regex: Regex::new(r"/api/v1/skills/(\d+)/users").unwrap(),
+                id_capture_group: Some(1),
+                query_params: vec!["company_id"],
+            },
+            // User skills routes
+            ResourcePattern {
+                name: "user_skills",
+                path_regex: Regex::new(r"/api/v1/user-skills(?:/(\d+))?").unwrap(),
+                id_capture_group: Some(1),
+                query_params: vec!["company_id", "user_id"],
+            },
+            ResourcePattern {
+                name: "user_skill",
+                path_regex: Regex::new(r"/api/v1/user-skills/(\d+)/(\d+)").unwrap(),
+                id_capture_group: Some(2),
+                query_params: vec!["company_id"],
+            },
+            // Shift skills routes
+            ResourcePattern {
+                name: "shift_skills",
+                path_regex: Regex::new(r"/api/v1/shift-skills(?:/(\d+))?").unwrap(),
+                id_capture_group: Some(1),
+                query_params: vec!["company_id", "shift_id"],
+            },
+            ResourcePattern {
+                name: "shift_skill",
+                path_regex: Regex::new(r"/api/v1/shift-skills/(\d+)/(\d+)").unwrap(),
+                id_capture_group: Some(2),
+                query_params: vec!["company_id"],
+            },
+            // Subscription routes
+            ResourcePattern {
+                name: "subscription",
+                path_regex: Regex::new(r"/api/v1/subscription(?:/([a-f0-9-]+))?").unwrap(),
+                id_capture_group: Some(1),
+                query_params: vec!["company_id"],
+            },
         ];
 
         Self { resource_patterns }
@@ -269,6 +428,10 @@ impl TagInferenceEngine {
                     "team_id" => tags.push(format!("team:{}", value)),
                     "location_id" => tags.push(format!("location:{}", value)),
                     "shift_id" => tags.push(format!("shifts:{}", value)),
+                    "role" => tags.push(format!("role:{}", value)),
+                    "status" => tags.push(format!("status:{}", value)),
+                    "period" => tags.push(format!("period:{}", value)),
+                    "type" => tags.push(format!("type:{}", value)),
                     _ => tags.push(format!("{}:{}", param, value)),
                 }
             }
@@ -288,29 +451,101 @@ impl TagInferenceEngine {
                 "shifts".to_string(),
                 "users".to_string(),
                 "time-off".to_string(),
+                "swaps".to_string(),
+                "shift_assignments".to_string(),
+                "pto_balance".to_string(),
             ]);
         }
 
-        // User changes affect their shifts and potentially company stats
-        if uri.contains("/users/") {
-            tags.push("shifts".to_string());
+        // User changes affect their shifts, assignments, PTO, skills, and potentially company stats
+        if uri.contains("/users/") || uri.contains("/admin/users/") {
+            tags.extend([
+                "shifts".to_string(),
+                "shift_assignments".to_string(),
+                "pto_balance".to_string(),
+                "user_skills".to_string(),
+                "schedules".to_string(),
+            ]);
             if user_ctx.is_some() {
                 tags.push("stats".to_string());
             }
         }
 
-        // Time-off affects shift availability and stats
-        if uri.contains("/time-off") {
-            tags.push("shifts".to_string());
-            tags.push("stats".to_string());
+        // Time-off affects shift availability, assignments, and stats
+        if uri.contains("/time-off") || uri.contains("/pto-balance") {
+            tags.extend([
+                "shifts".to_string(),
+                "shift_assignments".to_string(),
+                "schedules".to_string(),
+                "stats".to_string(),
+            ]);
         }
 
-        // Swaps affect specific shifts and stats
+        // Swaps affect specific shifts, assignments, and stats
         if uri.contains("/swaps") {
             if let Some(shift_id) = self.extract_query_param(uri, "shift_id") {
                 tags.push(format!("shifts:{}", shift_id));
+                tags.push(format!("shift_assignments_by_shift:{}", shift_id));
             }
-            tags.push("stats".to_string());
+            tags.extend(["shift_assignments".to_string(), "stats".to_string()]);
+        }
+
+        // Shift changes affect assignments, schedules, skills, and stats
+        if uri.contains("/shifts") {
+            tags.extend([
+                "shift_assignments".to_string(),
+                "schedules".to_string(),
+                "shift_skills".to_string(),
+                "stats".to_string(),
+            ]);
+        }
+
+        // Company changes affect all company-scoped resources
+        if uri.contains("/companies") || uri.contains("/admin/") {
+            tags.extend([
+                "users".to_string(),
+                "shifts".to_string(),
+                "time-off".to_string(),
+                "swaps".to_string(),
+                "shift_assignments".to_string(),
+                "pto_balance".to_string(),
+                "skills".to_string(),
+                "schedules".to_string(),
+                "stats".to_string(),
+            ]);
+        }
+
+        // Auth changes affect user context and related resources
+        if uri.contains("/auth/") {
+            tags.extend(["users".to_string(), "companies".to_string()]);
+        }
+
+        // Skills changes affect shifts and users
+        if uri.contains("/skills") {
+            tags.extend([
+                "shifts".to_string(),
+                "users".to_string(),
+                "shift_assignments".to_string(),
+            ]);
+        }
+
+        // Schedule changes affect shifts and assignments
+        if uri.contains("/schedules") || uri.contains("/assignments") {
+            tags.extend([
+                "shifts".to_string(),
+                "users".to_string(),
+                "stats".to_string(),
+            ]);
+        }
+
+        // Subscription changes affect company resources
+        if uri.contains("/subscription") {
+            tags.extend([
+                "companies".to_string(),
+                "users".to_string(),
+                "shifts".to_string(),
+                "stats".to_string(),
+            ]);
         }
     }
 

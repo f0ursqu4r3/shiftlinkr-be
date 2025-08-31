@@ -10,6 +10,7 @@ pub mod shift_claim;
 pub mod shift_swap;
 pub mod skill;
 pub mod stats;
+pub mod subscription;
 pub mod team;
 pub mod time_off;
 pub mod user;

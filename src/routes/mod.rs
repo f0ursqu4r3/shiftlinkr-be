@@ -8,6 +8,7 @@ pub mod schedules;
 pub mod shifts;
 pub mod skills;
 pub mod stats;
+pub mod subscription;
 pub mod swaps;
 pub mod time_off;
 
@@ -20,6 +21,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .configure(time_off::configure)
             .configure(swaps::configure)
             .configure(stats::configure)
+            .configure(subscription::configure)
             .configure(pto_balance::configure)
             .configure(skills::configure)
             .configure(schedules::configure)

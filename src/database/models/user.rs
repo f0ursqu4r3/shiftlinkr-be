@@ -19,6 +19,7 @@ pub struct User {
 string_enum! {
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum UserRole {
+        Owner => "owner",
         Admin => "admin",
         Manager => "manager",
         Employee => "employee",
