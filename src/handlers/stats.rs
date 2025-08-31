@@ -26,8 +26,6 @@ pub struct StatsQuery {
 pub async fn get_dashboard_stats(
     query: Query<StatsQuery>,
     ctx: UserContext,
-    req_info: RequestInfo,
-    cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let user_id = ctx.user_id();
 
@@ -42,18 +40,6 @@ pub async fn get_dashboard_stats(
                 log::error!("Error fetching dashboard stats: {}", err);
                 AppError::DatabaseError(err)
             })?;
-
-    // Cache dashboard stats - they're expensive to calculate and frequently accessed
-    cache
-        .invalidate(
-            &req_info.path,
-            &InvalidationContext {
-                company_id: Some(ctx.strict_company_id()?),
-                user_id: Some(target_user_id),
-                resource_id: None,
-            },
-        )
-        .await;
 
     Ok(ApiResponse::success(stats))
 }

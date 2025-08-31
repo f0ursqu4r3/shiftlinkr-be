@@ -1,7 +1,7 @@
 use std::future::Future;
 use std::pin::Pin;
 
-use actix_web::{dev::Payload, FromRequest, HttpRequest};
+use actix_web::{FromRequest, HttpRequest, dev::Payload};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -164,12 +164,14 @@ impl UserContext {
     }
 
     pub fn requires_same_user(&self, target_user_id: Uuid) -> Result<(), AppError> {
-        if !self.is_manager_or_admin() || self.user_id() != target_user_id {
-            return Err(AppError::PermissionDenied(
-                "Access denied: you can only access your own resources".to_string(),
-            ));
+        // Managers and admins can access any user's resources
+        if self.is_manager_or_admin() || self.user_id() == target_user_id {
+            return Ok(());
         }
-        Ok(())
+
+        Err(AppError::PermissionDenied(
+            "Access denied: you can only access your own resources".to_string(),
+        ))
     }
 
     pub fn requires_same_user_or(
@@ -177,10 +179,10 @@ impl UserContext {
         target_user_id: Uuid,
         message: &str,
     ) -> Result<(), AppError> {
-        if !self.is_manager_or_admin() || self.user_id() != target_user_id {
-            return Err(AppError::PermissionDenied(message.to_string()));
+        if self.is_manager_or_admin() || self.user_id() == target_user_id {
+            return Ok(());
         }
-        Ok(())
+        Err(AppError::PermissionDenied(message.to_string()))
     }
 
     pub fn requires_same_company(&self, target_company_id: Uuid) -> Result<(), AppError> {

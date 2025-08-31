@@ -7,8 +7,8 @@ use be::{
     database::init_database,
     handlers::shared::ApiResponse,
     middleware::{
-        GlobalRateLimiter, RateLimitStore, RequestIdMiddleware, RequestInfoMiddleware,
-        cleanup_rate_limits,
+        CacheLayer, GlobalRateLimiter, RateLimitStore, RequestIdMiddleware, RequestInfoMiddleware,
+        ResponseCacheMiddleware, cleanup_rate_limits,
     },
     routes,
 };
@@ -56,13 +56,19 @@ async fn main() -> Result<()> {
         cleanup_rate_limits(cleanup_store, 300).await; // Cleanup every 5 minutes
     });
 
+    // Create shared cache layer
+    let cache_layer = CacheLayer::new(10000, 300); // 10k capacity, 5min TTL
+    println!("🧠 Cache layer initialized (capacity: 10000, TTL: 300s)");
+
     let server_address = config.server_address();
     println!("🌐 Server starting on http://{}", server_address);
     println!("🛡️ Rate limiting enabled with cleanup task started");
+    println!("💾 Smart caching enabled with tag-based invalidation");
 
     // Start HTTP server
     HttpServer::new(move || {
         App::new()
+            .app_data(actix_web::web::Data::new(cache_layer.clone()))
             .wrap(
                 Cors::default()
                     .allowed_origin(&config.client_base_url.clone())
@@ -76,6 +82,7 @@ async fn main() -> Result<()> {
                     ])
                     .max_age(3600),
             )
+            .wrap(ResponseCacheMiddleware::new(cache_layer.clone()))
             .wrap(GlobalRateLimiter::general()) // Global rate limiting
             .wrap(RequestIdMiddleware)
             .wrap(RequestInfoMiddleware)
@@ -84,7 +91,7 @@ async fn main() -> Result<()> {
             ))
             .service(hello)
             .service(health)
-            .configure(routes::configure)
+            .configure(|cfg| routes::configure(cfg))
     })
     .bind(&server_address)?
     .run()
