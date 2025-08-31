@@ -3,7 +3,6 @@ use actix_web::{App, HttpServer, Responder, get, middleware::Logger};
 use anyhow::Result;
 
 use be::{
-    CacheLayer,
     config::Config,
     database::init_database,
     handlers::shared::ApiResponse,
