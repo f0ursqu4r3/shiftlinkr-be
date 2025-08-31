@@ -62,10 +62,10 @@ pub async fn get_subscription_plans() -> Result<HttpResponse> {
 pub async fn get_company_subscription(ctx: UserContext, path: Path<Uuid>) -> Result<HttpResponse> {
     let company_id = path.into_inner();
 
-    ctx.requires_same_company(company_id);
+    ctx.requires_same_company(company_id)?;
 
     // Verify user has access to this company
-    // TODO: Add company access verification
+    ctx.requires_same_company(company_id)?;
 
     match subscription_repo::get_company_subscription_with_plan(company_id).await {
         Ok(subscription) => Ok(ApiResponse::success(subscription)),
@@ -118,7 +118,7 @@ pub async fn create_subscription(
     let user_id = ctx.user_id();
 
     // Verify user has access to this company
-    // TODO: Add company access verification
+    ctx.requires_same_company(company_id)?;
 
     // Get the plan details
     let plan = subscription_repo::get_plan_by_stripe_price_id(&req.stripe_price_id)
@@ -202,7 +202,7 @@ pub async fn cancel_subscription(
     let user_id = ctx.user_id();
 
     // Verify user has access to this company
-    // TODO: Add company access verification
+    ctx.requires_same_company(company_id)?;
 
     let subscription = subscription_repo::get_company_subscription(company_id)
         .await
@@ -257,10 +257,10 @@ pub async fn cancel_subscription(
     Ok(ApiResponse::success(updated_subscription))
 }
 
-pub async fn get_payment_methods(_ctx: UserContext, path: Path<Uuid>) -> Result<HttpResponse> {
+pub async fn get_payment_methods(ctx: UserContext, path: Path<Uuid>) -> Result<HttpResponse> {
     let company_id = path.into_inner();
     // Verify user has access to this company
-    // TODO: Add company access verification
+    ctx.requires_same_company(company_id)?;
 
     let payment_methods = subscription_repo::get_company_payment_methods(company_id)
         .await
@@ -269,10 +269,10 @@ pub async fn get_payment_methods(_ctx: UserContext, path: Path<Uuid>) -> Result<
     Ok(ApiResponse::success(payment_methods))
 }
 
-pub async fn get_invoices(_ctx: UserContext, path: Path<Uuid>) -> Result<HttpResponse> {
+pub async fn get_invoices(ctx: UserContext, path: Path<Uuid>) -> Result<HttpResponse> {
     let company_id = path.into_inner();
     // Verify user has access to this company
-    // TODO: Add company access verification
+    ctx.requires_same_company(company_id)?;
 
     let invoices = subscription_repo::get_company_invoices(company_id)
         .await
