@@ -997,7 +997,7 @@ pub async fn delete_user(
     // Proceed with deletion
     DatabaseTransaction::run(|tx| {
         Box::pin(async move {
-            user_repo::delete_user(tx, user_id_to_delete).await?;
+            company_repo::remove_employee_from_company(tx, company_id, user_id_to_delete).await?;
 
             // Log the activity
             let metadata =
@@ -1008,7 +1008,7 @@ pub async fn delete_user(
                 Some(ctx.user_id()),
                 user_id_to_delete,
                 Action::DELETED,
-                format!("User with ID {} deleted", user_id_to_delete),
+                format!("User with ID {} removed", user_id_to_delete),
                 Some(metadata),
                 &req_info,
             )

@@ -50,8 +50,8 @@ pub struct CompanySubscription {
     pub updated_at: DateTime<Utc>,
 }
 
-/// Subscription status enum
 string_enum! {
+    /// Subscription status enum
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum SubscriptionStatus {
         Incomplete => "incomplete",
@@ -112,8 +112,8 @@ pub struct Invoice {
     pub updated_at: DateTime<Utc>,
 }
 
-/// Invoice status enum
 string_enum! {
+    /// Invoice status enum
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
     pub enum InvoiceStatus {
         Draft => "draft",
