@@ -77,10 +77,7 @@ pub async fn create_company(
                 (&"company_name".to_string(), company_name.clone()),
                 (&"creator_user_id".to_string(), user_id.to_string()),
                 (&"creator_name".to_string(), ctx.user.name.to_string()),
-                (
-                    &"creator_role".to_string(),
-                    ctx.company.unwrap().role.to_string(),
-                ),
+                (&"creator_role".to_string(), CompanyRole::Admin.to_string()),
             ]);
 
             if let Err(e) = activity_logger::log_activity(
