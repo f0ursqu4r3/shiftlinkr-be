@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::database::models::{CompanyInfo, User};
+use crate::database::models::{CompanyInfo, User, macros::string_enum};
 
 use super::company::CompanyRole;
 
@@ -16,11 +16,24 @@ pub struct InviteToken {
     pub role: CompanyRole,
     pub company_id: Uuid, // UUID for company references
     pub company_name: String,
-    pub team_id: Option<Uuid>,          // UUID for team references
-    pub expires_at: DateTime<Utc>,      // TIMESTAMPTZ
+    pub team_id: Option<Uuid>,     // UUID for team references
+    pub expires_at: DateTime<Utc>, // TIMESTAMPTZ
+    pub status: InviteTokenStatus,
     pub used_at: Option<DateTime<Utc>>, // TIMESTAMPTZ
     pub created_at: DateTime<Utc>,      // TIMESTAMPTZ
 }
+
+string_enum!(
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub enum InviteTokenStatus {
+        Pending => "pending",
+        Accepted => "accepted",
+        Rejected => "rejected",
+        Expired => "expired",
+        Revoked => "revoked",
+        Invalid => "invalid",
+    }
+);
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]

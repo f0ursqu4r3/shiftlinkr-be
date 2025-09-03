@@ -17,7 +17,7 @@ pub async fn log_activity(
 
     let company_activity = sqlx::query_as::<_, CompanyActivity>(&sql(r#"
         INSERT INTO
-            company_activities (
+            company_activity (
                 company_id,
                 user_id,
                 activity_type,

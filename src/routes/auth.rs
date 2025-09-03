@@ -4,7 +4,7 @@ use crate::handlers::auth;
 use crate::middleware::{AuthRateLimiter, CacheLayer, ResponseCacheMiddleware};
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
-    let cache_layer = CacheLayer::new(1000, 60);
+    let cache_layer = CacheLayer::new(1000, 5);
     cfg.service(
         web::scope("/auth")
             .app_data(web::Data::new(cache_layer.clone()))

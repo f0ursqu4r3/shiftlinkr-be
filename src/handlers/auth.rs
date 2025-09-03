@@ -12,7 +12,8 @@ use crate::{
     database::{
         models::{
             Action, AddEmployeeToCompanyInput, CompanyInfo, CreateInviteInput, CreateUserInput,
-            ForgotPasswordInput, GetInviteResponse, LoginInput, ResetPasswordInput, User,
+            ForgotPasswordInput, GetInviteResponse, InviteTokenStatus, LoginInput,
+            ResetPasswordInput, User,
         },
         repositories::{company as company_repo, invite as invite_repo, user as user_repo},
         transaction::DatabaseTransaction,
@@ -299,6 +300,7 @@ pub async fn accept_invite(
     cache: Data<CacheLayer>,
 ) -> Result<HttpResponse> {
     let user = ctx.user;
+    let user_id = user.id;
 
     // Get invite token
     let invite_token = invite_repo::get_invite_token(&token)
@@ -322,7 +324,7 @@ pub async fn accept_invite(
         return Err(AppError::Forbidden("You cannot accept this invite".to_string()).into());
     }
 
-    let accepting_user = DatabaseTransaction::run(|tx| {
+    let accepting_user = match DatabaseTransaction::run(|tx| {
         Box::pin(async move {
             // Check if the user is already part of the company
             if let Some(_) =
@@ -334,7 +336,8 @@ pub async fn accept_invite(
                     user.id,
                     invite_token.company_id
                 );
-                invite_repo::mark_invite_token_as_used(tx, &token).await?;
+                invite_repo::mark_invite_token_as_used(tx, &token, InviteTokenStatus::Invalid)
+                    .await?;
                 return Err(AppError::BadRequest(
                     "You are already part of this company".to_string(),
                 ));
@@ -361,7 +364,7 @@ pub async fn accept_invite(
             })?;
 
             // Mark invite as used
-            invite_repo::mark_invite_token_as_used(tx, &token).await?;
+            invite_repo::mark_invite_token_as_used(tx, &token, InviteTokenStatus::Accepted).await?;
 
             // log the activity
             let metadata = activity_logger::metadata(vec![
@@ -394,12 +397,26 @@ pub async fn accept_invite(
             Ok(user.clone())
         })
     })
-    .await?;
-
+    .await
+    {
+        Ok(user) => user,
+        Err(e) => {
+            cache
+                .invalidate(
+                    "invitations",
+                    &InvalidationContext {
+                        user_id: Some(user_id),
+                        ..Default::default()
+                    },
+                )
+                .await;
+            log::error!("Failed to accept invite: {}", e);
+            return Err(e.into());
+        }
+    };
     // Log successful invite acceptance
     // Return an Ok response with user info
-    let user = accepting_user;
-    let user_id = user.id;
+    let user = accepting_user.clone();
 
     // Get user's companies
     let companies = company_repo::get_companies_for_user(user.id)
@@ -439,6 +456,16 @@ pub async fn accept_invite(
             "stats",
             &InvalidationContext {
                 company_id: Some(invite_token.company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    cache
+        .invalidate(
+            "invitations",
+            &InvalidationContext {
+                user_id: Some(accepting_user.id),
                 ..Default::default()
             },
         )
@@ -510,7 +537,7 @@ pub async fn reject_invite(
             .await?;
 
             // Mark invite as used
-            invite_repo::mark_invite_token_as_used(tx, &token).await?;
+            invite_repo::mark_invite_token_as_used(tx, &token, InviteTokenStatus::Rejected).await?;
 
             Ok(())
         })
@@ -533,6 +560,16 @@ pub async fn reject_invite(
             "stats",
             &InvalidationContext {
                 company_id: Some(invite_token.company_id),
+                ..Default::default()
+            },
+        )
+        .await;
+
+    cache
+        .invalidate(
+            "invitations",
+            &InvalidationContext {
+                user_id: Some(user.id),
                 ..Default::default()
             },
         )

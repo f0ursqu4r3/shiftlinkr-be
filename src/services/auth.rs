@@ -1,12 +1,12 @@
-use std::future::{ready, Ready};
+use std::future::{Ready, ready};
 
 use actix_web::{
-    dev::Payload, error::ErrorUnauthorized, Error as ActixError, FromRequest, HttpRequest,
+    Error as ActixError, FromRequest, HttpRequest, dev::Payload, error::ErrorUnauthorized,
 };
-use anyhow::{anyhow, Result};
-use bcrypt::{hash, verify, DEFAULT_COST};
+use anyhow::{Result, anyhow};
+use bcrypt::{DEFAULT_COST, hash, verify};
 use chrono::{Duration, Utc};
-use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
+use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
