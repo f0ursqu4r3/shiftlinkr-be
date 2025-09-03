@@ -14,7 +14,8 @@ pub struct InviteToken {
     pub token: String,
     pub inviter_id: Uuid, // UUID for user references
     pub role: CompanyRole,
-    pub company_id: Uuid,               // UUID for company references
+    pub company_id: Uuid, // UUID for company references
+    pub company_name: String,
     pub team_id: Option<Uuid>,          // UUID for team references
     pub expires_at: DateTime<Utc>,      // TIMESTAMPTZ
     pub used_at: Option<DateTime<Utc>>, // TIMESTAMPTZ

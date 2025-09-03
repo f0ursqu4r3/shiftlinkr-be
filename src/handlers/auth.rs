@@ -542,13 +542,9 @@ pub async fn reject_invite(
 }
 
 pub async fn get_my_invites(ctx: UserContext) -> Result<HttpResponse> {
-    let user_id = ctx.user_id();
+    let email_address = ctx.user_email();
 
-    ctx.requires_manager()?;
-
-    let company_id = ctx.strict_company_id()?;
-
-    let invites = invite_repo::get_invites_by_inviter(user_id, company_id)
+    let invites = invite_repo::get_invites_by_email(email_address)
         .await
         .map_err(AppError::from)?;
 

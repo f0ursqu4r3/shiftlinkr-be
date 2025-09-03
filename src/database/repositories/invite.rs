@@ -133,19 +133,21 @@ pub async fn get_invites_by_inviter(
 pub async fn get_invites_by_email(email: &str) -> Result<Vec<InviteToken>, sqlx::Error> {
     let invites = sqlx::query_as::<_, InviteToken>(&sql(r#"
         SELECT
-            id,
-            email,
-            token,
-            inviter_id,
-            role,
-            company_id,
-            team_id,
-            expires_at,
-            used_at,
-            created_at
-        FROM invite_tokens
-        WHERE email = ?
-        ORDER BY created_at DESC
+            it.id,
+            it.email,
+            it.token,
+            it.inviter_id,
+            it.role,
+            it.company_id,
+            it.team_id,
+            it.expires_at,
+            it.used_at,
+            it.created_at,
+            c.name AS company_name
+        FROM invite_tokens it
+        JOIN companies c ON it.company_id = c.id
+        WHERE it.email = ?
+        ORDER BY it.created_at DESC
     "#))
     .bind(email)
     .fetch_all(&get_pool().await)
